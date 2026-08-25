@@ -460,26 +460,12 @@
       return `<div class="w-9 h-9 rounded-lg bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 shrink-0"><i data-lucide="tv" class="w-4 h-4"></i></div>`;
     }
 
-    // --- SMART FETCH COM SUPORTE ROBUSTO A PROXY PARA HTTPS/HTTP ---
+    // --- SMART FETCH USANDO O PROXY DA VERCEL (/api/proxy) ---
     async function smartFetch(url) {
-      const encoded = encodeURIComponent(url);
-      const endpoints = [
-        url,
-        `https://api.allorigins.win/raw?url=${encoded}`,
-        `https://corsproxy.io/?${encoded}`,
-        `https://thingproxy.freeboard.io/fetch/${url}`
-      ];
-
-      for (const target of endpoints) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-          const res = await fetch(target, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (res.ok) return res;
-        } catch (e) {}
-      }
-      throw new Error(`Falha ao conectar: ${url}`);
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error(`Falha ao conectar via proxy da Vercel: ${url}`);
+      return res;
     }
 
     async function fetchUsersFromSheet() {
