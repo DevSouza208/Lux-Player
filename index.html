@@ -460,10 +460,13 @@
       return `<div class="w-9 h-9 rounded-lg bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 shrink-0"><i data-lucide="tv" class="w-4 h-4"></i></div>`;
     }
 
-    // --- SMART FETCH USANDO O PROXY DA VERCEL (/api/proxy) ---
+    // --- SMART FETCH COM ANTI-CACHE USANDO O PROXY DA VERCEL ---
     async function smartFetch(url) {
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-      const res = await fetch(proxyUrl);
+      const cacheBuster = (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+      const finalUrl = url + cacheBuster;
+      
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(finalUrl)}`;
+      const res = await fetch(proxyUrl, { cache: 'no-store' });
       if (!res.ok) throw new Error(`Falha ao conectar via proxy da Vercel: ${url}`);
       return res;
     }
