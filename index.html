@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LUX Play - Web Streaming</title>
+  
+  <!-- Configurações PWA (Modo App Nativo) -->
+  <meta name="theme-color" content="#09060e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LUX Play">
+  <meta name="application-name" content="LUX Play">
+  <link rel="manifest" href='data:application/manifest+json,{"name":"LUX Play","short_name":"LUX Play","start_url":".","display":"standalone","background_color":"#09060e","theme_color":"#09060e","orientation":"portrait-primary"}'>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- HLS.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0c0814; }
+    ::-webkit-scrollbar-thumb { background: #2e1d47; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a855f7; }
+
+    .lux-glow { box-shadow: 0 0 30px -5px rgba(168, 85, 247, 0.4); }
+    .lux-glow-sm { box-shadow: 0 0 15px -3px rgba(168, 85, 247, 0.3); }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.03); }
+    }
+    .animate-lux-pulse { animation: pulseGlow 2.5s infinite ease-in-out; }
+
+    /* Transições de Telas */
+    .screen-transition {
+      transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .screen-hidden-down {
+      opacity: 0;
+      transform: translateY(35px) scale(0.98);
+      pointer-events: none;
+    }
+    .screen-hidden-up {
+      opacity: 0;
+      transform: translateY(-35px) scale(0.98);
+      pointer-events: none;
+    }
+    .screen-visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  </style>
+</head>
+<body class="bg-[#09060e] text-slate-100 font-sans h-screen flex flex-col overflow-hidden select-none">
+
+  <!-- ================= TELA DE LOGIN ================= -->
+  <div id="authScreen" class="fixed inset-0 z-50 bg-[#06040a] flex items-center justify-center p-4 screen-transition screen-visible">
+    <div class="bg-[#120c1f] border border-purple-900/40 rounded-3xl p-8 max-w-md w-full lux-glow">
+      <div class="flex flex-col items-center justify-center gap-2 mb-8">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-900 p-0.5 lux-glow-sm flex items-center justify-center animate-lux-pulse">
+          <svg class="w-10 h-10 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+            <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+          </svg>
+        </div>
+        <h1 class="text-3xl font-black tracking-widest text-white mt-1">LUX<span class="text-purple-400 font-light">PLAY</span></h1>
+        <p class="text-xs text-purple-300/60 uppercase tracking-widest font-medium">Sua Central de Streaming</p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-purple-300 font-medium">Usuário</label>
+          <input id="authEmail" type="text" placeholder="Digite seu usuário..." class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition-all">
+        </div>
+        <div>
+          <label class="text-xs text-purple-300 font-medium">Senha</label>
+          <input id="authPass" type="password" placeholder="••••••••" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition-all">
+        </div>
+
+        <button id="loginBtn" onclick="handleLogin()" class="w-full mt-2 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
+          <span>Entrar</span>
+        </button>
+
+        <p id="authStatusText" class="text-xs text-center font-medium"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SPLASH SCREEN DE CARREGAMENTO ================= -->
+  <div id="loadingSplash" class="fixed inset-0 z-40 bg-[#06040a] flex flex-col items-center justify-center p-6 screen-transition screen-hidden-up hidden">
+    <div class="w-20 h-20 rounded-3xl bg-gradient-to-br from-purple-600 to-indigo-900 flex items-center justify-center lux-glow mb-6 animate-lux-pulse">
+      <svg class="w-12 h-12 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+        <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+      </svg>
+    </div>
+
+    <h2 class="text-xl md:text-2xl font-bold text-white text-center">
+      Olá, <span id="splashUserName" class="text-purple-400">Usuário</span>!
+    </h2>
+    <p id="splashStatusMessage" class="text-xs text-purple-300/70 mt-2 font-medium">Preparando seu catálogo exclusivo...</p>
+
+    <div class="w-64 h-1.5 bg-[#1a122c] rounded-full mt-6 overflow-hidden border border-purple-900/40">
+      <div class="h-full bg-gradient-to-r from-purple-600 via-indigo-500 to-purple-400 rounded-full w-2/3 animate-pulse"></div>
+    </div>
+  </div>
+
+  <!-- ================= HEADER PRINCIPAL ================= -->
+  <header class="h-16 bg-[#100a1c] border-b border-purple-950/70 px-4 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-900 flex items-center justify-center lux-glow-sm">
+        <svg class="w-5 h-5 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+          <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+        </svg>
+      </div>
+      <span class="text-xl font-black tracking-widest text-white">LUX<span class="text-purple-400 font-light">PLAY</span></span>
+    </div>
+
+    <!-- Abas Desktop (Top Nav) -->
+    <nav id="desktopNav" class="relative hidden md:flex items-center bg-[#180f29] p-1 rounded-2xl border border-purple-900/40">
+      <div id="navSlider" class="absolute top-1 bottom-1 bg-purple-600 rounded-xl shadow-md transition-all duration-300 ease-out pointer-events-none z-0"></div>
+      
+      <button onclick="setSection('live')" id="navLive" class="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-white">
+        <i data-lucide="tv" class="w-3.5 h-3.5"></i> TV Ao Vivo
+      </button>
+      <button onclick="setSection('movies')" id="navMovies" class="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
+        <i data-lucide="film" class="w-3.5 h-3.5"></i> Filmes
+      </button>
+      <button onclick="setSection('series')" id="navSeries" class="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
+        <i data-lucide="clapperboard" class="w-3.5 h-3.5"></i> Séries
+      </button>
+    </nav>
+
+    <!-- Busca Rápida (Desktop) -->
+    <div class="flex-1 max-w-xs mx-4 hidden md:block">
+      <div class="relative">
+        <input id="searchInput" oninput="filterMedia()" type="text" placeholder="Buscar canal, filme ou série..." class="w-full bg-[#180f29] border border-purple-900/40 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-purple-400/40 focus:outline-none focus:border-purple-500">
+        <i data-lucide="search" class="w-4 h-4 text-purple-400/50 absolute left-3 top-2"></i>
+      </div>
+    </div>
+
+    <!-- Perfil & Admin -->
+    <div class="flex items-center gap-3">
+      <a id="sheetAdminBtn" href="https://docs.google.com/spreadsheets/d/1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0/edit" target="_blank" class="hidden bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
+        <i data-lucide="table" class="w-3.5 h-3.5"></i> Planilha
+      </a>
+
+      <!-- Botão Conexão (Exclusivo Admin) -->
+      <button id="connectionConfigBtn" onclick="toggleConfigModal()" title="Adicionar / Trocar Lista" class="hidden bg-[#180f29] hover:bg-[#23153b] text-purple-200 px-3 py-1.5 rounded-xl text-xs font-semibold border border-purple-900/50 transition-all flex items-center gap-1.5">
+        <i data-lucide="link" class="w-3.5 h-3.5"></i> Conexão
+      </button>
+
+      <button onclick="reloadFromSheet()" title="Recarregar Planilha" class="bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
+        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+      </button>
+
+      <div class="flex items-center gap-2 pl-2 border-l border-purple-950">
+        <div class="flex flex-col text-right">
+          <span id="userNameBadge" class="text-xs font-bold text-white truncate max-w-[100px] md:max-w-[120px]">Usuário</span>
+          <span id="userExpiryBadge" class="text-[10px] text-purple-400 font-mono">Val: --</span>
+        </div>
+        <button onclick="logout()" class="text-purple-400 hover:text-rose-400 p-1.5 rounded-lg transition-all ml-1" title="Sair">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= CORPO PRINCIPAL ================= -->
+  <div id="mainDashboard" class="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden relative pb-14 md:pb-0">
+    
+    <!-- 1. Coluna de Categorias (Sidebar no Desktop) -->
+    <aside id="desktopSidebar" class="hidden lg:flex w-60 bg-[#0d0817] border-r border-purple-950/70 flex-col p-3 shrink-0">
+      <div class="flex items-center justify-between px-2 mb-2">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400">Gêneros</span>
+        <span id="mediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-full font-mono">0 itens</span>
+      </div>
+      <div id="categoriesList" class="flex flex-col gap-1.5 overflow-y-auto pr-1"></div>
+    </aside>
+
+    <!-- 2. ETAPA 1 (MOBILE ONLY): Grade de Categorias em Cards -->
+    <section id="mobileCategoriesSection" class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col lg:hidden">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <div>
+          <h3 class="text-sm font-bold text-white">Selecione uma Categoria</h3>
+          <p class="text-[11px] text-purple-400/70" id="mobileCatSubtitle">Escolha o gênero para navegar</p>
+        </div>
+        <span id="mobileMediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2.5 py-1 rounded-full font-mono font-bold">0 itens</span>
+      </div>
+
+      <!-- Grade de Cards de Categorias Mobile -->
+      <div id="mobileCategoryGrid" class="grid grid-cols-2 gap-3 pb-8"></div>
+    </section>
+
+    <!-- 3. ETAPA 2 (MOBILE) / GRADE (DESKTOP): Lista de Canais (TV Ao Vivo) -->
+    <section id="liveChannelsSection" class="w-full lg:w-80 bg-[#120c1f] border-b lg:border-b-0 lg:border-r border-purple-950/70 flex-col flex-1 lg:flex-initial shrink-0 overflow-hidden hidden">
+      <div class="p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#150d24]">
+        <div class="flex items-center gap-2 min-w-0">
+          <button onclick="backToMobileCategories()" class="lg:hidden bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+            <span>Gêneros</span>
+          </button>
+          <span id="liveCategoryTitle" class="text-xs font-semibold text-purple-300 truncate">Grade de Canais</span>
+        </div>
+        <span id="liveChannelCount" class="text-[10px] bg-purple-950 text-purple-400 px-2 py-0.5 rounded-full font-mono shrink-0">0</span>
+      </div>
+      <div id="liveItemsContainer" class="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 pb-20 lg:pb-2"></div>
+    </section>
+
+    <!-- 4. Player Principal TV Ao Vivo (Desktop Only) -->
+    <main id="livePlayerSection" class="hidden flex-1 bg-black flex-col justify-between overflow-hidden relative">
+      <div class="flex-1 flex items-center justify-center bg-[#06040a] relative">
+        <video id="videoPlayerLive" controls class="w-full h-full max-h-[82vh] object-contain"></video>
+        
+        <div id="noStreamAlertLive" class="absolute inset-0 flex flex-col items-center justify-center bg-[#06040a] p-6 text-center">
+          <div class="w-16 h-16 rounded-full bg-purple-950/50 border border-purple-800/30 flex items-center justify-center mb-3 animate-lux-pulse">
+            <i data-lucide="tv" class="w-8 h-8 text-purple-400"></i>
+          </div>
+          <h3 class="text-purple-200 font-bold text-base">Nenhum canal ativo</h3>
+          <p class="text-purple-400/60 text-xs mt-1">Selecione uma transmissão na grade ao lado para assistir.</p>
+        </div>
+      </div>
+
+      <div class="h-16 bg-[#100a1c] border-t border-purple-950/80 px-6 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3.5">
+          <div id="liveCurrentLogo" class="w-10 h-10 rounded-xl bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 overflow-hidden">
+            <i data-lucide="tv" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 id="liveCurrentName" class="text-sm font-bold text-white">Nenhum canal ativo</h2>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="text-[10px] bg-purple-900/50 border border-purple-700/50 px-2 py-0.2 rounded text-purple-300 font-semibold uppercase">AO VIVO</span>
+              <span id="liveCurrentGroup" class="text-xs text-purple-400">LUX Play</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 5. Grade de Filmes / Séries -->
+    <section id="vodGridSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex-col overflow-hidden hidden">
+      <div class="lg:hidden p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#120c1f]">
+        <div class="flex items-center gap-2 min-w-0">
+          <button onclick="backToMobileCategories()" class="bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+            <span>Gêneros</span>
+          </button>
+          <span id="vodCategoryTitle" class="text-xs font-semibold text-purple-300 truncate">Catálogo</span>
+        </div>
+        <span id="vodItemCountBadge" class="text-[10px] bg-purple-950 text-purple-400 px-2 py-0.5 rounded-full font-mono shrink-0">0</span>
+      </div>
+
+      <div id="vodGridContainer" class="flex-1 min-h-0 h-full overflow-y-auto p-3.5 md:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 md:gap-5 content-start auto-rows-max pb-20 lg:pb-6"></div>
+    </section>
+
+  </div>
+
+  <!-- ================= BARRA DE NAVEGAÇÃO INFERIOR (MOBILE BOTTOM BAR) ================= -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#100a1c]/95 backdrop-blur-md border-t border-purple-950/80 flex items-center justify-around z-30 px-2">
+    <button onclick="setSection('live')" id="bNavLive" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-300 transition-all">
+      <div class="p-1 rounded-xl bg-purple-600 text-white shadow-md shadow-purple-900/60">
+        <i data-lucide="tv" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">TV Ao Vivo</span>
+    </button>
+    <button onclick="setSection('movies')" id="bNavMovies" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
+        <i data-lucide="film" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Filmes</span>
+    </button>
+    <button onclick="setSection('series')" id="bNavSeries" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
+        <i data-lucide="clapperboard" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Séries</span>
+    </button>
+  </nav>
+
+  <!-- ================= BANNER PWA / INSTALAR APP ================= -->
+  <div id="pwaInstallBanner" class="fixed bottom-16 md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm bg-[#150d24]/95 border border-purple-800/60 rounded-2xl p-3.5 backdrop-blur-md shadow-2xl lux-glow z-50 hidden transition-all">
+    <div class="flex items-start justify-between gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-900 flex items-center justify-center shrink-0 lux-glow-sm">
+        <svg class="w-6 h-6 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+          <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+        </svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <h4 class="text-xs font-bold text-white">Instalar o LUX Play</h4>
+        <p id="pwaInstructionText" class="text-[10px] text-purple-300/80 leading-tight mt-0.5">
+          Instale na sua tela inicial para assistir em tela cheia e sem barras do navegador.
+        </p>
+      </div>
+      <button onclick="dismissPwaBanner()" class="text-purple-400 hover:text-white p-1 rounded-lg text-xs">✕</button>
+    </div>
+
+    <div class="mt-2.5 pt-2 border-t border-purple-950/60 flex items-center justify-end gap-2">
+      <button onclick="dismissPwaBanner()" class="px-3 py-1.5 rounded-xl text-[11px] font-semibold text-purple-400 hover:text-purple-200">Agora não</button>
+      <button id="pwaInstallActionBtn" onclick="triggerPwaInstall()" class="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-1.5 rounded-xl text-[11px] font-bold shadow-md flex items-center gap-1.5">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+        <span>Instalar App</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DEDICADO DO PLAYER ================= -->
+  <div id="vodPlayerModal" class="fixed inset-0 z-50 bg-black flex flex-col hidden">
+    <div class="h-14 bg-[#100a1c]/95 backdrop-blur-md border-b border-purple-950 px-3 md:px-4 flex items-center justify-between shrink-0 z-10">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <button onclick="closeVodPlayer()" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Voltar</span>
+        </button>
+        <span id="vodPlayerType" class="text-[9px] md:text-[10px] bg-purple-900 text-purple-300 px-2 py-0.5 rounded font-bold uppercase shrink-0">AO VIVO</span>
+        <h2 id="vodPlayerTitle" class="text-xs md:text-sm font-bold text-white truncate max-w-[180px] sm:max-w-md">Título da Transmissão</h2>
+      </div>
+
+      <button onclick="togglePlayerFullscreen()" title="Alternar Tela Cheia" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+        <i data-lucide="maximize" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div id="playerVideoContainer" class="flex-1 bg-black flex items-center justify-center relative overflow-hidden">
+      <video id="videoPlayerVod" controls class="w-full h-full max-h-[92vh] object-contain" playsinline autoPlay></video>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DE SÉRIES ================= -->
+  <div id="seriesModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-2xl w-full max-h-[85vh] flex flex-col lux-glow">
+      <div class="flex items-start justify-between pb-4 border-b border-purple-950">
+        <div class="flex items-center gap-3 md:gap-4 min-w-0">
+          <div id="seriesModalCover" class="w-14 h-20 md:w-16 md:h-24 rounded-xl bg-[#0c0814] border border-purple-900/50 overflow-hidden shrink-0 flex items-center justify-center">
+            <i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 id="seriesModalTitle" class="text-base md:text-lg font-bold text-white truncate">Nome da Série</h2>
+            <p id="seriesModalCategory" class="text-xs text-purple-400 mt-0.5 truncate">Gênero</p>
+            <span id="seriesModalStats" class="text-[10px] md:text-[11px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-md font-mono mt-1 inline-block">Carregando...</span>
+          </div>
+        </div>
+        <button onclick="closeSeriesModal()" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0">✕</button>
+      </div>
+
+      <!-- Seletor de Temporadas -->
+      <div class="py-3">
+        <span class="text-[11px] font-bold uppercase text-purple-400 mb-1.5 block">Temporada:</span>
+        <div id="seriesSeasonsContainer" class="flex gap-2 overflow-x-auto pb-1"></div>
+      </div>
+
+      <!-- Lista de Episódios -->
+      <div class="flex-1 overflow-y-auto pr-1 space-y-1.5" id="seriesEpisodesContainer"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL CONTROLE PARENTAL (+18 PIN) ================= -->
+  <div id="adultPinModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#120c1f] border border-rose-900/50 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-950/60 border border-rose-800/40 flex items-center justify-center mb-3 text-rose-400">
+        <i data-lucide="lock" class="w-7 h-7"></i>
+      </div>
+      <h3 class="text-base font-bold text-white">Conteúdo Protegido (+18)</h3>
+      <p class="text-xs text-slate-400 mt-1 mb-4">Insira o PIN de controle parental da Coluna J para desbloquear.</p>
+      
+      <input id="adultPinInput" type="password" placeholder="Digite o PIN..." class="w-full bg-[#1a122c] border border-rose-900/50 rounded-xl px-4 py-2.5 text-center text-lg text-white font-mono focus:outline-none focus:border-rose-500 mb-2" maxlength="10">
+      <p id="adultPinError" class="text-xs text-rose-400 mb-3 hidden font-medium">PIN incorreto!</p>
+
+      <div class="flex gap-2">
+        <button onclick="closeAdultPinModal()" class="flex-1 py-2 text-xs font-semibold text-slate-400 hover:bg-purple-900/20 rounded-xl">Cancelar</button>
+        <button onclick="verifyAdultPin()" class="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-lg shadow-rose-950/40">Desbloquear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: CONFIGURAR CONEXÃO MANUAL ================= -->
+  <div id="configModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-6 max-w-lg w-full lux-glow">
+      <h2 class="text-lg font-bold mb-3 text-white">Conectar Fonte de Vídeo</h2>
+      
+      <div class="flex bg-[#1a122c] p-1 rounded-xl mb-4 border border-purple-900/40">
+        <button onclick="setConnectionTab('xc')" id="tabXc" class="flex-1 py-1.5 text-xs font-bold bg-purple-600 text-white rounded-lg transition-all">Xtream Codes (XC)</button>
+        <button onclick="setConnectionTab('m3u')" id="tabM3u" class="flex-1 py-1.5 text-xs font-bold text-purple-300 rounded-lg transition-all">Link M3U</button>
+      </div>
+
+      <div id="formXc" class="space-y-3">
+        <div>
+          <label class="text-[11px] text-purple-300 font-medium">URL do Servidor / DNS</label>
+          <input id="manualXcServer" type="text" placeholder="http://servidor.com:80" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Usuário XC</label>
+            <input id="manualXcUser" type="text" placeholder="usuario" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Senha XC</label>
+            <input id="manualXcPass" type="password" placeholder="••••••••" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+          </div>
+        </div>
+      </div>
+
+      <div id="formM3u" class="space-y-3 hidden">
+        <div>
+          <label class="text-[11px] text-purple-300 font-medium">Link M3U / M3U8 Completo</label>
+          <input id="manualM3uInput" type="text" placeholder="https://exemplo.com/lista.m3u8" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 mt-5">
+        <button onclick="toggleConfigModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-purple-300 hover:bg-purple-900/30">Cancelar</button>
+        <button onclick="saveManualConnection()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-lg shadow-purple-900/40">Conectar e Carregar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SHEET_ID = '1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0';
+    const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+
+    let currentUser = null;
+    let allMediaItems = [];
+    let currentSection = 'live';
+    let activeCategory = 'Todos';
+    let activeLiveChannel = null;
+
+    let mobileStep = 'categories';
+
+    let hlsLiveInstance = null;
+    let hlsVodInstance = null;
+
+    let isAdultUnlocked = false;
+    let pendingUnlockAction = null;
+
+    let currentFilteredItems = [];
+    let visibleCount = 60;
+    const ITEMS_PER_PAGE = 60;
+
+    let currentSeriesDetails = null;
+    let currentSeriesEpisodesData = null;
+    let currentSelectedSeason = 1;
+
+    let deferredPrompt = null;
+
+    // --- FUNÇÕES DE HISTÓRICO / CONTINUAR ASSISTINDO ---
+    function getResumeKey(item) {
+      return 'lux_progress_' + (item.series_id || item.id || item.url);
+    }
+
+    function getLiveFallbackHtml(isAdult) {
+      if (isAdult) {
+        return `<div class="w-9 h-9 rounded-lg bg-rose-950/50 border border-rose-900/70 flex flex-col items-center justify-center text-rose-400 font-bold text-[9px] shrink-0"><i data-lucide="lock" class="w-3.5 h-3.5"></i><span>+18</span></div>`;
+      }
+      return `<div class="w-9 h-9 rounded-lg bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 shrink-0"><i data-lucide="tv" class="w-4 h-4"></i></div>`;
+    }
+
+    async function smartFetch(url) {
+      const endpoints = [
+        url,
+        `https://corsproxy.io/?` + encodeURIComponent(url),
+        `https://api.allorigins.win/raw?url=` + encodeURIComponent(url)
+      ];
+
+      for (const target of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 9000);
+          const res = await fetch(target, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (res.ok) return res;
+        } catch (e) {}
+      }
+      throw new Error(`Falha ao conectar: ${url}`);
+    }
+
+    async function fetchUsersFromSheet() {
+      const res = await smartFetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`);
+      const csvText = await res.text();
+      return parseCSV(csvText);
+    }
+
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const users = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').trim());
+        if (i === 0 && (row[0]?.toLowerCase() === 'nome' || row[1]?.toLowerCase() === 'usuario')) continue;
+
+        if (row.length >= 2) {
+          const nome = row[0] || 'Usuário';
+          const usuario = row[1] || '';
+          const senha = row[2] || '';
+          const contato = row[3] || '';
+          const lista = row[4] || '';
+          const vencimento = row[5] || '';
+          const userXc = row[6] || '';
+          const senhaXc = row[7] || '';
+          const urlXc = row[8] || '';
+          const senhaAdulto = row[9] || senha;
+
+          const isAdmin = usuario.toLowerCase() === 'admin' || usuario.toLowerCase() === 'admin2' || nome.toLowerCase().includes('admin');
+
+          users.push({
+            name: nome,
+            user: usuario,
+            pass: senha,
+            contact: contato,
+            m3uUrl: lista,
+            dueDate: vencimento,
+            userXc: userXc,
+            senhaXc: senhaXc,
+            urlXc: urlXc,
+            adultPin: senhaAdulto,
+            role: isAdmin ? 'admin' : 'user'
+          });
+        }
+      }
+      return users;
+    }
+
+    function isExpired(dateStr) {
+      if (!dateStr) return false;
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const due = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), 23, 59, 59);
+        return new Date() > due;
+      }
+      return false;
+    }
+
+    function isAdultContent(group = '', name = '') {
+      const str = `${group} ${name}`.toLowerCase();
+      return str.includes('adult') || 
+             str.includes('xxx') || 
+             str.includes('+18') || 
+             str.includes('18+') || 
+             str.includes('playboy') || 
+             str.includes('sexy') || 
+             str.includes('venus') || 
+             str.includes('prive') || 
+             str.includes('mycamtv') || 
+             str.includes('erot');
+    }
+
+    function resolveUserCredentials(user) {
+      if (user.urlXc && user.userXc && user.senhaXc) {
+        return { isXc: true, server: user.urlXc, user: user.userXc, pass: user.senhaXc };
+      }
+      if (user.m3uUrl && (user.m3uUrl.includes('get.php') || user.m3uUrl.includes('player_api.php'))) {
+        try {
+          const u = new URL(user.m3uUrl);
+          const username = u.searchParams.get('username') || u.searchParams.get('user');
+          const password = u.searchParams.get('password') || u.searchParams.get('pass');
+          if (username && password) {
+            return { isXc: true, server: u.origin, user: username, pass: password };
+          }
+        } catch (e) {}
+      }
+      if (user.m3uUrl) {
+        return { isXc: false, url: user.m3uUrl };
+      }
+      return { isXc: false, url: '' };
+    }
+
+    async function handleLogin() {
+      const userInput = document.getElementById('authEmail').value.trim();
+      const passInput = document.getElementById('authPass').value.trim();
+      const statusText = document.getElementById('authStatusText');
+      const loginBtn = document.getElementById('loginBtn');
+
+      if (!userInput || !passInput) {
+        statusText.innerText = 'Preencha usuário e senha.';
+        statusText.className = 'text-xs text-center text-rose-400 font-medium';
+        return;
+      }
+
+      statusText.innerText = 'Verificando dados...';
+      statusText.className = 'text-xs text-center text-purple-400 font-medium';
+      loginBtn.disabled = true;
+
+      try {
+        const users = await fetchUsersFromSheet();
+        const account = users.find(u => u.user.toLowerCase() === userInput.toLowerCase() && u.pass === passInput);
+
+        if (account) {
+          if (account.dueDate && isExpired(account.dueDate)) {
+            statusText.innerText = `Acesso vencido em ${account.dueDate}.`;
+            statusText.className = 'text-xs text-center text-rose-400 font-medium';
+            return;
+          }
+          currentUser = account;
+          isAdultUnlocked = false;
+          statusText.innerText = '';
+          
+          showSplashScreen();
+          startApp();
+        } else {
+          statusText.innerText = 'Usuário ou senha incorretos.';
+          statusText.className = 'text-xs text-center text-rose-400 font-medium';
+        }
+      } catch (err) {
+        statusText.innerText = 'Erro ao consultar planilha.';
+        statusText.className = 'text-xs text-center text-rose-400 font-medium';
+      } finally {
+        loginBtn.disabled = false;
+      }
+    }
+
+    function showSplashScreen() {
+      const auth = document.getElementById('authScreen');
+      const splash = document.getElementById('loadingSplash');
+      
+      document.getElementById('splashUserName').innerText = currentUser.name;
+
+      splash.classList.remove('hidden');
+      splash.classList.remove('screen-hidden-up');
+      splash.classList.add('screen-visible');
+
+      auth.classList.remove('screen-visible');
+      auth.classList.add('screen-hidden-down');
+
+      setTimeout(() => {
+        auth.classList.add('hidden');
+      }, 400);
+    }
+
+    function hideSplashScreen() {
+      const splash = document.getElementById('loadingSplash');
+      splash.classList.remove('screen-visible');
+      splash.classList.add('screen-hidden-down');
+
+      setTimeout(() => {
+        splash.classList.add('hidden');
+        updateNavIndicator();
+      }, 450);
+    }
+
+    function logout() {
+      currentUser = null;
+      isAdultUnlocked = false;
+      const auth = document.getElementById('authScreen');
+      auth.classList.remove('hidden');
+      setTimeout(() => {
+        auth.classList.remove('screen-hidden-down');
+        auth.classList.add('screen-visible');
+      }, 30);
+    }
+
+    async function startApp() {
+      document.getElementById('userNameBadge').innerText = currentUser.name;
+      document.getElementById('userExpiryBadge').innerText = currentUser.dueDate ? `Val: ${currentUser.dueDate}` : 'Val: Ilimitada';
+
+      if (currentUser.role === 'admin') {
+        document.getElementById('sheetAdminBtn').classList.remove('hidden');
+        document.getElementById('connectionConfigBtn').classList.remove('hidden');
+      } else {
+        document.getElementById('sheetAdminBtn').classList.add('hidden');
+        document.getElementById('connectionConfigBtn').classList.add('hidden');
+      }
+
+      const liveContainer = document.getElementById('liveItemsContainer');
+      liveContainer.onscroll = () => handleScroll(liveContainer);
+
+      const vodContainer = document.getElementById('vodGridContainer');
+      vodContainer.onscroll = () => handleScroll(vodContainer);
+
+      const xcCreds = resolveUserCredentials(currentUser);
+
+      if (xcCreds.isXc) {
+        await loadFromXtreamApi(xcCreds.server, xcCreds.user, xcCreds.pass);
+      } else if (xcCreds.url) {
+        await loadPlaylist(xcCreds.url);
+      } else {
+        alert(`O usuário ${currentUser.name} não possui lista cadastrada.`);
+      }
+
+      hideSplashScreen();
+      lucide.createIcons();
+    }
+
+    function handleScroll(container) {
+      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 350) {
+        if (visibleCount < currentFilteredItems.length) {
+          visibleCount += ITEMS_PER_PAGE;
+          appendMoreItems();
+        }
+      }
+    }
+
+    async function reloadFromSheet() {
+      if (!currentUser) return;
+      showSplashScreen();
+      const users = await fetchUsersFromSheet();
+      const updated = users.find(u => u.user.toLowerCase() === currentUser.user.toLowerCase());
+      if (updated) {
+        currentUser = updated;
+        const xcCreds = resolveUserCredentials(currentUser);
+        if (xcCreds.isXc) {
+          await loadFromXtreamApi(xcCreds.server, xcCreds.user, xcCreds.pass);
+        } else if (xcCreds.url) {
+          await loadPlaylist(xcCreds.url);
+        }
+      }
+      hideSplashScreen();
+    }
+
+    async function loadFromXtreamApi(server, user, pass) {
+      const cleanServer = server.replace(/\/+$/, '');
+      const baseApi = `${cleanServer}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
+
+      document.getElementById('splashStatusMessage').innerText = 'Baixando categorias e canais...';
+
+      try {
+        const [liveCatsRes, vodCatsRes, seriesCatsRes] = await Promise.all([
+          smartFetch(`${baseApi}&action=get_live_categories`).then(r => r.json()).catch(() => []),
+          smartFetch(`${baseApi}&action=get_vod_categories`).then(r => r.json()).catch(() => []),
+          smartFetch(`${baseApi}&action=get_series_categories`).then(r => r.json()).catch(() => [])
+        ]);
+
+        const liveCatMap = Object.fromEntries(liveCatsRes.map(c => [c.category_id, c.category_name]));
+        const vodCatMap = Object.fromEntries(vodCatsRes.map(c => [c.category_id, c.category_name]));
+        const seriesCatMap = Object.fromEntries(seriesCatsRes.map(c => [c.category_id, c.category_name]));
+
+        document.getElementById('splashStatusMessage').innerText = 'Sincronizando filmes e séries...';
+
+        const [liveStreams, vodStreams, seriesStreams] = await Promise.all([
+          smartFetch(`${baseApi}&action=get_live_streams`).then(r => r.json()).catch(() => []),
+          smartFetch(`${baseApi}&action=get_vod_streams`).then(r => r.json()).catch(() => []),
+          smartFetch(`${baseApi}&action=get_series`).then(r => r.json()).catch(() => [])
+        ]);
+
+        const parsedItems = [];
+
+        liveStreams.forEach(item => {
+          const groupName = liveCatMap[item.category_id] || 'Canais';
+          parsedItems.push({
+            id: parsedItems.length,
+            name: item.name,
+            group: groupName,
+            logo: item.stream_icon || '',
+            url: `${cleanServer}/live/${user}/${pass}/${item.stream_id}.m3u8`,
+            type: 'live',
+            isAdult: isAdultContent(groupName, item.name)
+          });
+        });
+
+        vodStreams.forEach(item => {
+          const groupName = vodCatMap[item.category_id] || 'Filmes';
+          const ext = item.container_extension || 'mp4';
+          parsedItems.push({
+            id: parsedItems.length,
+            name: item.name,
+            group: groupName,
+            logo: item.stream_icon || '',
+            url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
+            type: 'movies',
+            isAdult: isAdultContent(groupName, item.name)
+          });
+        });
+
+        seriesStreams.forEach(item => {
+          const groupName = seriesCatMap[item.category_id] || 'Séries';
+          parsedItems.push({
+            id: parsedItems.length,
+            series_id: item.series_id,
+            name: item.name,
+            group: groupName,
+            logo: item.cover || '',
+            type: 'series',
+            isAdult: isAdultContent(groupName, item.name)
+          });
+        });
+
+        parsedItems.sort((a, b) => {
+          if (Boolean(a.isAdult) === Boolean(b.isAdult)) return 0;
+          return a.isAdult ? 1 : -1;
+        });
+
+        allMediaItems = parsedItems;
+        setSection('live');
+      } catch (err) {
+        const fallbackM3u = `${cleanServer}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=m3u8`;
+        await loadPlaylist(fallbackM3u);
+      }
+    }
+
+    async function loadPlaylist(url) {
+      try {
+        const res = await smartFetch(url);
+        const text = await res.text();
+        const parsed = parseM3U(text);
+
+        parsed.sort((a, b) => {
+          if (Boolean(a.isAdult) === Boolean(b.isAdult)) return 0;
+          return a.isAdult ? 1 : -1;
+        });
+
+        allMediaItems = parsed;
+        setSection('live');
+      } catch (err) {
+        alert('Erro ao carregar lista M3U.');
+      }
+    }
+
+    function parseM3U(data) {
+      if (!data) return [];
+      const lines = data.split(/\r?\n/);
+      const items = [];
+      let temp = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        if (line.startsWith('#EXTINF:')) {
+          temp = {};
+          const groupMatch = line.match(/group-title="([^"]*)"/i);
+          const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+          const commaIdx = line.lastIndexOf(',');
+
+          temp.group = groupMatch && groupMatch[1] ? groupMatch[1].trim() : 'Geral';
+          temp.logo = logoMatch && logoMatch[1] ? logoMatch[1].trim() : '';
+          temp.name = commaIdx !== -1 ? line.substring(commaIdx + 1).trim() : 'Sem título';
+        } else if (!line.startsWith('#') && temp) {
+          temp.url = line;
+          temp.id = items.length;
+          temp.type = detectMediaType(temp.group, temp.name, temp.url);
+          temp.isAdult = isAdultContent(temp.group, temp.name);
+          items.push(temp);
+          temp = null;
+        }
+      }
+      return items;
+    }
+
+    function detectMediaType(group, name, url) {
+      const g = (group || '').toLowerCase();
+      const n = (name || '').toLowerCase();
+      const u = (url || '').toLowerCase();
+
+      if (g.includes('24h') || g.includes('canais') || g.includes('abertos') || (g.includes('tv') && !g.includes('filmes') && !g.includes('series'))) {
+        return 'live';
+      }
+      if (g.includes('serie') || g.includes('séries') || g.includes('temporada') || u.includes('/series/')) {
+        return 'series';
+      }
+      if (g.includes('filme') || g.includes('movie') || g.includes('vod') || g.includes('cinema') || u.endsWith('.mp4') || u.endsWith('.mkv') || u.includes('/movie/')) {
+        return 'movies';
+      }
+      return 'live';
+    }
+
+    function updateNavIndicator() {
+      const activeBtn = document.getElementById('nav' + currentSection.charAt(0).toUpperCase() + currentSection.slice(1));
+      const slider = document.getElementById('navSlider');
+      if (activeBtn && slider) {
+        slider.style.left = `${activeBtn.offsetLeft}px`;
+        slider.style.width = `${activeBtn.offsetWidth}px`;
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      updateNavIndicator();
+      updateLayoutForScreen();
+    });
+
+    function setSection(section) {
+      currentSection = section;
+      activeCategory = 'Todos';
+      visibleCount = ITEMS_PER_PAGE;
+      mobileStep = 'categories';
+
+      const liveVideo = document.getElementById('videoPlayerLive');
+      if (liveVideo) liveVideo.pause();
+
+      ['live', 'movies', 'series'].forEach(sec => {
+        const btn = document.getElementById('nav' + sec.charAt(0).toUpperCase() + sec.slice(1));
+        if (btn) {
+          btn.className = sec === section
+            ? "relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-white"
+            : "relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white";
+        }
+      });
+      updateNavIndicator();
+
+      ['live', 'movies', 'series'].forEach(sec => {
+        const bBtn = document.getElementById('bNav' + sec.charAt(0).toUpperCase() + sec.slice(1));
+        if (bBtn) {
+          const iconDiv = bBtn.querySelector('div');
+          if (sec === section) {
+            bBtn.className = "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-300 transition-all";
+            iconDiv.className = "p-1 rounded-xl bg-purple-600 text-white shadow-md shadow-purple-900/60";
+          } else {
+            bBtn.className = "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all";
+            iconDiv.className = "p-1 rounded-xl text-purple-400/60";
+          }
+        }
+      });
+
+      renderCategories();
+      updateLayoutForScreen();
+    }
+
+    function updateLayoutForScreen() {
+      const isMobile = window.innerWidth < 1024;
+      const mobCatSec = document.getElementById('mobileCategoriesSection');
+      const liveChannelsSec = document.getElementById('liveChannelsSection');
+      const livePlayerSec = document.getElementById('livePlayerSection');
+      const vodGridSec = document.getElementById('vodGridSection');
+
+      if (isMobile) {
+        if (mobileStep === 'categories') {
+          mobCatSec.classList.remove('hidden');
+          liveChannelsSec.classList.add('hidden');
+          livePlayerSec.classList.add('hidden');
+          vodGridSec.classList.add('hidden');
+        } else {
+          mobCatSec.classList.add('hidden');
+          if (currentSection === 'live') {
+            liveChannelsSec.classList.remove('hidden');
+            livePlayerSec.classList.add('hidden');
+            vodGridSec.classList.add('hidden');
+          } else {
+            liveChannelsSec.classList.add('hidden');
+            livePlayerSec.classList.add('hidden');
+            vodGridSec.classList.remove('hidden');
+          }
+        }
+      } else {
+        mobCatSec.classList.add('hidden');
+
+        if (currentSection === 'live') {
+          liveChannelsSec.classList.remove('hidden');
+          livePlayerSec.classList.remove('hidden');
+          vodGridSec.classList.add('hidden');
+        } else {
+          liveChannelsSec.classList.add('hidden');
+          livePlayerSec.classList.add('hidden');
+          vodGridSec.classList.remove('hidden');
+        }
+      }
+
+      filterMedia();
+      lucide.createIcons();
+    }
+
+    function backToMobileCategories() {
+      mobileStep = 'categories';
+      updateLayoutForScreen();
+    }
+
+    function selectMobileCategory(cat) {
+      const isAdultCat = isAdultContent(cat);
+      const proceed = () => {
+        activeCategory = cat;
+        mobileStep = 'items';
+        visibleCount = ITEMS_PER_PAGE;
+        updateLayoutForScreen();
+      };
+
+      if (isAdultCat && !isAdultUnlocked) {
+        requireAdultPin(proceed);
+      } else {
+        proceed();
+      }
+    }
+
+    function getSectionItems() {
+      return allMediaItems.filter(item => item.type === currentSection);
+    }
+
+    // --- RENDERIZAÇÃO DE GÊNEROS (INCLUINDO CONTINUAR ASSISTINDO) ---
+    function renderCategories() {
+      const items = getSectionItems();
+      const rawCats = [...new Set(items.map(c => c.group))];
+
+      const nonAdultCats = rawCats.filter(c => !isAdultContent(c));
+      const adultCats = rawCats.filter(c => isAdultContent(c));
+      
+      const cats = ['Todos', 'Continuar Assistindo', ...nonAdultCats, ...adultCats];
+
+      // Conta quantos itens da seção atual possuem progresso salvo
+      const resumeCount = items.filter(c => {
+        const prog = localStorage.getItem(getResumeKey(c));
+        return prog && parseFloat(prog) > 5;
+      }).length;
+
+      document.getElementById('mediaCountBadge').innerText = `${items.length} itens`;
+      document.getElementById('mobileMediaCountBadge').innerText = `${items.length} itens`;
+
+      const sectionTitle = currentSection === 'live' ? 'Canais de TV' : (currentSection === 'movies' ? 'Filmes' : 'Séries');
+      document.getElementById('mobileCatSubtitle').innerText = `Escolha um gênero de ${sectionTitle}`;
+
+      // 1. Sidebar Desktop
+      const desktopContainer = document.getElementById('categoriesList');
+      desktopContainer.innerHTML = '';
+
+      cats.forEach(cat => {
+        const isAdultCat = isAdultContent(cat);
+        const isResumeCat = cat === 'Continuar Assistindo';
+        const isAllCat = cat === 'Todos';
+        
+        let count = 0;
+        if (isAllCat) count = items.length;
+        else if (isResumeCat) count = resumeCount;
+        else count = items.filter(c => c.group === cat).length;
+
+        const btn = document.createElement('button');
+        btn.onclick = () => {
+          const proceed = () => {
+            activeCategory = cat;
+            visibleCount = ITEMS_PER_PAGE;
+            renderCategories();
+            filterMedia();
+          };
+          if (isAdultCat && !isAdultUnlocked) requireAdultPin(proceed);
+          else proceed();
+        };
+
+        const activeClasses = activeCategory === cat 
+          ? (isResumeCat ? 'bg-amber-600/20 text-amber-300 border border-amber-500/50 shadow-sm' : 'bg-purple-600/20 text-purple-300 border border-purple-500/40 shadow-sm')
+          : (isResumeCat ? 'text-amber-400/80 hover:bg-amber-950/40 hover:text-amber-200' : 'text-purple-400/70 hover:bg-purple-950/40 hover:text-purple-200');
+
+        btn.className = `text-left px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center justify-between ${activeClasses}`;
+        
+        btn.innerHTML = `
+          <span class="truncate max-w-[145px] flex items-center gap-1.5">
+            ${isResumeCat ? `<i data-lucide="play-circle" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>` : (isAdultCat ? `<i data-lucide="lock" class="w-3 h-3 text-rose-400 shrink-0"></i>` : '')}
+            ${cat}
+          </span>
+          <span class="text-[10px] ${isResumeCat ? 'text-amber-400/70 bg-[#26180c]' : 'text-purple-400/50 bg-[#170e26]'} px-1.5 py-0.5 rounded-md ml-1 shrink-0">${count}</span>
+        `;
+        desktopContainer.appendChild(btn);
+      });
+
+      // 2. Grade de Cards Mobile (Etapa 1)
+      const mobileGrid = document.getElementById('mobileCategoryGrid');
+      mobileGrid.innerHTML = '';
+
+      cats.forEach(cat => {
+        const isAdultCat = isAdultContent(cat);
+        const isResumeCat = cat === 'Continuar Assistindo';
+        const isSpecialAll = cat === 'Todos';
+
+        let count = 0;
+        if (isSpecialAll) count = items.length;
+        else if (isResumeCat) count = resumeCount;
+        else count = items.filter(c => c.group === cat).length;
+
+        const card = document.createElement('div');
+        card.onclick = () => selectMobileCategory(cat);
+
+        const iconName = isResumeCat ? 'play-circle' : (isAdultCat ? 'lock' : (currentSection === 'live' ? 'tv' : (currentSection === 'movies' ? 'film' : 'clapperboard')));
+        const iconColor = isResumeCat 
+          ? 'text-amber-400 bg-amber-950/80 border-amber-800/60' 
+          : (isAdultCat ? 'text-rose-400 bg-rose-950/60 border-rose-800/40' : 'text-purple-400 bg-purple-950/60 border-purple-800/40');
+
+        card.className = `relative rounded-2xl border p-4 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.97] shadow-lg ${
+          isSpecialAll 
+            ? 'col-span-1 bg-gradient-to-r from-purple-900/60 to-indigo-900/40 border-purple-500/50 min-h-[95px]'
+            : (isResumeCat 
+              ? 'col-span-1 bg-gradient-to-r from-amber-950/60 to-purple-950/60 border-amber-500/50 min-h-[95px]'
+              : (isAdultCat 
+                ? 'bg-[#180d1a] border-rose-900/40 hover:border-rose-600/50 min-h-[105px]' 
+                : 'bg-[#120c1f] border-purple-950/80 hover:border-purple-600/50 min-h-[105px]'))
+        }`;
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div class="w-9 h-9 rounded-xl border flex items-center justify-center ${iconColor}">
+              <i data-lucide="${iconName}" class="w-4 h-4"></i>
+            </div>
+            <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md ${isResumeCat ? 'bg-amber-950 text-amber-300' : (isAdultCat ? 'bg-rose-950 text-rose-300' : 'bg-purple-950 text-purple-300')}">
+              ${count}
+            </span>
+          </div>
+          <div class="mt-2">
+            <h4 class="text-xs font-bold ${isResumeCat ? 'text-amber-200' : 'text-slate-100'} line-clamp-2">${cat}</h4>
+          </div>
+        `;
+        mobileGrid.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    // --- FILTRAGEM DE CONTEÚDO (INCLUINDO CONTINUAR ASSISTINDO) ---
+    function filterMedia() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      const currentList = getSectionItems();
+      
+      currentFilteredItems = currentList.filter(c => {
+        let matchesCat = false;
+        if (activeCategory === 'Todos') matchesCat = true;
+        else if (activeCategory === 'Continuar Assistindo') {
+          const prog = localStorage.getItem(getResumeKey(c));
+          matchesCat = prog && parseFloat(prog) > 5;
+        } else {
+          matchesCat = c.group === activeCategory;
+        }
+
+        const matchesQuery = !query || c.name.toLowerCase().includes(query);
+        return matchesCat && matchesQuery;
+      });
+
+      currentFilteredItems.sort((a, b) => {
+        if (Boolean(a.isAdult) === Boolean(b.isAdult)) return 0;
+        return a.isAdult ? 1 : -1;
+      });
+
+      document.getElementById('liveCategoryTitle').innerText = activeCategory;
+      document.getElementById('vodCategoryTitle').innerText = activeCategory;
+      document.getElementById('vodItemCountBadge').innerText = `${currentFilteredItems.length} itens`;
+
+      visibleCount = ITEMS_PER_PAGE;
+      renderCurrentPage();
+    }
+
+    function renderCurrentPage() {
+      const container = currentSection === 'live' 
+        ? document.getElementById('liveItemsContainer') 
+        : document.getElementById('vodGridContainer');
+
+      container.innerHTML = '';
+      container.scrollTop = 0;
+
+      if (currentSection === 'live') {
+        document.getElementById('liveChannelCount').innerText = currentFilteredItems.length;
+      }
+
+      appendMoreItems();
+    }
+
+    function appendMoreItems() {
+      const isLive = currentSection === 'live';
+      const container = isLive 
+        ? document.getElementById('liveItemsContainer') 
+        : document.getElementById('vodGridContainer');
+
+      const currentBatch = currentFilteredItems.slice(container.children.length, visibleCount);
+      const fragment = document.createDocumentFragment();
+
+      currentBatch.forEach(c => {
+        const card = document.createElement('div');
+
+        if (isLive) {
+          const isActive = activeLiveChannel && activeLiveChannel.id === c.id;
+          card.onclick = () => {
+            if (c.isAdult && !isAdultUnlocked) {
+              requireAdultPin(() => playLiveChannel(c));
+            } else {
+              playLiveChannel(c);
+            }
+          };
+
+          card.className = `flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all border ${
+            isActive ? 'bg-purple-900/40 border-purple-500/50 lux-glow-sm' : 'hover:bg-purple-950/30 border-transparent'
+          }`;
+          card.innerHTML = `
+            ${c.logo 
+              ? `<img src="${c.logo}" class="w-9 h-9 object-contain rounded-lg bg-[#0c0814] border border-purple-950 p-1 shrink-0" loading="lazy" onerror="this.outerHTML = getLiveFallbackHtml(${c.isAdult}); lucide.createIcons();"/>`
+              : getLiveFallbackHtml(c.isAdult)
+            }
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold text-slate-200 truncate flex items-center gap-1">
+                ${c.isAdult ? `<i data-lucide="lock" class="w-3 h-3 text-rose-400 shrink-0"></i>` : ''}
+                ${c.name}
+              </p>
+              <p class="text-[10px] text-purple-400 truncate">${c.group}</p>
+            </div>
+            ${isActive ? `<div class="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0"></div>` : ''}
+          `;
+        } else {
+          card.onclick = () => {
+            if (c.isAdult && !isAdultUnlocked) {
+              requireAdultPin(() => handleVodClick(c));
+            } else {
+              handleVodClick(c);
+            }
+          };
+
+          const isAdult = c.isAdult;
+          const fallbackIcon = isAdult 
+            ? `<div class="w-12 h-12 rounded-2xl bg-rose-950/60 border border-rose-800/50 flex flex-col items-center justify-center text-rose-400 mb-2 shadow-lg"><i data-lucide="lock" class="w-5 h-5 mb-0.5"></i><span class="text-[9px] font-bold">+18</span></div>`
+            : (currentSection === 'movies'
+              ? `<div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center text-purple-400 mb-2 shadow-lg"><i data-lucide="film" class="w-6 h-6"></i></div>`
+              : `<div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center text-purple-400 mb-2 shadow-lg"><i data-lucide="clapperboard" class="w-6 h-6"></i></div>`
+            );
+
+          const fallbackBgGradient = isAdult
+            ? `from-[#1c0b16] via-[#120710] to-[#0a0409]`
+            : `from-[#180f29] via-[#0f091a] to-[#08050e]`;
+
+          card.className = "flex flex-col bg-[#120c1f] rounded-2xl border border-purple-950/80 hover:border-purple-500/70 overflow-hidden cursor-pointer group transition-all duration-300 hover:-translate-y-1.5 shadow-lg hover:shadow-purple-950/60 w-full min-h-[270px] md:min-h-[300px]";
+          card.innerHTML = `
+            <div class="w-full relative overflow-hidden bg-[#0c0814] flex items-center justify-center shrink-0 aspect-[2/3]">
+              ${c.logo 
+                ? `<img src="${c.logo}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); lucide.createIcons();"/>`
+                : ''
+              }
+              <div class="${c.logo ? 'hidden' : ''} absolute inset-0 bg-gradient-to-br ${fallbackBgGradient} flex flex-col items-center justify-center p-4 text-center border-b border-purple-950/40">
+                ${fallbackIcon}
+                <p class="text-[11px] font-bold text-slate-300 line-clamp-3 leading-tight">${c.name}</p>
+              </div>
+
+              <div class="absolute inset-0 bg-gradient-to-t from-[#120c1f] via-transparent to-transparent opacity-90 pointer-events-none"></div>
+
+              ${c.isAdult ? `<div class="absolute top-2 right-2 bg-rose-950/90 border border-rose-600/50 text-rose-300 text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 z-10 shadow"><i data-lucide="lock" class="w-3 h-3"></i> +18</div>` : ''}
+
+              <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px] z-10">
+                <div class="w-11 h-11 md:w-12 md:h-12 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-lg shadow-purple-900/60 transform group-hover:scale-110 transition-transform">
+                  <i data-lucide="${currentSection === 'series' ? 'list-video' : 'play'}" class="w-5 h-5 fill-white ml-0.5"></i>
+                </div>
+              </div>
+            </div>
+            <div class="p-2.5 md:p-3 bg-[#120c1f] border-t border-purple-950/40 flex-1 flex flex-col justify-between min-h-[55px]">
+              <h4 class="text-xs font-bold text-slate-100 truncate group-hover:text-purple-300 transition-colors" title="${c.name}">${c.name}</h4>
+              <p class="text-[10px] text-purple-400/80 truncate mt-0.5 md:mt-1">${c.group}</p>
+            </div>
+          `;
+        }
+
+        fragment.appendChild(card);
+      });
+
+      container.appendChild(fragment);
+      lucide.createIcons();
+    }
+
+    function handleVodClick(item) {
+      if (currentSection === 'movies') {
+        openVodPlayer(item);
+      } else if (currentSection === 'series') {
+        openSeriesModal(item);
+      }
+    }
+
+    function playLiveChannel(channel) {
+      activeLiveChannel = channel;
+
+      if (window.innerWidth < 1024) {
+        openVodPlayer(channel);
+        return;
+      }
+
+      document.getElementById('noStreamAlertLive').classList.add('hidden');
+      document.getElementById('liveCurrentName').innerText = channel.name;
+      document.getElementById('liveCurrentGroup').innerText = channel.group;
+
+      const logoContainer = document.getElementById('liveCurrentLogo');
+      const fallbackBarHtml = channel.isAdult
+        ? `<div class="w-full h-full bg-rose-950/60 flex flex-col items-center justify-center text-rose-400 font-bold text-[9px]"><i data-lucide="lock" class="w-3.5 h-3.5"></i><span>+18</span></div>`
+        : `<i data-lucide="tv" class="w-5 h-5"></i>`;
+
+      logoContainer.innerHTML = channel.logo 
+        ? `<img src="${channel.logo}" class="w-full h-full object-contain" onerror="this.outerHTML='${fallbackBarHtml}'; lucide.createIcons();"/>`
+        : fallbackBarHtml;
+
+      const video = document.getElementById('videoPlayerLive');
+
+      if (hlsLiveInstance) hlsLiveInstance.destroy();
+
+      if (Hls.isSupported() && channel.url.includes('.m3u8')) {
+        hlsLiveInstance = new Hls({ enableWorker: true });
+        hlsLiveInstance.loadSource(channel.url);
+        hlsLiveInstance.attachMedia(video);
+        hlsLiveInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+      } else {
+        video.src = channel.url;
+        video.play().catch(() => {});
+      }
+
+      appendMoreItems();
+    }
+
+    // --- PLAYER VOD (COM SUPORTE A RETOMAR DE ONDE PAROU) ---
+    function openVodPlayer(item) {
+      const liveVideo = document.getElementById('videoPlayerLive');
+      if (liveVideo) liveVideo.pause();
+
+      document.getElementById('vodPlayerTitle').innerText = item.name;
+      document.getElementById('vodPlayerType').innerText = item.type === 'live' ? 'AO VIVO' : (item.type === 'movies' ? 'FILME' : 'EPISÓDIO');
+      document.getElementById('vodPlayerModal').classList.remove('hidden');
+
+      const video = document.getElementById('videoPlayerVod');
+      if (hlsVodInstance) hlsVodInstance.destroy();
+
+      const resumeKey = getResumeKey(item);
+      const savedTime = item.type !== 'live' ? localStorage.getItem(resumeKey) : null;
+
+      const onVideoReady = () => {
+        if (savedTime && parseFloat(savedTime) > 10) {
+          video.currentTime = parseFloat(savedTime);
+        }
+        video.play().catch(() => {});
+      };
+
+      if (Hls.isSupported() && (item.url.includes('.m3u8') || item.type === 'live')) {
+        hlsVodInstance = new Hls({ enableWorker: true });
+        hlsVodInstance.loadSource(item.url);
+        hlsVodInstance.attachMedia(video);
+        hlsVodInstance.on(Hls.Events.MANIFEST_PARSED, onVideoReady);
+      } else {
+        video.src = item.url;
+        video.onloadedmetadata = onVideoReady;
+      }
+
+      // Salva o progresso a cada 2 segundos
+      video.ontimeupdate = () => {
+        if (item.type !== 'live' && video.currentTime > 5) {
+          localStorage.setItem(resumeKey, video.currentTime);
+        }
+      };
+
+      // Limpa ao finalizar
+      video.onended = () => {
+        if (item.type !== 'live') {
+          localStorage.removeItem(resumeKey);
+        }
+      };
+
+      lucide.createIcons();
+    }
+
+    function closeVodPlayer() {
+      const video = document.getElementById('videoPlayerVod');
+      video.pause();
+      video.src = '';
+      if (hlsVodInstance) hlsVodInstance.destroy();
+      document.getElementById('vodPlayerModal').classList.add('hidden');
+    }
+
+    function togglePlayerFullscreen() {
+      const playerElem = document.getElementById('vodPlayerModal');
+      const video = document.getElementById('videoPlayerVod');
+
+      if (!document.fullscreenElement) {
+        if (playerElem.requestFullscreen) {
+          playerElem.requestFullscreen().catch(() => video.requestFullscreen());
+        } else if (video.webkitEnterFullscreen) {
+          video.webkitEnterFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+      }
+    }
+
+    async function openSeriesModal(series) {
+      currentSeriesDetails = series;
+      document.getElementById('seriesModalTitle').innerText = series.name;
+      document.getElementById('seriesModalCategory').innerText = series.group;
+      document.getElementById('seriesModalStats').innerText = 'Buscando temporadas...';
+
+      const coverContainer = document.getElementById('seriesModalCover');
+      const seriesFallbackHtml = series.isAdult
+        ? `<div class="w-full h-full bg-rose-950/60 flex flex-col items-center justify-center text-rose-400 font-bold text-[10px]"><i data-lucide="lock" class="w-5 h-5 mb-0.5"></i>+18</div>`
+        : `<i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>`;
+
+      coverContainer.innerHTML = series.logo 
+        ? `<img src="${series.logo}" class="w-full h-full object-cover" onerror="this.outerHTML='${seriesFallbackHtml}'; lucide.createIcons();"/>`
+        : seriesFallbackHtml;
+
+      document.getElementById('seriesSeasonsContainer').innerHTML = '';
+      
+      document.getElementById('seriesEpisodesContainer').innerHTML = `
+        <div class="flex flex-col items-center justify-center py-12 gap-3">
+          <div class="w-10 h-10 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin"></div>
+          <p class="text-xs font-semibold text-purple-300 animate-pulse">Sincronizando temporadas e episódios...</p>
+        </div>
+      `;
+      document.getElementById('seriesModal').classList.remove('hidden');
+
+      const xcCreds = resolveUserCredentials(currentUser);
+
+      if (xcCreds.isXc && series.series_id) {
+        const cleanServer = xcCreds.server.replace(/\/+$/, '');
+        const infoUrl = `${cleanServer}/player_api.php?username=${encodeURIComponent(xcCreds.user)}&password=${encodeURIComponent(xcCreds.pass)}&action=get_series_info&series_id=${series.series_id}`;
+        
+        try {
+          const res = await smartFetch(infoUrl);
+          const data = await res.json();
+          currentSeriesEpisodesData = data.episodes || {};
+
+          const seasonNumbers = Object.keys(currentSeriesEpisodesData)
+            .map(Number)
+            .filter(n => !isNaN(n))
+            .sort((a, b) => a - b);
+
+          document.getElementById('seriesModalStats').innerText = `${seasonNumbers.length} Temporada(s) Disponíveis`;
+
+          if (seasonNumbers.length > 0) {
+            currentSelectedSeason = seasonNumbers[0];
+            renderSeasonTabs(seasonNumbers);
+            renderSeasonEpisodes();
+          } else {
+            document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-slate-400 p-6 text-center">Nenhum episódio cadastrado nesta série.</p>';
+          }
+        } catch (err) {
+          document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-rose-400 p-6 text-center">Erro ao buscar episódios do servidor.</p>';
+        }
+      } else {
+        document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-purple-400 p-6 text-center">Série disponível via lista direta.</p>';
+      }
+      lucide.createIcons();
+    }
+
+    function renderSeasonTabs(seasonsList) {
+      const container = document.getElementById('seriesSeasonsContainer');
+      container.innerHTML = '';
+
+      seasonsList.forEach(sNum => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+          Number(sNum) === Number(currentSelectedSeason)
+            ? 'bg-purple-600 text-white shadow-lg shadow-purple-950/50'
+            : 'bg-[#1a122c] text-purple-300 hover:bg-purple-900/50 border border-purple-900/50'
+        }`;
+        btn.innerText = `Temporada ${sNum}`;
+        btn.onclick = () => {
+          currentSelectedSeason = Number(sNum);
+          renderSeasonTabs(seasonsList);
+          renderSeasonEpisodes();
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function renderSeasonEpisodes() {
+      const container = document.getElementById('seriesEpisodesContainer');
+      container.innerHTML = '';
+
+      if (!currentSeriesEpisodesData) return;
+      const episodes = currentSeriesEpisodesData[currentSelectedSeason] || 
+                       currentSeriesEpisodesData[String(currentSelectedSeason)] || 
+                       currentSeriesEpisodesData[Number(currentSelectedSeason)] || [];
+
+      if (episodes.length === 0) {
+        container.innerHTML = '<p class="text-xs text-slate-400 p-6 text-center">Nenhum episódio nesta temporada.</p>';
+        return;
+      }
+
+      const xcCreds = resolveUserCredentials(currentUser);
+      const cleanServer = xcCreds.server.replace(/\/+$/, '');
+
+      episodes.forEach(ep => {
+        const ext = ep.container_extension || 'mp4';
+        const streamUrl = `${cleanServer}/series/${xcCreds.user}/${xcCreds.pass}/${ep.id}.${ext}`;
+        const epNum = ep.episode_num || ep.episode || '1';
+        const epTitle = ep.title ? ep.title.trim() : `Episódio ${epNum}`;
+
+        const row = document.createElement('div');
+        row.onclick = () => {
+          closeSeriesModal();
+          openVodPlayer({
+            name: `${currentSeriesDetails.name} - T${currentSelectedSeason}E${epNum} (${epTitle})`,
+            url: streamUrl,
+            type: 'series',
+            id: ep.id
+          });
+        };
+
+        row.className = "flex items-center justify-between p-3 bg-[#180f29] hover:bg-purple-900/40 border border-purple-950 hover:border-purple-700/50 rounded-xl cursor-pointer transition-all group";
+        row.innerHTML = `
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-8 h-8 rounded-lg bg-purple-950 border border-purple-900/60 text-purple-300 flex items-center justify-center text-xs font-mono font-bold shrink-0">
+              ${epNum}
+            </span>
+            <div class="truncate">
+              <p class="text-xs font-semibold text-slate-200 truncate group-hover:text-purple-300 transition-colors">
+                ${epTitle}
+              </p>
+              <p class="text-[10px] text-purple-400/60 font-mono">Temporada ${currentSelectedSeason} • Episódio ${epNum}</p>
+            </div>
+          </div>
+          <div class="w-8 h-8 rounded-full bg-purple-600/20 group-hover:bg-purple-600 text-purple-400 group-hover:text-white flex items-center justify-center shrink-0 transition-all shadow">
+            <i data-lucide="play" class="w-4 h-4 fill-current ml-0.5"></i>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+      lucide.createIcons();
+    }
+
+    function closeSeriesModal() {
+      document.getElementById('seriesModal').classList.add('hidden');
+    }
+
+    function requireAdultPin(onSuccess) {
+      if (isAdultUnlocked) {
+        onSuccess();
+        return;
+      }
+      pendingUnlockAction = onSuccess;
+      document.getElementById('adultPinInput').value = '';
+      document.getElementById('adultPinError').classList.add('hidden');
+      document.getElementById('adultPinModal').classList.remove('hidden');
+      document.getElementById('adultPinInput').focus();
+    }
+
+    function verifyAdultPin() {
+      const entered = document.getElementById('adultPinInput').value.trim();
+      const correctPin = (currentUser && currentUser.adultPin) ? currentUser.adultPin : '0000';
+
+      if (entered === correctPin) {
+        isAdultUnlocked = true;
+        closeAdultPinModal();
+        if (pendingUnlockAction) pendingUnlockAction();
+      } else {
+        document.getElementById('adultPinError').classList.remove('hidden');
+      }
+    }
+
+    function closeAdultPinModal() {
+      document.getElementById('adultPinModal').classList.add('hidden');
+      pendingUnlockAction = null;
+    }
+
+    function toggleConfigModal() {
+      document.getElementById('configModal').classList.toggle('hidden');
+    }
+
+    function setConnectionTab(tab) {
+      activeConnectionTab = tab;
+      if (tab === 'xc') {
+        document.getElementById('formXc').classList.remove('hidden');
+        document.getElementById('formM3u').classList.add('hidden');
+        document.getElementById('tabXc').className = 'flex-1 py-1.5 text-xs font-bold bg-purple-600 text-white rounded-lg transition-all';
+        document.getElementById('tabM3u').className = 'flex-1 py-1.5 text-xs font-bold text-purple-300 rounded-lg transition-all';
+      } else {
+        document.getElementById('formM3u').classList.remove('hidden');
+        document.getElementById('formXc').classList.add('hidden');
+        document.getElementById('tabM3u').className = 'flex-1 py-1.5 text-xs font-bold bg-purple-600 text-white rounded-lg transition-all';
+        document.getElementById('tabXc').className = 'flex-1 py-1.5 text-xs font-bold text-purple-300 rounded-lg transition-all';
+      }
+    }
+
+    function saveManualConnection() {
+      let finalUrl = '';
+
+      if (activeConnectionTab === 'xc') {
+        const server = document.getElementById('manualXcServer').value.trim();
+        const user = document.getElementById('manualXcUser').value.trim();
+        const pass = document.getElementById('manualXcPass').value.trim();
+
+        if (!server || !user || !pass) {
+          alert('Preencha Servidor, Usuário e Senha do Xtream Codes.');
+          return;
+        }
+
+        const cleanServer = server.replace(/\/+$/, '');
+        finalUrl = `${cleanServer}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=m3u8`;
+      } else {
+        finalUrl = document.getElementById('manualM3uInput').value.trim();
+        if (!finalUrl) {
+          alert('Insira a URL da lista M3U.');
+          return;
+        }
+      }
+
+      toggleConfigModal();
+      loadPlaylist(finalUrl);
+    }
+
+    // --- DETECÇÃO E INSTALAÇÃO PWA ---
+    function isRunningStandalone() {
+      return window.matchMedia('(display-mode: standalone)').matches || 
+             window.navigator.standalone === true || 
+             document.referrer.includes('android-app://');
+    }
+
+    function isIosDevice() {
+      return /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      checkAndShowPwaBanner();
+    });
+
+    function checkAndShowPwaBanner() {
+      if (isRunningStandalone()) return;
+      const dismissedTime = localStorage.getItem('lux_pwa_dismissed');
+      if (dismissedTime && (Date.now() - parseInt(dismissedTime, 10)) < 86400000) return;
+
+      const banner = document.getElementById('pwaInstallBanner');
+      const actionBtn = document.getElementById('pwaInstallActionBtn');
+      const instructionText = document.getElementById('pwaInstructionText');
+
+      if (isIosDevice()) {
+        instructionText.innerHTML = `Toque no botão <strong>Compartilhar</strong> do Safari (<i data-lucide="share" class="w-3 h-3 inline"></i>) e selecione <strong>"Adicionar à Tela de Início"</strong>.`;
+        actionBtn.classList.add('hidden');
+      }
+
+      banner.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    async function triggerPwaInstall() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          dismissPwaBanner();
+        }
+        deferredPrompt = null;
+      }
+    }
+
+    function dismissPwaBanner() {
+      document.getElementById('pwaInstallBanner').classList.add('hidden');
+      localStorage.setItem('lux_pwa_dismissed', Date.now().toString());
+    }
+
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        checkAndShowPwaBanner();
+      }, 2500);
+    });
+
+    lucide.createIcons();
+  </script>
+</body>
+</html>
