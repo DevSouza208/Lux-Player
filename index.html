@@ -460,17 +460,20 @@
       return `<div class="w-9 h-9 rounded-lg bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 shrink-0"><i data-lucide="tv" class="w-4 h-4"></i></div>`;
     }
 
+    // --- SMART FETCH COM SUPORTE ROBUSTO A PROXY PARA HTTPS/HTTP ---
     async function smartFetch(url) {
+      const encoded = encodeURIComponent(url);
       const endpoints = [
         url,
-        `https://corsproxy.io/?` + encodeURIComponent(url),
-        `https://api.allorigins.win/raw?url=` + encodeURIComponent(url)
+        `https://api.allorigins.win/raw?url=${encoded}`,
+        `https://corsproxy.io/?${encoded}`,
+        `https://thingproxy.freeboard.io/fetch/${url}`
       ];
 
       for (const target of endpoints) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 9000);
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
           const res = await fetch(target, { signal: controller.signal });
           clearTimeout(timeoutId);
           if (res.ok) return res;
@@ -480,7 +483,8 @@
     }
 
     async function fetchUsersFromSheet() {
-      const res = await smartFetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`);
+      const sheetUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+      const res = await smartFetch(sheetUrl);
       const csvText = await res.text();
       return parseCSV(csvText);
     }
