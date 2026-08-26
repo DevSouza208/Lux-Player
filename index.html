@@ -447,6 +447,7 @@
     let currentSelectedSeason = 1;
 
     let deferredPrompt = null;
+    let activeConnectionTab = 'xc';
 
     // --- FUNÇÕES DE HISTÓRICO / CONTINUAR ASSISTINDO ---
     function getResumeKey(item) {
@@ -733,11 +734,12 @@
 
         liveStreams.forEach(item => {
           const groupName = liveCatMap[item.category_id] || 'Canais';
+          const secureLogo = item.stream_icon ? item.stream_icon.replace(/^http:\/\//i, 'https://') : '';
           parsedItems.push({
             id: parsedItems.length,
             name: item.name,
             group: groupName,
-            logo: item.stream_icon || '',
+            logo: secureLogo,
             url: `${cleanServer}/live/${user}/${pass}/${item.stream_id}.m3u8`,
             type: 'live',
             isAdult: isAdultContent(groupName, item.name)
@@ -747,11 +749,12 @@
         vodStreams.forEach(item => {
           const groupName = vodCatMap[item.category_id] || 'Filmes';
           const ext = item.container_extension || 'mp4';
+          const secureLogo = item.stream_icon ? item.stream_icon.replace(/^http:\/\//i, 'https://') : '';
           parsedItems.push({
             id: parsedItems.length,
             name: item.name,
             group: groupName,
-            logo: item.stream_icon || '',
+            logo: secureLogo,
             url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
             type: 'movies',
             isAdult: isAdultContent(groupName, item.name)
@@ -760,12 +763,13 @@
 
         seriesStreams.forEach(item => {
           const groupName = seriesCatMap[item.category_id] || 'Séries';
+          const secureLogo = item.cover ? item.cover.replace(/^http:\/\//i, 'https://') : '';
           parsedItems.push({
             id: parsedItems.length,
             series_id: item.series_id,
             name: item.name,
             group: groupName,
-            logo: item.cover || '',
+            logo: secureLogo,
             type: 'series',
             isAdult: isAdultContent(groupName, item.name)
           });
@@ -819,7 +823,8 @@
           const commaIdx = line.lastIndexOf(',');
 
           temp.group = groupMatch && groupMatch[1] ? groupMatch[1].trim() : 'Geral';
-          temp.logo = logoMatch && logoMatch[1] ? logoMatch[1].trim() : '';
+          const rawLogo = logoMatch && logoMatch[1] ? logoMatch[1].trim() : '';
+          temp.logo = rawLogo.replace(/^http:\/\//i, 'https://');
           temp.name = commaIdx !== -1 ? line.substring(commaIdx + 1).trim() : 'Sem título';
         } else if (!line.startsWith('#') && temp) {
           temp.url = line;
@@ -979,7 +984,6 @@
       
       const cats = ['Todos', 'Continuar Assistindo', ...nonAdultCats, ...adultCats];
 
-      // Conta quantos itens da seção atual possuem progresso salvo
       const resumeCount = items.filter(c => {
         const prog = localStorage.getItem(getResumeKey(c));
         return prog && parseFloat(prog) > 5;
@@ -1285,6 +1289,11 @@
       const video = document.getElementById('videoPlayerVod');
       if (hlsVodInstance) hlsVodInstance.destroy();
 
+      let finalStreamUrl = item.url;
+      if (finalStreamUrl.startsWith('http://') && !finalStreamUrl.includes('m3u8')) {
+        finalStreamUrl = `/api/proxy?url=${encodeURIComponent(item.url)}`;
+      }
+
       const resumeKey = getResumeKey(item);
       const savedTime = item.type !== 'live' ? localStorage.getItem(resumeKey) : null;
 
@@ -1295,24 +1304,22 @@
         video.play().catch(() => {});
       };
 
-      if (Hls.isSupported() && (item.url.includes('.m3u8') || item.type === 'live')) {
+      if (Hls.isSupported() && (finalStreamUrl.includes('.m3u8') || item.type === 'live')) {
         hlsVodInstance = new Hls({ enableWorker: true });
-        hlsVodInstance.loadSource(item.url);
+        hlsVodInstance.loadSource(finalStreamUrl);
         hlsVodInstance.attachMedia(video);
         hlsVodInstance.on(Hls.Events.MANIFEST_PARSED, onVideoReady);
       } else {
-        video.src = item.url;
+        video.src = finalStreamUrl;
         video.onloadedmetadata = onVideoReady;
       }
 
-      // Salva o progresso a cada 2 segundos
       video.ontimeupdate = () => {
         if (item.type !== 'live' && video.currentTime > 5) {
           localStorage.setItem(resumeKey, video.currentTime);
         }
       };
 
-      // Limpa ao finalizar
       video.onended = () => {
         if (item.type !== 'live') {
           localStorage.removeItem(resumeKey);
