@@ -4,13 +4,22 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(targetUrl);
-    const data = await response.text();
-
+    
+    // Repassa os headers importantes do servidor original
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Content-Type', response.headers.get('content-type') || 'text/plain');
+    
+    const contentType = response.headers.get('content-type') || 'text/plain';
+    res.setHeader('Content-Type', contentType);
 
-    return res.status(200).send(data);
+    // Se for texto/m3u, lê como texto, senão como buffer
+    if (contentType.includes('text') || contentType.includes('application') || targetUrl.includes('.m3u')) {
+      const data = await response.text();
+      return res.status(200).send(data);
+    } else {
+      const buffer = await response.arrayBuffer();
+      return res.status(200).send(Buffer.from(buffer));
+    }
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao conectar via proxy da Vercel' });
   }
