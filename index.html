@@ -4,15 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>LUX Play - Web Streaming</title>
-  
-  <!-- Configurações PWA (Modo App Nativo) -->
-  <meta name="theme-color" content="#09060e">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="LUX Play">
-  <meta name="application-name" content="LUX Play">
-  <link rel="manifest" href='data:application/manifest+json,{"name":"LUX Play","short_name":"LUX Play","start_url":".","display":"standalone","background_color":"%2309060e","theme_color":"%2309060e","orientation":"portrait-primary"}'>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -60,7 +51,7 @@
 
   <!-- ================= TELA DE LOGIN ================= -->
   <div id="authScreen" class="fixed inset-0 z-50 bg-[#06040a] flex items-center justify-center p-4 screen-transition screen-visible">
-    <div class="bg-[#120c1f] border border-purple-900/40 rounded-3xl p-8 max-w-md w-full lux-glow">
+    <div class="bg-[#120c1f] border border-purple-900/40 rounded-3xl p-8 max-w-md w-full lux-glow relative">
       <div class="flex flex-col items-center justify-center gap-2 mb-8">
         <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-900 p-0.5 lux-glow-sm flex items-center justify-center animate-lux-pulse">
           <svg class="w-10 h-10 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
@@ -88,6 +79,9 @@
 
         <p id="authStatusText" class="text-xs text-center font-medium"></p>
       </div>
+
+      <!-- Versão no canto inferior direito da tela de login -->
+      <div class="absolute bottom-3 right-4 text-[10px] text-purple-400/40 font-mono pointer-events-none">versão 1.0</div>
     </div>
   </div>
 
@@ -140,7 +134,7 @@
     <!-- Busca Rápida (Desktop) -->
     <div class="flex-1 max-w-xs mx-4 hidden md:block">
       <div class="relative">
-        <input id="searchInput" oninput="filterMedia()" type="text" placeholder="Buscar canal, filme ou série..." class="w-full bg-[#180f29] border border-purple-900/40 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-purple-400/40 focus:outline-none focus:border-purple-500">
+        <input id="searchInput" oninput="handleSearchInput()" type="text" placeholder="Buscar canal, filme ou série..." class="w-full bg-[#180f29] border border-purple-900/40 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-purple-400/40 focus:outline-none focus:border-purple-500">
         <i data-lucide="search" class="w-4 h-4 text-purple-400/50 absolute left-3 top-2"></i>
       </div>
     </div>
@@ -148,7 +142,7 @@
     <!-- Perfil & Admin -->
     <div class="flex items-center gap-3">
       <a id="sheetAdminBtn" href="https://docs.google.com/spreadsheets/d/1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0/edit" target="_blank" class="hidden bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
-        <i data-lucide="table" class="w-3.5 h-3.5"></i> Planilha
+        <i data-lucide="database" class="w-3.5 h-3.5"></i> Banco de Dados
       </a>
 
       <!-- Botão Conexão (Exclusivo Admin) -->
@@ -156,7 +150,7 @@
         <i data-lucide="link" class="w-3.5 h-3.5"></i> Conexão
       </button>
 
-      <button onclick="reloadFromSheet()" title="Recarregar Planilha" class="bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
+      <button onclick="reloadFromSheet()" title="Recarregar Banco de Dados" class="bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
         <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
       </button>
 
@@ -179,7 +173,12 @@
     <aside id="desktopSidebar" class="hidden lg:flex w-60 bg-[#0d0817] border-r border-purple-950/70 flex-col p-3 shrink-0">
       <div class="flex items-center justify-between px-2 mb-2">
         <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400">Gêneros</span>
-        <span id="mediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-full font-mono">0 itens</span>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleSortMode()" id="sortModeBtn" title="Organizar Gêneros" class="text-[10px] bg-purple-950 hover:bg-purple-900 text-purple-300 p-1.5 rounded-md transition-all flex items-center justify-center">
+            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+          </button>
+          <span id="mediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-full font-mono">0 itens</span>
+        </div>
       </div>
       <div id="categoriesList" class="flex flex-col gap-1.5 overflow-y-auto pr-1"></div>
     </aside>
@@ -199,7 +198,7 @@
     </section>
 
     <!-- 3. ETAPA 2 (MOBILE) / GRADE (DESKTOP): Lista de Canais (TV Ao Vivo) -->
-    <section id="liveChannelsSection" class="w-full lg:w-80 bg-[#120c1f] border-b lg:border-b-0 lg:border-r border-purple-950/70 flex-col flex-1 lg:flex-initial shrink-0 overflow-hidden hidden">
+    <section id="liveChannelsSection" class="w-full lg:w-80 bg-[#120c1f] border-b lg:border-b-0 lg:border-r border-purple-950/70 flex flex-col flex-1 lg:flex-initial shrink-0 overflow-hidden hidden">
       <div class="p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#150d24]">
         <div class="flex items-center gap-2 min-w-0">
           <button onclick="backToMobileCategories()" class="lg:hidden bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
@@ -240,11 +239,15 @@
             </div>
           </div>
         </div>
+        <!-- Botão Guia EPG na Barra do Player Ao Vivo -->
+        <button onclick="openEpgModal()" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
+          <i data-lucide="calendar" class="w-4 h-4"></i> Guia EPG
+        </button>
       </div>
     </main>
 
     <!-- 5. Grade de Filmes / Séries -->
-    <section id="vodGridSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex-col overflow-hidden hidden">
+    <section id="vodGridSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex flex-col overflow-hidden hidden">
       <div class="lg:hidden p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#120c1f]">
         <div class="flex items-center gap-2 min-w-0">
           <button onclick="backToMobileCategories()" class="bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
@@ -259,6 +262,120 @@
       <div id="vodGridContainer" class="flex-1 min-h-0 h-full overflow-y-auto p-3.5 md:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 md:gap-5 content-start auto-rows-max pb-20 lg:pb-6"></div>
     </section>
 
+  </div>
+
+  <!-- ================= BOTÃO FLUTUANTE DE PESQUISA (MOBILE ONLY) ================= -->
+  <button id="floatingSearchBtn" onclick="toggleMobileSearchModal()" class="hidden md:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-xl lux-glow transition-all active:scale-95">
+    <i data-lucide="search" class="w-6 h-6"></i>
+  </button>
+
+  <!-- ================= MODAL DE PESQUISA MOBILE ================= -->
+  <div id="mobileSearchModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex flex-col p-4 justify-start pt-16">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-2xl p-4 w-full max-w-md mx-auto lux-glow relative">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i data-lucide="search" class="w-4 h-4 text-purple-400"></i> Buscar Conteúdo
+        </h3>
+        <button onclick="toggleMobileSearchModal()" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+      <div class="relative">
+        <input id="mobileSearchInput" oninput="syncMobileSearch()" type="text" placeholder="Digite o nome..." class="w-full bg-[#1a122c] border border-purple-900/50 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+        <i data-lucide="search" class="w-4 h-4 text-purple-400/50 absolute left-3 top-3"></i>
+      </div>
+      <button onclick="toggleMobileSearchModal()" class="w-full mt-3 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-xs transition-all">
+        Filtrar e Fechar
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DE DETALHES / SINOPSE DE FILMES ================= -->
+  <div id="movieModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-xl w-full max-h-[85vh] flex flex-col lux-glow overflow-y-auto">
+      <div class="flex items-start justify-between pb-4 border-b border-purple-950">
+        <div class="flex items-center gap-3 md:gap-4 min-w-0">
+          <div id="movieModalCover" class="w-20 h-28 md:w-24 md:h-36 rounded-xl bg-[#0c0814] border border-purple-900/50 overflow-hidden shrink-0 flex items-center justify-center shadow-lg">
+            <i data-lucide="film" class="w-8 h-8 text-purple-700"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 id="movieModalTitle" class="text-base md:text-xl font-bold text-white truncate">Título do Filme</h2>
+            <p id="movieModalCategory" class="text-xs text-purple-400 mt-1 truncate">Gênero</p>
+            <div class="flex items-center gap-2 mt-2">
+              <span id="movieModalYear" class="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded font-mono">--</span>
+              <button id="movieModalFavBtn" onclick="toggleFavoriteCurrentMovie(event)" class="text-purple-300 hover:text-rose-400 p-1 rounded-lg transition-all flex items-center gap-1 text-xs">
+                <i data-lucide="heart" class="w-4 h-4"></i> <span id="movieModalFavText">Favoritar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <button onclick="closeMovieModal()" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0">✕</button>
+      </div>
+
+      <div class="py-4 space-y-3">
+        <div>
+          <h4 class="text-[11px] font-bold uppercase text-purple-400 mb-1">Sinopse</h4>
+          <p id="movieModalPlot" class="text-xs text-slate-300 leading-relaxed">Carregando sinopse...</p>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-purple-950 flex gap-3 mt-auto">
+        <button id="movieModalPlayBtn" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-xs transition-all shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
+          <i data-lucide="play" class="w-4 h-4 fill-white"></i> Assistir Filme
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DE SÉRIES (COMPLETO COM SINOPSE) ================= -->
+  <div id="seriesModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-2xl w-full max-h-[85vh] flex flex-col lux-glow">
+      <div class="flex items-start justify-between pb-4 border-b border-purple-950">
+        <div class="flex items-center gap-3 md:gap-4 min-w-0">
+          <div id="seriesModalCover" class="w-20 h-28 md:w-24 md:h-36 rounded-xl bg-[#0c0814] border border-purple-900/50 overflow-hidden shrink-0 flex items-center justify-center shadow-lg">
+            <i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 id="seriesModalTitle" class="text-base md:text-lg font-bold text-white truncate">Nome da Série</h2>
+            <p id="seriesModalCategory" class="text-xs text-purple-400 mt-0.5 truncate">Gênero</p>
+            <div class="flex items-center gap-2 mt-1">
+              <span id="seriesModalStats" class="text-[10px] md:text-[11px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-md font-mono">Carregando...</span>
+              <button id="seriesModalFavBtn" onclick="toggleFavoriteCurrentSeries(event)" class="text-purple-300 hover:text-rose-400 p-1 rounded-lg transition-all flex items-center gap-1 text-xs">
+                <i data-lucide="heart" class="w-4 h-4"></i> <span id="seriesModalFavText">Favoritar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <button onclick="closeSeriesModal()" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0">✕</button>
+      </div>
+
+      <!-- Sinopse da Série -->
+      <div class="py-2">
+        <p id="seriesModalPlot" class="text-xs text-slate-300 leading-relaxed line-clamp-3">Carregando sinopse...</p>
+      </div>
+
+      <!-- Seletor de Temporadas -->
+      <div class="py-2">
+        <span class="text-[11px] font-bold uppercase text-purple-400 mb-1.5 block">Temporada:</span>
+        <div id="seriesSeasonsContainer" class="flex gap-2 overflow-x-auto pb-1"></div>
+      </div>
+
+      <!-- Lista de Episódios -->
+      <div class="flex-1 overflow-y-auto pr-1 space-y-1.5" id="seriesEpisodesContainer"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL GUIA EPG (PROGRAMAÇÃO AO VIVO) ================= -->
+  <div id="epgModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-lg w-full max-h-[80vh] flex flex-col lux-glow">
+      <div class="flex items-center justify-between pb-3 border-b border-purple-950">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i data-lucide="calendar" class="w-4 h-4 text-purple-400"></i> Guia de Programação (EPG)
+        </h3>
+        <button onclick="closeEpgModal()" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+      <div id="epgContainer" class="flex-1 overflow-y-auto py-3 space-y-2">
+        <p class="text-xs text-purple-300/70 text-center py-8">Selecione um canal para ver a programação ou aguarde carregamento...</p>
+      </div>
+    </div>
   </div>
 
   <!-- ================= BARRA DE NAVEGAÇÃO INFERIOR (MOBILE BOTTOM BAR) ================= -->
@@ -283,33 +400,6 @@
     </button>
   </nav>
 
-  <!-- ================= BANNER PWA / INSTALAR APP ================= -->
-  <div id="pwaInstallBanner" class="fixed bottom-16 md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm bg-[#150d24]/95 border border-purple-800/60 rounded-2xl p-3.5 backdrop-blur-md shadow-2xl lux-glow z-50 hidden transition-all">
-    <div class="flex items-start justify-between gap-3">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-900 flex items-center justify-center shrink-0 lux-glow-sm">
-        <svg class="w-6 h-6 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
-          <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
-        </svg>
-      </div>
-      <div class="flex-1 min-w-0">
-        <h4 class="text-xs font-bold text-white">Instalar o LUX Play</h4>
-        <p id="pwaInstructionText" class="text-[10px] text-purple-300/80 leading-tight mt-0.5">
-          Instale na sua tela inicial para assistir em tela cheia e sem barras do navegador.
-        </p>
-      </div>
-      <button onclick="dismissPwaBanner()" class="text-purple-400 hover:text-white p-1 rounded-lg text-xs">✕</button>
-    </div>
-
-    <div class="mt-2.5 pt-2 border-t border-purple-950/60 flex items-center justify-end gap-2">
-      <button onclick="dismissPwaBanner()" class="px-3 py-1.5 rounded-xl text-[11px] font-semibold text-purple-400 hover:text-purple-200">Agora não</button>
-      <button id="pwaInstallActionBtn" onclick="triggerPwaInstall()" class="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-1.5 rounded-xl text-[11px] font-bold shadow-md flex items-center gap-1.5">
-        <i data-lucide="download" class="w-3.5 h-3.5"></i>
-        <span>Instalar App</span>
-      </button>
-    </div>
-  </div>
-
   <!-- ================= MODAL DEDICADO DO PLAYER ================= -->
   <div id="vodPlayerModal" class="fixed inset-0 z-50 bg-black flex flex-col hidden">
     <div class="h-14 bg-[#100a1c]/95 backdrop-blur-md border-b border-purple-950 px-3 md:px-4 flex items-center justify-between shrink-0 z-10">
@@ -322,41 +412,19 @@
         <h2 id="vodPlayerTitle" class="text-xs md:text-sm font-bold text-white truncate max-w-[180px] sm:max-w-md">Título da Transmissão</h2>
       </div>
 
-      <button onclick="togglePlayerFullscreen()" title="Alternar Tela Cheia" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
-        <i data-lucide="maximize" class="w-4 h-4"></i>
-      </button>
+      <div class="flex items-center gap-2">
+        <!-- Botão EPG no Player Mobile -->
+        <button onclick="openEpgModal()" class="md:hidden bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+          <i data-lucide="calendar" class="w-4 h-4"></i>
+        </button>
+        <button onclick="togglePlayerFullscreen()" title="Alternar Tela Cheia" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+          <i data-lucide="maximize" class="w-4 h-4"></i>
+        </button>
+      </div>
     </div>
 
     <div id="playerVideoContainer" class="flex-1 bg-black flex items-center justify-center relative overflow-hidden">
       <video id="videoPlayerVod" controls class="w-full h-full max-h-[92vh] object-contain" playsinline autoPlay></video>
-    </div>
-  </div>
-
-  <!-- ================= MODAL DE SÉRIES ================= -->
-  <div id="seriesModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
-    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-2xl w-full max-h-[85vh] flex flex-col lux-glow">
-      <div class="flex items-start justify-between pb-4 border-b border-purple-950">
-        <div class="flex items-center gap-3 md:gap-4 min-w-0">
-          <div id="seriesModalCover" class="w-14 h-20 md:w-16 md:h-24 rounded-xl bg-[#0c0814] border border-purple-900/50 overflow-hidden shrink-0 flex items-center justify-center">
-            <i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>
-          </div>
-          <div class="min-w-0">
-            <h2 id="seriesModalTitle" class="text-base md:text-lg font-bold text-white truncate">Nome da Série</h2>
-            <p id="seriesModalCategory" class="text-xs text-purple-400 mt-0.5 truncate">Gênero</p>
-            <span id="seriesModalStats" class="text-[10px] md:text-[11px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-md font-mono mt-1 inline-block">Carregando...</span>
-          </div>
-        </div>
-        <button onclick="closeSeriesModal()" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0">✕</button>
-      </div>
-
-      <!-- Seletor de Temporadas -->
-      <div class="py-3">
-        <span class="text-[11px] font-bold uppercase text-purple-400 mb-1.5 block">Temporada:</span>
-        <div id="seriesSeasonsContainer" class="flex gap-2 overflow-x-auto pb-1"></div>
-      </div>
-
-      <!-- Lista de Episódios -->
-      <div class="flex-1 overflow-y-auto pr-1 space-y-1.5" id="seriesEpisodesContainer"></div>
     </div>
   </div>
 
@@ -422,12 +490,11 @@
 
   <script>
     const SHEET_ID = '1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0';
-    const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
 
     let currentUser = null;
     let allMediaItems = [];
     let currentSection = 'live';
-    let activeCategory = 'Todos';
+    let activeCategory = 'Área do Cliente';
     let activeLiveChannel = null;
 
     let mobileStep = 'categories';
@@ -446,10 +513,87 @@
     let currentSeriesEpisodesData = null;
     let currentSelectedSeason = 1;
 
-    let deferredPrompt = null;
-    let activeConnectionTab = 'xc';
+    let currentMovieItem = null;
+    let currentSeriesItem = null;
 
-    // --- FUNÇÕES DE HISTÓRICO / CONTINUAR ASSISTINDO ---
+    let activeConnectionTab = 'xc';
+    let isSortModeActive = false;
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedUser = localStorage.getItem('lux_auth_user');
+      const savedPass = localStorage.getItem('lux_auth_pass');
+      
+      if (savedUser && savedPass) {
+        document.getElementById('authEmail').value = savedUser;
+        document.getElementById('authPass').value = savedPass;
+        handleLogin();
+      }
+    });
+
+    function getItemKey(item) {
+      return item.url || item.series_id || item.id;
+    }
+
+    function getFavorites() {
+      try {
+        const favs = localStorage.getItem('lux_favorites');
+        return favs ? JSON.parse(favs) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function isFavorite(item) {
+      const key = getItemKey(item);
+      return getFavorites().includes(key);
+    }
+
+    function toggleFavorite(item, event) {
+      if (event) event.stopPropagation();
+      const key = getItemKey(item);
+      let favs = getFavorites();
+      if (favs.includes(key)) {
+        favs = favs.filter(k => k !== key);
+      } else {
+        favs.push(key);
+      }
+      localStorage.setItem('lux_favorites', JSON.stringify(favs));
+      renderCategories();
+      filterMedia();
+    }
+
+    function toggleFavoriteCurrentMovie(event) {
+      if (currentMovieItem) {
+        toggleFavorite(currentMovieItem, event);
+        updateMovieModalFavBtn();
+      }
+    }
+
+    function updateMovieModalFavBtn() {
+      if (!currentMovieItem) return;
+      const fav = isFavorite(currentMovieItem);
+      const textElem = document.getElementById('movieModalFavText');
+      if (textElem) {
+        textElem.innerText = fav ? 'Favoritado' : 'Favoritar';
+      }
+    }
+
+    function toggleFavoriteCurrentSeries(event) {
+      if (currentSeriesItem) {
+        toggleFavorite(currentSeriesItem, event);
+        updateSeriesModalFavBtn();
+      }
+    }
+
+    function updateSeriesModalFavBtn() {
+      if (!currentSeriesItem) return;
+      const fav = isFavorite(currentSeriesItem);
+      const textElem = document.getElementById('seriesModalFavText');
+      if (textElem) {
+        textElem.innerText = fav ? 'Favoritado' : 'Favoritar';
+      }
+    }
+
     function getResumeKey(item) {
       return 'lux_progress_' + (item.series_id || item.id || item.url);
     }
@@ -461,15 +605,25 @@
       return `<div class="w-9 h-9 rounded-lg bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 shrink-0"><i data-lucide="tv" class="w-4 h-4"></i></div>`;
     }
 
-    // --- SMART FETCH COM ANTI-CACHE USANDO O PROXY DA VERCEL ---
     async function smartFetch(url) {
-      const cacheBuster = (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
-      const finalUrl = url + cacheBuster;
-      
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(finalUrl)}`;
-      const res = await fetch(proxyUrl, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`Falha ao conectar via proxy da Vercel: ${url}`);
-      return res;
+      const encoded = encodeURIComponent(url);
+      const endpoints = [
+        url,
+        `https://api.allorigins.win/raw?url=${encoded}`,
+        `https://corsproxy.io/?${encoded}`,
+        `https://thingproxy.freeboard.io/fetch/${url}`
+      ];
+
+      for (const target of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          const res = await fetch(target, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (res.ok) return res;
+        } catch (e) {}
+      }
+      throw new Error(`Falha ao conectar: ${url}`);
     }
 
     async function fetchUsersFromSheet() {
@@ -587,11 +741,16 @@
           if (account.dueDate && isExpired(account.dueDate)) {
             statusText.innerText = `Acesso vencido em ${account.dueDate}.`;
             statusText.className = 'text-xs text-center text-rose-400 font-medium';
+            loginBtn.disabled = false;
             return;
           }
+          
           currentUser = account;
           isAdultUnlocked = false;
           statusText.innerText = '';
+          
+          localStorage.setItem('lux_auth_user', userInput);
+          localStorage.setItem('lux_auth_pass', passInput);
           
           showSplashScreen();
           startApp();
@@ -600,7 +759,7 @@
           statusText.className = 'text-xs text-center text-rose-400 font-medium';
         }
       } catch (err) {
-        statusText.innerText = 'Erro ao consultar planilha.';
+        statusText.innerText = 'Erro ao consultar banco de dados.';
         statusText.className = 'text-xs text-center text-rose-400 font-medium';
       } finally {
         loginBtn.disabled = false;
@@ -639,6 +798,14 @@
     function logout() {
       currentUser = null;
       isAdultUnlocked = false;
+      
+      localStorage.removeItem('lux_auth_user');
+      localStorage.removeItem('lux_auth_pass');
+      document.getElementById('authEmail').value = '';
+      document.getElementById('authPass').value = '';
+      
+      document.getElementById('floatingSearchBtn').classList.add('hidden');
+      
       const auth = document.getElementById('authScreen');
       auth.classList.remove('hidden');
       setTimeout(() => {
@@ -658,6 +825,8 @@
         document.getElementById('sheetAdminBtn').classList.add('hidden');
         document.getElementById('connectionConfigBtn').classList.add('hidden');
       }
+
+      document.getElementById('floatingSearchBtn').classList.remove('hidden');
 
       const liveContainer = document.getElementById('liveItemsContainer');
       liveContainer.onscroll = () => handleScroll(liveContainer);
@@ -734,12 +903,12 @@
 
         liveStreams.forEach(item => {
           const groupName = liveCatMap[item.category_id] || 'Canais';
-          const secureLogo = item.stream_icon ? item.stream_icon.replace(/^http:\/\//i, 'https://') : '';
           parsedItems.push({
             id: parsedItems.length,
+            stream_id: item.stream_id,
             name: item.name,
             group: groupName,
-            logo: secureLogo,
+            logo: item.stream_icon || '',
             url: `${cleanServer}/live/${user}/${pass}/${item.stream_id}.m3u8`,
             type: 'live',
             isAdult: isAdultContent(groupName, item.name)
@@ -749,12 +918,12 @@
         vodStreams.forEach(item => {
           const groupName = vodCatMap[item.category_id] || 'Filmes';
           const ext = item.container_extension || 'mp4';
-          const secureLogo = item.stream_icon ? item.stream_icon.replace(/^http:\/\//i, 'https://') : '';
           parsedItems.push({
             id: parsedItems.length,
+            stream_id: item.stream_id,
             name: item.name,
             group: groupName,
-            logo: secureLogo,
+            logo: item.stream_icon || '',
             url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
             type: 'movies',
             isAdult: isAdultContent(groupName, item.name)
@@ -763,13 +932,12 @@
 
         seriesStreams.forEach(item => {
           const groupName = seriesCatMap[item.category_id] || 'Séries';
-          const secureLogo = item.cover ? item.cover.replace(/^http:\/\//i, 'https://') : '';
           parsedItems.push({
             id: parsedItems.length,
             series_id: item.series_id,
             name: item.name,
             group: groupName,
-            logo: secureLogo,
+            logo: item.cover || '',
             type: 'series',
             isAdult: isAdultContent(groupName, item.name)
           });
@@ -823,8 +991,7 @@
           const commaIdx = line.lastIndexOf(',');
 
           temp.group = groupMatch && groupMatch[1] ? groupMatch[1].trim() : 'Geral';
-          const rawLogo = logoMatch && logoMatch[1] ? logoMatch[1].trim() : '';
-          temp.logo = rawLogo.replace(/^http:\/\//i, 'https://');
+          temp.logo = logoMatch && logoMatch[1] ? logoMatch[1].trim() : '';
           temp.name = commaIdx !== -1 ? line.substring(commaIdx + 1).trim() : 'Sem título';
         } else if (!line.startsWith('#') && temp) {
           temp.url = line;
@@ -871,9 +1038,19 @@
 
     function setSection(section) {
       currentSection = section;
-      activeCategory = 'Todos';
+      
+      const items = getSectionItems();
+      const rawCats = [...new Set(items.map(c => c.group))];
+      if (rawCats.includes('Área do Cliente')) {
+        activeCategory = 'Área do Cliente';
+      } else {
+        activeCategory = 'Todos';
+      }
+
       visibleCount = ITEMS_PER_PAGE;
       mobileStep = 'categories';
+      isSortModeActive = false;
+      updateSortButtonUI();
 
       const liveVideo = document.getElementById('videoPlayerLive');
       if (liveVideo) liveVideo.pause();
@@ -974,20 +1151,96 @@
       return allMediaItems.filter(item => item.type === currentSection);
     }
 
-    // --- RENDERIZAÇÃO DE GÊNEROS (INCLUINDO CONTINUAR ASSISTINDO) ---
+    function getStoredCategoryOrder() {
+      try {
+        const saved = localStorage.getItem('lux_cat_order_' + currentSection);
+        return saved ? JSON.parse(saved) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveCategoryOrder(orderArray) {
+      localStorage.setItem('lux_cat_order_' + currentSection, JSON.stringify(orderArray));
+    }
+
+    function toggleSortMode() {
+      isSortModeActive = !isSortModeActive;
+      updateSortButtonUI();
+      renderCategories();
+    }
+
+    function updateSortButtonUI() {
+      const btn = document.getElementById('sortModeBtn');
+      if (!btn) return;
+
+      if (isSortModeActive) {
+        btn.className = "text-[10px] bg-amber-600 hover:bg-amber-500 text-white p-1.5 rounded-md transition-all flex items-center justify-center shadow-md";
+        btn.title = "Concluir Organização";
+      } else {
+        btn.className = "text-[10px] bg-purple-950 hover:bg-purple-900 text-purple-300 p-1.5 rounded-md transition-all flex items-center justify-center";
+        btn.title = "Organizar Gêneros";
+      }
+    }
+
+    function moveCategory(catName, direction) {
+      const items = getSectionItems();
+      const rawCats = [...new Set(items.map(c => c.group))];
+      const nonAdultCats = rawCats.filter(c => !isAdultContent(c) && c !== 'Área do Cliente');
+      const adultCats = rawCats.filter(c => isAdultContent(c));
+      let currentOrder = getStoredCategoryOrder();
+
+      const fullBaseCats = [...nonAdultCats, ...adultCats];
+      let orderedCats = [];
+      currentOrder.forEach(c => {
+        if (fullBaseCats.includes(c)) orderedCats.push(c);
+      });
+      fullBaseCats.forEach(c => {
+        if (!orderedCats.includes(c)) orderedCats.push(c);
+      });
+
+      const index = orderedCats.indexOf(catName);
+      if (index === -1) return;
+
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= orderedCats.length) return;
+
+      const temp = orderedCats[index];
+      orderedCats[index] = orderedCats[targetIndex];
+      orderedCats[targetIndex] = temp;
+
+      saveCategoryOrder(orderedCats);
+      renderCategories();
+    }
+
     function renderCategories() {
       const items = getSectionItems();
       const rawCats = [...new Set(items.map(c => c.group))];
 
-      const nonAdultCats = rawCats.filter(c => !isAdultContent(c));
+      const hasCliente = rawCats.includes('Área do Cliente');
+      const nonAdultCats = rawCats.filter(c => !isAdultContent(c) && c !== 'Área do Cliente');
       const adultCats = rawCats.filter(c => isAdultContent(c));
-      
-      const cats = ['Todos', 'Continuar Assistindo', ...nonAdultCats, ...adultCats];
+      const allBaseCats = [...nonAdultCats, ...adultCats];
+
+      let savedOrder = getStoredCategoryOrder();
+      let sortedCats = [];
+      savedOrder.forEach(cat => {
+        if (allBaseCats.includes(cat)) sortedCats.push(cat);
+      });
+      allBaseCats.forEach(cat => {
+        if (!sortedCats.includes(cat)) sortedCats.push(cat);
+      });
+
+      const cats = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
+      if (hasCliente) cats.push('Área do Cliente');
+      cats.push(...sortedCats);
 
       const resumeCount = items.filter(c => {
         const prog = localStorage.getItem(getResumeKey(c));
         return prog && parseFloat(prog) > 5;
       }).length;
+
+      const favCount = items.filter(c => isFavorite(c)).length;
 
       document.getElementById('mediaCountBadge').innerText = `${items.length} itens`;
       document.getElementById('mobileMediaCountBadge').innerText = `${items.length} itens`;
@@ -995,91 +1248,131 @@
       const sectionTitle = currentSection === 'live' ? 'Canais de TV' : (currentSection === 'movies' ? 'Filmes' : 'Séries');
       document.getElementById('mobileCatSubtitle').innerText = `Escolha um gênero de ${sectionTitle}`;
 
-      // 1. Sidebar Desktop
       const desktopContainer = document.getElementById('categoriesList');
       desktopContainer.innerHTML = '';
 
       cats.forEach(cat => {
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
-        const isAllCat = cat === 'Todos';
+        const isClienteCat = cat === 'Área do Cliente';
+        const isFavCat = cat === 'Minha Lista';
+        const isFixedTop = isResumeCat || cat === 'Todos' || isClienteCat || isFavCat;
         
         let count = 0;
-        if (isAllCat) count = items.length;
+        if (cat === 'Todos') count = items.length;
         else if (isResumeCat) count = resumeCount;
+        else if (isFavCat) count = favCount;
         else count = items.filter(c => c.group === cat).length;
 
-        const btn = document.createElement('button');
-        btn.onclick = () => {
-          const proceed = () => {
-            activeCategory = cat;
-            visibleCount = ITEMS_PER_PAGE;
-            renderCategories();
-            filterMedia();
-          };
-          if (isAdultCat && !isAdultUnlocked) requireAdultPin(proceed);
-          else proceed();
-        };
-
-        const activeClasses = activeCategory === cat 
-          ? (isResumeCat ? 'bg-amber-600/20 text-amber-300 border border-amber-500/50 shadow-sm' : 'bg-purple-600/20 text-purple-300 border border-purple-500/40 shadow-sm')
-          : (isResumeCat ? 'text-amber-400/80 hover:bg-amber-950/40 hover:text-amber-200' : 'text-purple-400/70 hover:bg-purple-950/40 hover:text-purple-200');
-
-        btn.className = `text-left px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center justify-between ${activeClasses}`;
+        const btn = document.createElement('div');
         
+        const activeClasses = activeCategory === cat 
+          ? (isResumeCat ? 'bg-amber-600/20 text-amber-300 border border-amber-500/50 shadow-sm' : (isClienteCat ? 'bg-blue-600/20 text-blue-300 border border-blue-500/50 shadow-sm' : (isFavCat ? 'bg-rose-600/20 text-rose-300 border border-rose-500/50 shadow-sm' : 'bg-purple-600/20 text-purple-300 border border-purple-500/40 shadow-sm')))
+          : (isResumeCat ? 'text-amber-400/80 hover:bg-amber-950/40 hover:text-amber-200' : (isClienteCat ? 'text-blue-400/90 hover:bg-blue-950/40 hover:text-blue-200' : (isFavCat ? 'text-rose-400/90 hover:bg-rose-950/40 hover:text-rose-200' : 'text-purple-400/70 hover:bg-purple-950/40 hover:text-purple-200')));
+
+        btn.className = `px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${activeClasses} ${!isSortModeActive ? 'cursor-pointer' : ''}`;
+        
+        if (!isSortModeActive) {
+          btn.onclick = () => {
+            const proceed = () => {
+              activeCategory = cat;
+              visibleCount = ITEMS_PER_PAGE;
+              renderCategories();
+              filterMedia();
+            };
+            if (isAdultCat && !isAdultUnlocked) requireAdultPin(proceed);
+            else proceed();
+          };
+        }
+
+        let sortButtonsHtml = '';
+        if (isSortModeActive && !isFixedTop) {
+          sortButtonsHtml = `
+            <div class="flex items-center gap-1 ml-2 shrink-0" onclick="event.stopPropagation()">
+              <button onclick="moveCategory('${cat.replace(/'/g, "\\'")}', -1)" class="p-1 rounded bg-[#241738] hover:bg-purple-600 text-purple-300 hover:text-white transition-all" title="Subir">
+                <i data-lucide="chevron-up" class="w-3.5 h-3.5"></i>
+              </button>
+              <button onclick="moveCategory('${cat.replace(/'/g, "\\'")}', 1)" class="p-1 rounded bg-[#241738] hover:bg-purple-600 text-purple-300 hover:text-white transition-all" title="Descer">
+                <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          `;
+        }
+
+        let iconHtml = '';
+        if (isResumeCat) iconHtml = `<i data-lucide="play-circle" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>`;
+        else if (isFavCat) iconHtml = `<i data-lucide="heart" class="w-3.5 h-3.5 text-rose-400 shrink-0 fill-rose-400"></i>`;
+        else if (isClienteCat) iconHtml = `<i data-lucide="shield" class="w-3.5 h-3.5 text-blue-400 shrink-0"></i>`;
+        else if (isAdultCat) iconHtml = `<i data-lucide="lock" class="w-3 h-3 text-rose-400 shrink-0"></i>`;
+
+        let badgeBg = isResumeCat ? 'text-amber-400/70 bg-[#26180c]' : (isFavCat ? 'text-rose-400/70 bg-[#260c14]' : (isClienteCat ? 'text-blue-400/70 bg-[#0c1a26]' : 'text-purple-400/50 bg-[#170e26]'));
+
         btn.innerHTML = `
-          <span class="truncate max-w-[145px] flex items-center gap-1.5">
-            ${isResumeCat ? `<i data-lucide="play-circle" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>` : (isAdultCat ? `<i data-lucide="lock" class="w-3 h-3 text-rose-400 shrink-0"></i>` : '')}
+          <span class="truncate max-w-[130px] flex items-center gap-1.5">
+            ${iconHtml}
             ${cat}
           </span>
-          <span class="text-[10px] ${isResumeCat ? 'text-amber-400/70 bg-[#26180c]' : 'text-purple-400/50 bg-[#170e26]'} px-1.5 py-0.5 rounded-md ml-1 shrink-0">${count}</span>
+          <div class="flex items-center gap-1">
+            <span class="text-[10px] ${badgeBg} px-1.5 py-0.5 rounded-md shrink-0">${count}</span>
+            ${sortButtonsHtml}
+          </div>
         `;
         desktopContainer.appendChild(btn);
       });
 
-      // 2. Grade de Cards Mobile (Etapa 1)
       const mobileGrid = document.getElementById('mobileCategoryGrid');
       mobileGrid.innerHTML = '';
 
       cats.forEach(cat => {
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
+        const isFavCat = cat === 'Minha Lista';
+        const isClienteCat = cat === 'Área do Cliente';
         const isSpecialAll = cat === 'Todos';
 
         let count = 0;
         if (isSpecialAll) count = items.length;
         else if (isResumeCat) count = resumeCount;
+        else if (isFavCat) count = favCount;
         else count = items.filter(c => c.group === cat).length;
 
         const card = document.createElement('div');
         card.onclick = () => selectMobileCategory(cat);
 
-        const iconName = isResumeCat ? 'play-circle' : (isAdultCat ? 'lock' : (currentSection === 'live' ? 'tv' : (currentSection === 'movies' ? 'film' : 'clapperboard')));
+        const iconName = isResumeCat ? 'play-circle' : (isFavCat ? 'heart' : (isClienteCat ? 'shield' : (isAdultCat ? 'lock' : (currentSection === 'live' ? 'tv' : (currentSection === 'movies' ? 'film' : 'clapperboard')))));
         const iconColor = isResumeCat 
           ? 'text-amber-400 bg-amber-950/80 border-amber-800/60' 
-          : (isAdultCat ? 'text-rose-400 bg-rose-950/60 border-rose-800/40' : 'text-purple-400 bg-purple-950/60 border-purple-800/40');
+          : (isFavCat 
+            ? 'text-rose-400 bg-rose-950/80 border-rose-800/60' 
+            : (isClienteCat ? 'text-blue-400 bg-blue-950/80 border-blue-800/60' : (isAdultCat ? 'text-rose-400 bg-rose-950/60 border-rose-800/40' : 'text-purple-400 bg-purple-950/60 border-purple-800/40')));
 
         card.className = `relative rounded-2xl border p-4 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.97] shadow-lg ${
           isSpecialAll 
             ? 'col-span-1 bg-gradient-to-r from-purple-900/60 to-indigo-900/40 border-purple-500/50 min-h-[95px]'
             : (isResumeCat 
               ? 'col-span-1 bg-gradient-to-r from-amber-950/60 to-purple-950/60 border-amber-500/50 min-h-[95px]'
-              : (isAdultCat 
-                ? 'bg-[#180d1a] border-rose-900/40 hover:border-rose-600/50 min-h-[105px]' 
-                : 'bg-[#120c1f] border-purple-950/80 hover:border-purple-600/50 min-h-[105px]'))
+              : (isFavCat
+                ? 'col-span-1 bg-gradient-to-r from-rose-950/60 to-purple-950/60 border-rose-500/50 min-h-[95px]'
+                : (isClienteCat
+                  ? 'col-span-1 bg-gradient-to-r from-blue-950/60 to-purple-950/60 border-blue-500/50 min-h-[95px]'
+                  : (isAdultCat 
+                    ? 'bg-[#180d1a] border-rose-900/40 hover:border-rose-600/50 min-h-[105px]' 
+                    : 'bg-[#120c1f] border-purple-950/80 hover:border-purple-600/50 min-h-[105px]'))))
         }`;
+
+        let badgeColor = isResumeCat ? 'bg-amber-950 text-amber-300' : (isFavCat ? 'bg-rose-950 text-rose-300' : (isClienteCat ? 'bg-blue-950 text-blue-300' : (isAdultCat ? 'bg-rose-950 text-rose-300' : 'bg-purple-950 text-purple-300')));
 
         card.innerHTML = `
           <div class="flex items-center justify-between">
             <div class="w-9 h-9 rounded-xl border flex items-center justify-center ${iconColor}">
-              <i data-lucide="${iconName}" class="w-4 h-4"></i>
+              <i data-lucide="${iconName}" class="w-4 h-4 ${isFavCat ? 'fill-rose-400' : ''}"></i>
             </div>
-            <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md ${isResumeCat ? 'bg-amber-950 text-amber-300' : (isAdultCat ? 'bg-rose-950 text-rose-300' : 'bg-purple-950 text-purple-300')}">
+            <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md ${badgeColor}">
               ${count}
             </span>
           </div>
           <div class="mt-2">
-            <h4 class="text-xs font-bold ${isResumeCat ? 'text-amber-200' : 'text-slate-100'} line-clamp-2">${cat}</h4>
+            <h4 class="text-xs font-bold ${isResumeCat ? 'text-amber-200' : (isFavCat ? 'text-rose-200' : (isClienteCat ? 'text-blue-200' : 'text-slate-100'))} line-clamp-2">${cat}</h4>
           </div>
         `;
         mobileGrid.appendChild(card);
@@ -1088,7 +1381,41 @@
       lucide.createIcons();
     }
 
-    // --- FILTRAGEM DE CONTEÚDO (INCLUINDO CONTINUAR ASSISTINDO) ---
+    function handleSearchInput() {
+      const val = document.getElementById('searchInput').value;
+      const mobileInput = document.getElementById('mobileSearchInput');
+      if (mobileInput) mobileInput.value = val;
+
+      if (val.trim() !== '') {
+        if (activeCategory !== 'Todos' || mobileStep !== 'items') {
+          activeCategory = 'Todos';
+          mobileStep = 'items';
+          renderCategories();
+          updateLayoutForScreen();
+          return; 
+        }
+      }
+      
+      filterMedia();
+    }
+
+    function syncMobileSearch() {
+      const val = document.getElementById('mobileSearchInput').value;
+      document.getElementById('searchInput').value = val;
+      
+      if (val.trim() !== '') {
+        if (activeCategory !== 'Todos' || mobileStep !== 'items') {
+          activeCategory = 'Todos';
+          mobileStep = 'items';
+          renderCategories();
+          updateLayoutForScreen();
+          return;
+        }
+      }
+      
+      filterMedia();
+    }
+
     function filterMedia() {
       const query = document.getElementById('searchInput').value.toLowerCase();
       const currentList = getSectionItems();
@@ -1099,6 +1426,8 @@
         else if (activeCategory === 'Continuar Assistindo') {
           const prog = localStorage.getItem(getResumeKey(c));
           matchesCat = prog && parseFloat(prog) > 5;
+        } else if (activeCategory === 'Minha Lista') {
+          matchesCat = isFavorite(c);
         } else {
           matchesCat = c.group === activeCategory;
         }
@@ -1118,6 +1447,14 @@
 
       visibleCount = ITEMS_PER_PAGE;
       renderCurrentPage();
+    }
+
+    function toggleMobileSearchModal() {
+      const modal = document.getElementById('mobileSearchModal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        document.getElementById('mobileSearchInput').focus();
+      }
     }
 
     function renderCurrentPage() {
@@ -1149,6 +1486,7 @@
 
         if (isLive) {
           const isActive = activeLiveChannel && activeLiveChannel.id === c.id;
+          const fav = isFavorite(c);
           card.onclick = () => {
             if (c.isAdult && !isAdultUnlocked) {
               requireAdultPin(() => playLiveChannel(c));
@@ -1160,11 +1498,9 @@
           card.className = `flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all border ${
             isActive ? 'bg-purple-900/40 border-purple-500/50 lux-glow-sm' : 'hover:bg-purple-950/30 border-transparent'
           }`;
+          
           card.innerHTML = `
-            ${c.logo 
-              ? `<img src="${c.logo}" class="w-9 h-9 object-contain rounded-lg bg-[#0c0814] border border-purple-950 p-1 shrink-0" loading="lazy" onerror="this.outerHTML = getLiveFallbackHtml(${c.isAdult}); lucide.createIcons();"/>`
-              : getLiveFallbackHtml(c.isAdult)
-            }
+            <div class="channel-logo-container w-9 h-9 object-contain rounded-lg bg-[#0c0814] border border-purple-950 p-1 shrink-0 flex items-center justify-center"></div>
             <div class="flex-1 min-w-0">
               <p class="text-xs font-semibold text-slate-200 truncate flex items-center gap-1">
                 ${c.isAdult ? `<i data-lucide="lock" class="w-3 h-3 text-rose-400 shrink-0"></i>` : ''}
@@ -1172,8 +1508,35 @@
               </p>
               <p class="text-[10px] text-purple-400 truncate">${c.group}</p>
             </div>
-            ${isActive ? `<div class="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0"></div>` : ''}
           `;
+
+          const logoDiv = card.querySelector('.channel-logo-container');
+          if (c.logo) {
+            const img = document.createElement('img');
+            img.src = c.logo;
+            img.className = "w-full h-full object-contain";
+            img.onerror = () => {
+              logoDiv.innerHTML = getLiveFallbackHtml(c.isAdult);
+              lucide.createIcons();
+            };
+            logoDiv.appendChild(img);
+          } else {
+            logoDiv.innerHTML = getLiveFallbackHtml(c.isAdult);
+          }
+
+          const favBtn = document.createElement('button');
+          favBtn.className = "p-1.5 text-purple-400 hover:text-rose-400 transition-colors shrink-0";
+          favBtn.title = "Favoritar";
+          favBtn.innerHTML = `<i data-lucide="heart" class="w-4 h-4 ${fav ? 'fill-rose-500 text-rose-500' : ''}"></i>`;
+          favBtn.onclick = (e) => toggleFavorite(c, e);
+          card.appendChild(favBtn);
+
+          if (isActive) {
+            const activeIndicator = document.createElement('div');
+            activeIndicator.className = "w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0";
+            card.appendChild(activeIndicator);
+          }
+
         } else {
           card.onclick = () => {
             if (c.isAdult && !isAdultUnlocked) {
@@ -1184,44 +1547,39 @@
           };
 
           const isAdult = c.isAdult;
-          const fallbackIcon = isAdult 
-            ? `<div class="w-12 h-12 rounded-2xl bg-rose-950/60 border border-rose-800/50 flex flex-col items-center justify-center text-rose-400 mb-2 shadow-lg"><i data-lucide="lock" class="w-5 h-5 mb-0.5"></i><span class="text-[9px] font-bold">+18</span></div>`
-            : (currentSection === 'movies'
-              ? `<div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center text-purple-400 mb-2 shadow-lg"><i data-lucide="film" class="w-6 h-6"></i></div>`
-              : `<div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center text-purple-400 mb-2 shadow-lg"><i data-lucide="clapperboard" class="w-6 h-6"></i></div>`
-            );
-
-          const fallbackBgGradient = isAdult
-            ? `from-[#1c0b16] via-[#120710] to-[#0a0409]`
-            : `from-[#180f29] via-[#0f091a] to-[#08050e]`;
-
+          const fav = isFavorite(c);
+          
           card.className = "flex flex-col bg-[#120c1f] rounded-2xl border border-purple-950/80 hover:border-purple-500/70 overflow-hidden cursor-pointer group transition-all duration-300 hover:-translate-y-1.5 shadow-lg hover:shadow-purple-950/60 w-full min-h-[270px] md:min-h-[300px]";
-          card.innerHTML = `
-            <div class="w-full relative overflow-hidden bg-[#0c0814] flex items-center justify-center shrink-0 aspect-[2/3]">
-              ${c.logo 
-                ? `<img src="${c.logo}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden'); lucide.createIcons();"/>`
-                : ''
-              }
-              <div class="${c.logo ? 'hidden' : ''} absolute inset-0 bg-gradient-to-br ${fallbackBgGradient} flex flex-col items-center justify-center p-4 text-center border-b border-purple-950/40">
-                ${fallbackIcon}
-                <p class="text-[11px] font-bold text-slate-300 line-clamp-3 leading-tight">${c.name}</p>
-              </div>
+          
+          const posterContainer = document.createElement('div');
+          posterContainer.className = "w-full relative overflow-hidden bg-[#0c0814] flex items-center justify-center shrink-0 aspect-[2/3]";
 
-              <div class="absolute inset-0 bg-gradient-to-t from-[#120c1f] via-transparent to-transparent opacity-90 pointer-events-none"></div>
+          if (c.logo) {
+            const img = document.createElement('img');
+            img.src = c.logo;
+            img.className = "w-full h-full object-cover group-hover:scale-105 transition-transform duration-300";
+            img.loading = "lazy";
+            img.onerror = () => {
+              posterContainer.innerHTML = '';
+              posterContainer.appendChild(createFallbackPoster(c, isAdult));
+              addPosterOverlays(posterContainer, c, fav);
+              lucide.createIcons();
+            };
+            posterContainer.appendChild(img);
+          } else {
+            posterContainer.appendChild(createFallbackPoster(c, isAdult));
+          }
 
-              ${c.isAdult ? `<div class="absolute top-2 right-2 bg-rose-950/90 border border-rose-600/50 text-rose-300 text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 z-10 shadow"><i data-lucide="lock" class="w-3 h-3"></i> +18</div>` : ''}
+          addPosterOverlays(posterContainer, c, fav);
+          card.appendChild(posterContainer);
 
-              <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px] z-10">
-                <div class="w-11 h-11 md:w-12 md:h-12 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-lg shadow-purple-900/60 transform group-hover:scale-110 transition-transform">
-                  <i data-lucide="${currentSection === 'series' ? 'list-video' : 'play'}" class="w-5 h-5 fill-white ml-0.5"></i>
-                </div>
-              </div>
-            </div>
-            <div class="p-2.5 md:p-3 bg-[#120c1f] border-t border-purple-950/40 flex-1 flex flex-col justify-between min-h-[55px]">
-              <h4 class="text-xs font-bold text-slate-100 truncate group-hover:text-purple-300 transition-colors" title="${c.name}">${c.name}</h4>
-              <p class="text-[10px] text-purple-400/80 truncate mt-0.5 md:mt-1">${c.group}</p>
-            </div>
+          const infoDiv = document.createElement('div');
+          infoDiv.className = "p-2.5 md:p-3 bg-[#120c1f] border-t border-purple-950/40 flex-1 flex flex-col justify-between min-h-[55px]";
+          infoDiv.innerHTML = `
+            <h4 class="text-xs font-bold text-slate-100 truncate group-hover:text-purple-300 transition-colors" title="${c.name}">${c.name}</h4>
+            <p class="text-[10px] text-purple-400/80 truncate mt-0.5 md:mt-1">${c.group}</p>
           `;
+          card.appendChild(infoDiv);
         }
 
         fragment.appendChild(card);
@@ -1231,141 +1589,157 @@
       lucide.createIcons();
     }
 
+    function createFallbackPoster(c, isAdult) {
+      const fallbackBgGradient = isAdult ? `from-[#1c0b16] via-[#120710] to-[#0a0409]` : `from-[#180f29] via-[#0f091a] to-[#08050e]`;
+      const fallbackIcon = isAdult 
+        ? `<div class="w-12 h-12 rounded-2xl bg-rose-950/60 border border-rose-800/50 flex flex-col items-center justify-center text-rose-400 mb-2 shadow-lg"><i data-lucide="lock" class="w-5 h-5 mb-0.5"></i><span class="text-[9px] font-bold">+18</span></div>`
+        : (currentSection === 'movies'
+          ? `<div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center text-purple-400 mb-2 shadow-lg"><i data-lucide="film" class="w-6 h-6"></i></div>`
+          : `<div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center text-purple-400 mb-2 shadow-lg"><i data-lucide="clapperboard" class="w-6 h-6"></i></div>`
+        );
+
+      const div = document.createElement('div');
+      div.className = `absolute inset-0 bg-gradient-to-br ${fallbackBgGradient} flex flex-col items-center justify-center p-4 text-center border-b border-purple-950/40`;
+      div.innerHTML = `
+        ${fallbackIcon}
+        <p class="text-[11px] font-bold text-slate-300 line-clamp-3 leading-tight">${c.name}</p>
+      `;
+      return div;
+    }
+
+    function addPosterOverlays(container, c, fav) {
+      const gradientOverlay = document.createElement('div');
+      gradientOverlay.className = "absolute inset-0 bg-gradient-to-t from-[#120c1f] via-transparent to-transparent opacity-90 pointer-events-none";
+      container.appendChild(gradientOverlay);
+
+      const favBtn = document.createElement('button');
+      favBtn.className = "absolute top-2 left-2 p-2 rounded-xl bg-black/60 hover:bg-black text-white transition-all z-20 shadow cursor-pointer";
+      favBtn.innerHTML = `<i data-lucide="heart" class="w-4 h-4 ${fav ? 'fill-rose-500 text-rose-500' : 'text-white'}">`;
+      favBtn.onclick = (e) => toggleFavorite(c, e);
+      container.appendChild(favBtn);
+
+      if (c.isAdult) {
+        const adultBadge = document.createElement('div');
+        adultBadge.className = "absolute top-2 right-2 bg-rose-950/90 border border-rose-600/50 text-rose-300 text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 z-10 shadow";
+        adultBadge.innerHTML = `<i data-lucide="lock" class="w-3 h-3"></i> +18`;
+        container.appendChild(adultBadge);
+      }
+
+      const hoverOverlay = document.createElement('div');
+      hoverOverlay.className = "absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px] z-10 pointer-events-none";
+      hoverOverlay.innerHTML = `
+        <div class="w-11 h-11 md:w-12 md:h-12 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-lg shadow-purple-900/60 transform group-hover:scale-110 transition-transform">
+          <i data-lucide="${currentSection === 'series' ? 'list-video' : 'info'}" class="w-5 h-5 fill-white ml-0.5"></i>
+        </div>
+      `;
+      container.appendChild(hoverOverlay);
+    }
+
     function handleVodClick(item) {
       if (currentSection === 'movies') {
-        openVodPlayer(item);
+        openMovieModal(item);
       } else if (currentSection === 'series') {
         openSeriesModal(item);
       }
     }
 
-    function playLiveChannel(channel) {
-      activeLiveChannel = channel;
+    async function openMovieModal(item) {
+      currentMovieItem = item;
+      document.getElementById('movieModalTitle').innerText = item.name;
+      document.getElementById('movieModalCategory').innerText = item.group;
+      document.getElementById('movieModalYear').innerText = 'Filme';
+      document.getElementById('movieModalPlot').innerText = 'Carregando sinopse...';
 
-      if (window.innerWidth < 1024) {
-        openVodPlayer(channel);
-        return;
-      }
-
-      document.getElementById('noStreamAlertLive').classList.add('hidden');
-      document.getElementById('liveCurrentName').innerText = channel.name;
-      document.getElementById('liveCurrentGroup').innerText = channel.group;
-
-      const logoContainer = document.getElementById('liveCurrentLogo');
-      const fallbackBarHtml = channel.isAdult
-        ? `<div class="w-full h-full bg-rose-950/60 flex flex-col items-center justify-center text-rose-400 font-bold text-[9px]"><i data-lucide="lock" class="w-3.5 h-3.5"></i><span>+18</span></div>`
-        : `<i data-lucide="tv" class="w-5 h-5"></i>`;
-
-      logoContainer.innerHTML = channel.logo 
-        ? `<img src="${channel.logo}" class="w-full h-full object-contain" onerror="this.outerHTML='${fallbackBarHtml}'; lucide.createIcons();"/>`
-        : fallbackBarHtml;
-
-      const video = document.getElementById('videoPlayerLive');
-
-      if (hlsLiveInstance) hlsLiveInstance.destroy();
-
-      if (Hls.isSupported() && channel.url.includes('.m3u8')) {
-        hlsLiveInstance = new Hls({ enableWorker: true });
-        hlsLiveInstance.loadSource(channel.url);
-        hlsLiveInstance.attachMedia(video);
-        hlsLiveInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+      const coverContainer = document.getElementById('movieModalCover');
+      coverContainer.innerHTML = '';
+      
+      if (item.logo) {
+        const img = document.createElement('img');
+        img.src = item.logo;
+        img.className = "w-full h-full object-cover";
+        img.onerror = () => {
+          coverContainer.innerHTML = `<i data-lucide="film" class="w-8 h-8 text-purple-700"></i>`;
+          lucide.createIcons();
+        };
+        coverContainer.appendChild(img);
       } else {
-        video.src = channel.url;
-        video.play().catch(() => {});
+        coverContainer.innerHTML = `<i data-lucide="film" class="w-8 h-8 text-purple-700"></i>`;
       }
 
-      appendMoreItems();
-    }
+      updateMovieModalFavBtn();
 
-    // --- PLAYER VOD (COM SUPORTE A RETOMAR DE ONDE PAROU) ---
-    function openVodPlayer(item) {
-      const liveVideo = document.getElementById('videoPlayerLive');
-      if (liveVideo) liveVideo.pause();
-
-      document.getElementById('vodPlayerTitle').innerText = item.name;
-      document.getElementById('vodPlayerType').innerText = item.type === 'live' ? 'AO VIVO' : (item.type === 'movies' ? 'FILME' : 'EPISÓDIO');
-      document.getElementById('vodPlayerModal').classList.remove('hidden');
-
-      const video = document.getElementById('videoPlayerVod');
-      if (hlsVodInstance) hlsVodInstance.destroy();
-
-      let finalStreamUrl = item.url;
-      if (finalStreamUrl.startsWith('http://') && !finalStreamUrl.includes('m3u8')) {
-        finalStreamUrl = `/api/proxy?url=${encodeURIComponent(item.url)}`;
-      }
-
-      const resumeKey = getResumeKey(item);
-      const savedTime = item.type !== 'live' ? localStorage.getItem(resumeKey) : null;
-
-      const onVideoReady = () => {
-        if (savedTime && parseFloat(savedTime) > 10) {
-          video.currentTime = parseFloat(savedTime);
-        }
-        video.play().catch(() => {});
+      document.getElementById('movieModalPlayBtn').onclick = () => {
+        closeMovieModal();
+        openVodPlayer(item);
       };
 
-      if (Hls.isSupported() && (finalStreamUrl.includes('.m3u8') || item.type === 'live')) {
-        hlsVodInstance = new Hls({ enableWorker: true });
-        hlsVodInstance.loadSource(finalStreamUrl);
-        hlsVodInstance.attachMedia(video);
-        hlsVodInstance.on(Hls.Events.MANIFEST_PARSED, onVideoReady);
+      document.getElementById('movieModal').classList.remove('hidden');
+
+      const xcCreds = resolveUserCredentials(currentUser);
+      if (xcCreds.isXc && item.url) {
+        const match = item.url.match(/\/movie\/[^/]+\/[^/]+\/([^\.]+)\./);
+        if (match && match[1]) {
+          const streamId = match[1];
+          const cleanServer = xcCreds.server.replace(/\/+$/, '');
+          const infoUrl = `${cleanServer}/player_api.php?username=${encodeURIComponent(xcCreds.user)}&password=${encodeURIComponent(xcCreds.pass)}&action=get_vod_info&vod_id=${streamId}`;
+          try {
+            const res = await smartFetch(infoUrl);
+            const data = await res.json();
+            if (data && data.info) {
+              const info = data.info;
+              document.getElementById('movieModalPlot').innerText = info.plot || info.description || 'Sinopse não disponível.';
+              if (info.releasedate || info.year) {
+                document.getElementById('movieModalYear').innerText = info.releasedate || info.year;
+              }
+            } else {
+              document.getElementById('movieModalPlot').innerText = 'Sinopse não disponível.';
+            }
+          } catch(e) {
+            document.getElementById('movieModalPlot').innerText = 'Sinopse não disponível.';
+          }
+        } else {
+          document.getElementById('movieModalPlot').innerText = 'Sinopse não disponível.';
+        }
       } else {
-        video.src = finalStreamUrl;
-        video.onloadedmetadata = onVideoReady;
+        document.getElementById('movieModalPlot').innerText = 'Sinopse disponível apenas via servidor Xtream Codes.';
       }
-
-      video.ontimeupdate = () => {
-        if (item.type !== 'live' && video.currentTime > 5) {
-          localStorage.setItem(resumeKey, video.currentTime);
-        }
-      };
-
-      video.onended = () => {
-        if (item.type !== 'live') {
-          localStorage.removeItem(resumeKey);
-        }
-      };
-
       lucide.createIcons();
     }
 
-    function closeVodPlayer() {
-      const video = document.getElementById('videoPlayerVod');
-      video.pause();
-      video.src = '';
-      if (hlsVodInstance) hlsVodInstance.destroy();
-      document.getElementById('vodPlayerModal').classList.add('hidden');
-    }
-
-    function togglePlayerFullscreen() {
-      const playerElem = document.getElementById('vodPlayerModal');
-      const video = document.getElementById('videoPlayerVod');
-
-      if (!document.fullscreenElement) {
-        if (playerElem.requestFullscreen) {
-          playerElem.requestFullscreen().catch(() => video.requestFullscreen());
-        } else if (video.webkitEnterFullscreen) {
-          video.webkitEnterFullscreen();
-        }
-      } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-      }
+    function closeMovieModal() {
+      document.getElementById('movieModal').classList.add('hidden');
+      currentMovieItem = null;
     }
 
     async function openSeriesModal(series) {
+      currentSeriesItem = series;
       currentSeriesDetails = series;
       document.getElementById('seriesModalTitle').innerText = series.name;
       document.getElementById('seriesModalCategory').innerText = series.group;
       document.getElementById('seriesModalStats').innerText = 'Buscando temporadas...';
+      document.getElementById('seriesModalPlot').innerText = 'Carregando sinopse...';
+
+      updateSeriesModalFavBtn();
 
       const coverContainer = document.getElementById('seriesModalCover');
-      const seriesFallbackHtml = series.isAdult
-        ? `<div class="w-full h-full bg-rose-950/60 flex flex-col items-center justify-center text-rose-400 font-bold text-[10px]"><i data-lucide="lock" class="w-5 h-5 mb-0.5"></i>+18</div>`
-        : `<i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>`;
+      coverContainer.innerHTML = '';
 
-      coverContainer.innerHTML = series.logo 
-        ? `<img src="${series.logo}" class="w-full h-full object-cover" onerror="this.outerHTML='${seriesFallbackHtml}'; lucide.createIcons();"/>`
-        : seriesFallbackHtml;
+      if (series.logo) {
+        const img = document.createElement('img');
+        img.src = series.logo;
+        img.className = "w-full h-full object-cover";
+        img.onerror = () => {
+          coverContainer.innerHTML = series.isAdult 
+            ? `<div class="w-full h-full bg-rose-950/60 flex flex-col items-center justify-center text-rose-400 font-bold text-[10px]"><i data-lucide="lock" class="w-5 h-5 mb-0.5"></i>+18</div>`
+            : `<i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>`;
+          lucide.createIcons();
+        };
+        coverContainer.appendChild(img);
+      } else {
+        coverContainer.innerHTML = series.isAdult 
+          ? `<div class="w-full h-full bg-rose-950/60 flex flex-col items-center justify-center text-rose-400 font-bold text-[10px]"><i data-lucide="lock" class="w-5 h-5 mb-0.5"></i>+18</div>`
+          : `<i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>`;
+      }
 
       document.getElementById('seriesSeasonsContainer').innerHTML = '';
       
@@ -1388,12 +1762,19 @@
           const data = await res.json();
           currentSeriesEpisodesData = data.episodes || {};
 
+          if (data && data.info) {
+            const info = data.info;
+            document.getElementById('seriesModalPlot').innerText = info.plot || info.description || 'Sinopse não disponível.';
+          } else {
+            document.getElementById('seriesModalPlot').innerText = 'Sinopse não disponível.';
+          }
+
           const seasonNumbers = Object.keys(currentSeriesEpisodesData)
             .map(Number)
             .filter(n => !isNaN(n))
             .sort((a, b) => a - b);
 
-          document.getElementById('seriesModalStats').innerText = `${seasonNumbers.length} Temporada(s) Disponíveis`;
+          document.getElementById('seriesModalStats').innerText = `${seasonNumbers.length} Temporada(s)`;
 
           if (seasonNumbers.length > 0) {
             currentSelectedSeason = seasonNumbers[0];
@@ -1403,9 +1784,11 @@
             document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-slate-400 p-6 text-center">Nenhum episódio cadastrado nesta série.</p>';
           }
         } catch (err) {
+          document.getElementById('seriesModalPlot').innerText = 'Sinopse não disponível.';
           document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-rose-400 p-6 text-center">Erro ao buscar episódios do servidor.</p>';
         }
       } else {
+        document.getElementById('seriesModalPlot').innerText = 'Sinopse disponível apenas via servidor Xtream Codes.';
         document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-purple-400 p-6 text-center">Série disponível via lista direta.</p>';
       }
       lucide.createIcons();
@@ -1491,6 +1874,186 @@
 
     function closeSeriesModal() {
       document.getElementById('seriesModal').classList.add('hidden');
+      currentSeriesItem = null;
+    }
+
+    function decodeEpgText(str) {
+      if (!str) return '';
+      try {
+        const binString = atob(str);
+        const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0));
+        return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      } catch (e) {
+        try {
+          return atob(str);
+        } catch (err) {
+          return str;
+        }
+      }
+    }
+
+    async function openEpgModal() {
+      const modal = document.getElementById('epgModal');
+      const container = document.getElementById('epgContainer');
+      container.innerHTML = '<p class="text-xs text-purple-300/70 text-center py-8">Carregando guia de programação...</p>';
+      modal.classList.remove('hidden');
+
+      if (!activeLiveChannel || !activeLiveChannel.stream_id) {
+        container.innerHTML = '<p class="text-xs text-purple-300/70 text-center py-8">Nenhum canal ao vivo selecionado no momento.</p>';
+        return;
+      }
+
+      const xcCreds = resolveUserCredentials(currentUser);
+      if (xcCreds.isXc) {
+        const cleanServer = xcCreds.server.replace(/\/+$/, '');
+        const epgUrl = `${cleanServer}/player_api.php?username=${encodeURIComponent(xcCreds.user)}&password=${encodeURIComponent(xcCreds.pass)}&action=get_short_epg&stream_id=${activeLiveChannel.stream_id}`;
+        try {
+          const res = await smartFetch(epgUrl);
+          const data = await res.json();
+          if (data && data.epg_listings && data.epg_listings.length > 0) {
+            container.innerHTML = '';
+            data.epg_listings.forEach(epg => {
+              const title = decodeEpgText(epg.title || '');
+              const start = epg.start || '';
+              const end = epg.end || '';
+              const desc = decodeEpgText(epg.description || '');
+
+              const card = document.createElement('div');
+              card.className = "p-3 bg-[#180f29] border border-purple-900/40 rounded-xl space-y-1";
+              card.innerHTML = `
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-white">${title || 'Programa ao vivo'}</span>
+                  <span class="text-[10px] text-purple-400 font-mono">${start.substring(11, 16)} - ${end.substring(11, 16)}</span>
+                </div>
+                ${desc ? `<p class="text-[11px] text-slate-300 leading-tight">${desc}</p>` : ''}
+              `;
+              container.appendChild(card);
+            });
+          } else {
+            container.innerHTML = '<p class="text-xs text-purple-300/70 text-center py-8">Sinopse não disponível.</p>';
+          }
+        } catch (e) {
+          container.innerHTML = '<p class="text-xs text-rose-400 text-center py-8">Erro ao carregar a programação do EPG.</p>';
+        }
+      } else {
+        container.innerHTML = '<p class="text-xs text-purple-300/70 text-center py-8">Guia EPG disponível apenas via Xtream Codes.</p>';
+      }
+      lucide.createIcons();
+    }
+
+    function closeEpgModal() {
+      document.getElementById('epgModal').classList.add('hidden');
+    }
+
+    function playLiveChannel(channel) {
+      activeLiveChannel = channel;
+
+      if (window.innerWidth < 1024) {
+        openVodPlayer(channel);
+        return;
+      }
+
+      document.getElementById('noStreamAlertLive').classList.add('hidden');
+      document.getElementById('liveCurrentName').innerText = channel.name;
+      document.getElementById('liveCurrentGroup').innerText = channel.group;
+
+      const logoContainer = document.getElementById('liveCurrentLogo');
+      const fallbackBarHtml = channel.isAdult
+        ? `<div class="w-full h-full bg-rose-950/60 flex flex-col items-center justify-center text-rose-400 font-bold text-[9px]"><i data-lucide="lock" class="w-3.5 h-3.5"></i><span>+18</span></div>`
+        : `<i data-lucide="tv" class="w-5 h-5"></i>`;
+
+      logoContainer.innerHTML = channel.logo 
+        ? `<img src="${channel.logo}" class="w-full h-full object-contain" onerror="this.outerHTML='${fallbackBarHtml}'; lucide.createIcons();"/>`
+        : fallbackBarHtml;
+
+      const video = document.getElementById('videoPlayerLive');
+
+      if (hlsLiveInstance) hlsLiveInstance.destroy();
+
+      if (Hls.isSupported() && channel.url.includes('.m3u8')) {
+        hlsLiveInstance = new Hls({ enableWorker: true });
+        hlsLiveInstance.loadSource(channel.url);
+        hlsLiveInstance.attachMedia(video);
+        hlsLiveInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+      } else {
+        video.src = channel.url;
+        video.play().catch(() => {});
+      }
+
+      appendMoreItems();
+    }
+
+    // --- CORREÇÃO APLICADA AQUI: REMOVIDO O PROXY /API/PROXY PARA O .EXE ---
+    function openVodPlayer(item) {
+      const liveVideo = document.getElementById('videoPlayerLive');
+      if (liveVideo) liveVideo.pause();
+
+      document.getElementById('vodPlayerTitle').innerText = item.name;
+      document.getElementById('vodPlayerType').innerText = item.type === 'live' ? 'AO VIVO' : (item.type === 'movies' ? 'FILME' : 'EPISÓDIO');
+      document.getElementById('vodPlayerModal').classList.remove('hidden');
+
+      const video = document.getElementById('videoPlayerVod');
+      if (hlsVodInstance) hlsVodInstance.destroy();
+
+      // Utiliza diretamente a URL fornecida sem tentar bater em rotas de backend inativas no .exe
+      let finalStreamUrl = item.url;
+
+      const resumeKey = getResumeKey(item);
+      const savedTime = item.type !== 'live' ? localStorage.getItem(resumeKey) : null;
+
+      const onVideoReady = () => {
+        if (savedTime && parseFloat(savedTime) > 10) {
+          video.currentTime = parseFloat(savedTime);
+        }
+        video.play().catch(() => {});
+      };
+
+      if (Hls.isSupported() && (finalStreamUrl.includes('.m3u8') || item.type === 'live')) {
+        hlsVodInstance = new Hls({ enableWorker: true });
+        hlsVodInstance.loadSource(finalStreamUrl);
+        hlsVodInstance.attachMedia(video);
+        hlsVodInstance.on(Hls.Events.MANIFEST_PARSED, onVideoReady);
+      } else {
+        video.src = finalStreamUrl;
+        video.onloadedmetadata = onVideoReady;
+      }
+
+      video.ontimeupdate = () => {
+        if (item.type !== 'live' && video.currentTime > 5) {
+          localStorage.setItem(resumeKey, video.currentTime);
+        }
+      };
+
+      video.onended = () => {
+        if (item.type !== 'live') {
+          localStorage.removeItem(resumeKey);
+        }
+      };
+
+      lucide.createIcons();
+    }
+
+    function closeVodPlayer() {
+      const video = document.getElementById('videoPlayerVod');
+      video.pause();
+      video.src = '';
+      if (hlsVodInstance) hlsVodInstance.destroy();
+      document.getElementById('vodPlayerModal').classList.add('hidden');
+    }
+
+    function togglePlayerFullscreen() {
+      const playerElem = document.getElementById('vodPlayerModal');
+      const video = document.getElementById('videoPlayerVod');
+
+      if (!document.fullscreenElement) {
+        if (playerElem.requestFullscreen) {
+          playerElem.requestFullscreen().catch(() => video.requestFullscreen());
+        } else if (video.webkitEnterFullscreen) {
+          video.webkitEnterFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+      }
     }
 
     function requireAdultPin(onSuccess) {
@@ -1568,63 +2131,6 @@
       toggleConfigModal();
       loadPlaylist(finalUrl);
     }
-
-    // --- DETECÇÃO E INSTALAÇÃO PWA ---
-    function isRunningStandalone() {
-      return window.matchMedia('(display-mode: standalone)').matches || 
-             window.navigator.standalone === true || 
-             document.referrer.includes('android-app://');
-    }
-
-    function isIosDevice() {
-      return /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
-    }
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      checkAndShowPwaBanner();
-    });
-
-    function checkAndShowPwaBanner() {
-      if (isRunningStandalone()) return;
-      const dismissedTime = localStorage.getItem('lux_pwa_dismissed');
-      if (dismissedTime && (Date.now() - parseInt(dismissedTime, 10)) < 86400000) return;
-
-      const banner = document.getElementById('pwaInstallBanner');
-      const actionBtn = document.getElementById('pwaInstallActionBtn');
-      const instructionText = document.getElementById('pwaInstructionText');
-
-      if (isIosDevice()) {
-        instructionText.innerHTML = `Toque no botão <strong>Compartilhar</strong> do Safari (<i data-lucide="share" class="w-3 h-3 inline"></i>) e selecione <strong>"Adicionar à Tela de Início"</strong>.`;
-        actionBtn.classList.add('hidden');
-      }
-
-      banner.classList.remove('hidden');
-      lucide.createIcons();
-    }
-
-    async function triggerPwaInstall() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-          dismissPwaBanner();
-        }
-        deferredPrompt = null;
-      }
-    }
-
-    function dismissPwaBanner() {
-      document.getElementById('pwaInstallBanner').classList.add('hidden');
-      localStorage.setItem('lux_pwa_dismissed', Date.now().toString());
-    }
-
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        checkAndShowPwaBanner();
-      }, 2500);
-    });
 
     lucide.createIcons();
   </script>
