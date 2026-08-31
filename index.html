@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>LUX Play - Web Streaming</title>
 
+  <!-- 1º Favicon -->
+  <link rel="icon" href="lux.ico" type="image/x-icon">
+
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- HLS.js CDN -->
@@ -80,7 +83,6 @@
         <p id="authStatusText" class="text-xs text-center font-medium"></p>
       </div>
 
-      <!-- Versão no canto inferior direito da tela de login -->
       <div class="absolute bottom-3 right-4 text-[10px] text-purple-400/40 font-mono pointer-events-none">versão 1.0</div>
     </div>
   </div>
@@ -264,10 +266,13 @@
 
   </div>
 
-  <!-- ================= BOTÃO FLUTUANTE DE PESQUISA (MOBILE ONLY) ================= -->
+  <!-- ================= 3º BOTÃO FLUTUANTE DE PESQUISA (MOBILE ONLY - Oculto inicialmente) ================= -->
   <button id="floatingSearchBtn" onclick="toggleMobileSearchModal()" class="hidden md:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-xl lux-glow transition-all active:scale-95">
     <i data-lucide="search" class="w-6 h-6"></i>
   </button>
+
+  <!-- ================= 2º SISTEMA DE NOTIFICAÇÕES (Empilhado no canto inferior direito) ================= -->
+  <div id="notificationContainer" class="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-2.5 pointer-events-none max-w-sm w-full px-4 md:px-0"></div>
 
   <!-- ================= MODAL DE PESQUISA MOBILE ================= -->
   <div id="mobileSearchModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex flex-col p-4 justify-start pt-16">
@@ -489,6 +494,34 @@
   </div>
 
   <script>
+    // 4º COMUNICAÇÃO HTTP E WWW AO INICIAR
+    (function () {
+      const hostname = window.location.hostname;
+      const protocol = window.location.protocol;
+      const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '';
+
+      if (!isLocal) {
+        let needsRedirect = false;
+        let targetHost = hostname;
+
+        // Se estiver em https, força http
+        if (protocol === 'https:') {
+          needsRedirect = true;
+        }
+
+        // Se não começar com www., adiciona www.
+        if (!targetHost.startsWith('www.')) {
+          targetHost = 'www.' + targetHost;
+          needsRedirect = true;
+        }
+
+        if (needsRedirect) {
+          const newUrl = 'http://' + targetHost + window.location.pathname + window.location.search + window.location.hash;
+          window.location.replace(newUrl);
+        }
+      }
+    })();
+
     const SHEET_ID = '1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0';
 
     let currentUser = null;
@@ -519,6 +552,7 @@
     let activeConnectionTab = 'xc';
     let isSortModeActive = false;
 
+    // --- AUTO-LOGIN AO INICIAR A PÁGINA ---
     window.addEventListener('DOMContentLoaded', () => {
       const savedUser = localStorage.getItem('lux_auth_user');
       const savedPass = localStorage.getItem('lux_auth_pass');
@@ -530,6 +564,59 @@
       }
     });
 
+    // --- 2º SISTEMA DE NOTIFICAÇÕES (Empilhadas no canto inferior direito) ---
+    function showNotification(title, message, type = 'info', duration = 4000) {
+      const container = document.getElementById('notificationContainer');
+      if (!container) return;
+
+      const notif = document.createElement('div');
+      notif.className = `pointer-events-auto bg-[#120c1f] border rounded-2xl p-4 shadow-2xl lux-glow-sm transform translate-y-4 opacity-0 transition-all duration-300 flex items-start gap-3 relative overflow-hidden`;
+      
+      let borderColor = 'border-purple-900/60';
+      let iconName = 'info';
+      let iconColor = 'text-purple-400 bg-purple-950/80 border-purple-800/40';
+
+      if (type === 'success') {
+        borderColor = 'border-emerald-900/60';
+        iconName = 'check-circle';
+        iconColor = 'text-emerald-400 bg-emerald-950/80 border-emerald-800/40';
+      } else if (type === 'error') {
+        borderColor = 'border-rose-900/60';
+        iconName = 'alert-circle';
+        iconColor = 'text-rose-400 bg-rose-950/80 border-rose-800/40';
+      } else if (type === 'warning') {
+        borderColor = 'border-amber-900/60';
+        iconName = 'alert-triangle';
+        iconColor = 'text-amber-400 bg-amber-950/80 border-amber-800/40';
+      }
+
+      notif.classList.add(borderColor);
+
+      notif.innerHTML = `
+        <div class="w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${iconColor}">
+          <i data-lucide="${iconName}" class="w-4 h-4"></i>
+        </div>
+        <div class="flex-1 min-w-0 pr-4">
+          <h4 class="text-xs font-bold text-white">${title}</h4>
+          <p class="text-[11px] text-slate-300 mt-0.5 leading-relaxed">${message}</p>
+        </div>
+        <button onclick="this.parentElement.remove()" class="absolute top-3 right-3 text-purple-400 hover:text-white p-1 rounded-lg text-xs">✕</button>
+      `;
+
+      container.appendChild(notif);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        notif.classList.remove('translate-y-4', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        notif.classList.add('translate-y-4', 'opacity-0');
+        setTimeout(() => notif.remove(), 300);
+      }, duration);
+    }
+
+    // --- SISTEMA DE FAVORITOS (MINHA LISTA) ---
     function getItemKey(item) {
       return item.url || item.series_id || item.id;
     }
@@ -554,8 +641,10 @@
       let favs = getFavorites();
       if (favs.includes(key)) {
         favs = favs.filter(k => k !== key);
+        showNotification('Removido', 'Item removido da sua lista.', 'info');
       } else {
         favs.push(key);
+        showNotification('Favoritado', 'Item adicionado à sua lista.', 'success');
       }
       localStorage.setItem('lux_favorites', JSON.stringify(favs));
       renderCategories();
@@ -742,6 +831,7 @@
             statusText.innerText = `Acesso vencido em ${account.dueDate}.`;
             statusText.className = 'text-xs text-center text-rose-400 font-medium';
             loginBtn.disabled = false;
+            showNotification('Acesso Vencido', `Sua conta venceu em ${account.dueDate}.`, 'error');
             return;
           }
           
@@ -792,6 +882,9 @@
       setTimeout(() => {
         splash.classList.add('hidden');
         updateNavIndicator();
+        // 3º Mostra o botão flutuante de pesquisa mobile SOMENTE APÓS sair da tela de carregamento
+        document.getElementById('floatingSearchBtn').classList.remove('hidden');
+        showNotification('Bem-vindo', `Conectado com sucesso, ${currentUser.name}!`, 'success');
       }, 450);
     }
 
@@ -826,8 +919,6 @@
         document.getElementById('connectionConfigBtn').classList.add('hidden');
       }
 
-      document.getElementById('floatingSearchBtn').classList.remove('hidden');
-
       const liveContainer = document.getElementById('liveItemsContainer');
       liveContainer.onscroll = () => handleScroll(liveContainer);
 
@@ -841,7 +932,7 @@
       } else if (xcCreds.url) {
         await loadPlaylist(xcCreds.url);
       } else {
-        alert(`O usuário ${currentUser.name} não possui lista cadastrada.`);
+        showNotification('Atenção', `O usuário ${currentUser.name} não possui lista cadastrada.`, 'warning');
       }
 
       hideSplashScreen();
@@ -872,6 +963,7 @@
         }
       }
       hideSplashScreen();
+      showNotification('Atualizado', 'Lista recarregada com sucesso.', 'success');
     }
 
     async function loadFromXtreamApi(server, user, pass) {
@@ -970,7 +1062,7 @@
         allMediaItems = parsed;
         setSection('live');
       } catch (err) {
-        alert('Erro ao carregar lista M3U.');
+        showNotification('Erro', 'Erro ao carregar lista M3U.', 'error');
       }
     }
 
@@ -1983,7 +2075,6 @@
       appendMoreItems();
     }
 
-    // --- CORREÇÃO APLICADA AQUI: REMOVIDO O PROXY /API/PROXY PARA O .EXE ---
     function openVodPlayer(item) {
       const liveVideo = document.getElementById('videoPlayerLive');
       if (liveVideo) liveVideo.pause();
@@ -1995,8 +2086,10 @@
       const video = document.getElementById('videoPlayerVod');
       if (hlsVodInstance) hlsVodInstance.destroy();
 
-      // Utiliza diretamente a URL fornecida sem tentar bater em rotas de backend inativas no .exe
       let finalStreamUrl = item.url;
+      if (finalStreamUrl.startsWith('http://') && !finalStreamUrl.includes('m3u8')) {
+        finalStreamUrl = `/api/proxy?url=${encodeURIComponent(item.url)}`;
+      }
 
       const resumeKey = getResumeKey(item);
       const savedTime = item.type !== 'live' ? localStorage.getItem(resumeKey) : null;
@@ -2075,6 +2168,7 @@
       if (entered === correctPin) {
         isAdultUnlocked = true;
         closeAdultPinModal();
+        showNotification('Desbloqueado', 'Conteúdo adulto liberado.', 'success');
         if (pendingUnlockAction) pendingUnlockAction();
       } else {
         document.getElementById('adultPinError').classList.remove('hidden');
@@ -2114,7 +2208,7 @@
         const pass = document.getElementById('manualXcPass').value.trim();
 
         if (!server || !user || !pass) {
-          alert('Preencha Servidor, Usuário e Senha do Xtream Codes.');
+          showNotification('Atenção', 'Preencha Servidor, Usuário e Senha do Xtream Codes.', 'warning');
           return;
         }
 
@@ -2123,7 +2217,7 @@
       } else {
         finalUrl = document.getElementById('manualM3uInput').value.trim();
         if (!finalUrl) {
-          alert('Insira a URL da lista M3U.');
+          showNotification('Atenção', 'Insira a URL da lista M3U.', 'warning');
           return;
         }
       }
