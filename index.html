@@ -150,6 +150,12 @@
         <i data-lucide="link" class="w-3.5 h-3.5"></i> Conexão
       </button>
 
+      <!-- Botão do Sino de Notificações -->
+      <button id="notificationBellBtn" onclick="reopenNotifications()" title="Ver Avisos" class="relative bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
+        <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+        <span id="notificationBadge" class="absolute top-1 right-1 w-2.5 h-2.5 bg-purple-500 rounded-full ring-2 ring-[#100a1c] hidden"></span>
+      </button>
+
       <button onclick="reloadFromSheet()" title="Recarregar Banco de Dados" class="bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
         <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
       </button>
@@ -488,8 +494,12 @@
     </div>
   </div>
 
+  <!-- ================= NOTIFICAÇÕES (TOAST FLUTUANTE) ================= -->
+  <div id="notificationContainer" class="fixed bottom-16 md:bottom-6 right-4 z-[60] flex flex-col gap-2.5 max-w-xs sm:max-w-sm w-[calc(100%-2rem)] sm:w-80 pointer-events-none"></div>
+
   <script>
     const SHEET_ID = '1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0';
+    const NOTIFICATION_SHEET_ID = '1BCtYvuyNd7POr1VbKTFRbOCKIh1W6iGewVh-zuk-Et4';
 
     let currentUser = null;
     let allMediaItems = [];
@@ -518,6 +528,8 @@
 
     let activeConnectionTab = 'xc';
     let isSortModeActive = false;
+
+    let activeNotifications = [];
 
     window.addEventListener('DOMContentLoaded', () => {
       const savedUser = localStorage.getItem('lux_auth_user');
@@ -624,6 +636,137 @@
         } catch (e) {}
       }
       throw new Error(`Falha ao conectar: ${url}`);
+    }
+
+    // --- SISTEMA DE NOTIFICAÇÕES FLUTUANTES ---
+    async function fetchNotificationsFromSheet() {
+      const sheetUrl = `https://docs.google.com/spreadsheets/d/${NOTIFICATION_SHEET_ID}/export?format=csv`;
+      try {
+        const res = await smartFetch(sheetUrl);
+        const csvText = await res.text();
+        return parseNotificationCSV(csvText);
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function parseNotificationCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const list = [];
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').trim());
+        if (row.length >= 3) {
+          list.push({
+            startDate: row[0] || '',
+            endDate: row[1] || '',
+            message: row[2] || '',
+            link: row[3] || ''
+          });
+        }
+      }
+      return list;
+    }
+
+    function isNotificationActive(startDateStr, endDateStr) {
+      if (!startDateStr || !endDateStr) return false;
+      try {
+        const parseD = (s, isEnd) => {
+          const parts = s.split('/');
+          if (parts.length !== 3) return null;
+          return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10), isEnd ? 23 : 0, isEnd ? 59 : 0, isEnd ? 59 : 0);
+        };
+        const start = parseD(startDateStr, false);
+        const end = parseD(endDateStr, true);
+        const now = new Date();
+        if (!start || !end) return false;
+        return now >= start && now <= end;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function renderNotifications(autoDismiss = true) {
+      const container = document.getElementById('notificationContainer');
+      container.innerHTML = '';
+      if (!activeNotifications || activeNotifications.length === 0) return;
+
+      activeNotifications.forEach((item, index) => {
+        const toast = document.createElement('div');
+        toast.className = "bg-[#120c1f]/95 border border-purple-900/70 rounded-2xl p-3.5 lux-glow-sm shadow-2xl flex items-start gap-3 backdrop-blur-md pointer-events-auto transition-all duration-300 transform translate-y-4 opacity-0";
+        
+        const linkHtml = item.link ? `<a href="${item.link}" target="_blank" onclick="hideNotificationDot()" class="inline-flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 font-bold mt-1 transition-colors">Acessar link <i data-lucide="external-link" class="w-3 h-3"></i></a>` : '';
+
+        toast.innerHTML = `
+          <div class="w-8 h-8 rounded-xl bg-purple-950/80 border border-purple-800/50 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
+            <i data-lucide="bell" class="w-4 h-4"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-semibold text-slate-100 leading-snug break-words">${item.message}</p>
+            ${linkHtml}
+          </div>
+          <button onclick="dismissNotification(this)" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0 transition-colors" title="Fechar">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+          toast.classList.remove('translate-y-4', 'opacity-0');
+        }, 60 * index);
+
+        if (autoDismiss) {
+          setTimeout(() => {
+            if (toast && toast.parentElement) {
+              toast.classList.add('opacity-0', 'translate-y-4');
+              setTimeout(() => {
+                toast.remove();
+                checkIfAllToastsClosed();
+              }, 300);
+            }
+          }, 5000);
+        }
+      });
+
+      lucide.createIcons();
+    }
+
+    function hideNotificationDot() {
+      const badge = document.getElementById('notificationBadge');
+      if (badge) badge.classList.add('hidden');
+    }
+
+    function dismissNotification(btn) {
+      const toast = btn.closest('.pointer-events-auto');
+      if (toast) {
+        toast.classList.add('opacity-0', 'translate-y-4');
+        setTimeout(() => {
+          toast.remove();
+          checkIfAllToastsClosed();
+        }, 300);
+      }
+    }
+
+    function checkIfAllToastsClosed() {
+      const container = document.getElementById('notificationContainer');
+      if (!container || container.children.length === 0) {
+        hideNotificationDot();
+      }
+    }
+
+    function reopenNotifications() {
+      hideNotificationDot();
+      renderNotifications(false);
+    }
+
+    async function loadAndShowNotifications() {
+      const raw = await fetchNotificationsFromSheet();
+      activeNotifications = raw.filter(n => isNotificationActive(n.startDate, n.endDate));
+      if (activeNotifications.length > 0) {
+        const badge = document.getElementById('notificationBadge');
+        if (badge) badge.classList.remove('hidden');
+        renderNotifications(true);
+      }
     }
 
     async function fetchUsersFromSheet() {
@@ -846,6 +989,7 @@
 
       hideSplashScreen();
       lucide.createIcons();
+      loadAndShowNotifications();
     }
 
     function handleScroll(container) {
@@ -872,6 +1016,7 @@
         }
       }
       hideSplashScreen();
+      loadAndShowNotifications();
     }
 
     async function loadFromXtreamApi(server, user, pass) {
@@ -1041,8 +1186,9 @@
       
       const items = getSectionItems();
       const rawCats = [...new Set(items.map(c => c.group))];
-      if (rawCats.includes('Área do Cliente')) {
-        activeCategory = 'Área do Cliente';
+      const clienteCat = rawCats.find(c => c.toLowerCase().includes('área do cliente') || c.toLowerCase().includes('area do cliente'));
+      if (currentSection === 'live' && clienteCat) {
+        activeCategory = clienteCat;
       } else {
         activeCategory = 'Todos';
       }
@@ -1183,21 +1329,69 @@
       }
     }
 
+    // --- REGRAS DE HIERARQUIA PADRÃO DOS GÊNEROS ---
+    function getCategoryTier(cat) {
+      if (isAdultContent(cat)) return 5; // +18 por último
+
+      const lower = cat.toLowerCase();
+
+      // MODO FILMES: Filmes primeiro > Coletâneas depois > Outros para baixo
+      if (currentSection === 'movies') {
+        if (lower.startsWith('filme') || lower.includes('filme') || lower.includes('movie') || lower.includes('cinema')) return 1;
+        if (lower.includes('colet') || lower.includes('saga') || lower.includes('franquia')) return 2;
+        return 3;
+      }
+
+      // MODO SÉRIES
+      if (currentSection === 'series') {
+        if (lower.startsWith('série') || lower.startsWith('serie') || lower.includes('série') || lower.includes('serie')) return 1;
+        if (lower.includes('novela') || lower.includes('anime') || lower.includes('desenho') || lower.includes('colet')) return 2;
+        return 3;
+      }
+
+      // MODO TV AO VIVO (live)
+      const isForeign = cat.includes('|') || 
+        lower.includes('usa') || lower.includes('latino') || lower.includes('mexico') || 
+        lower.includes('argentina') || lower.includes('colombia') || lower.includes('equador') || 
+        lower.includes('paraguay') || lower.includes('uruguay') || lower.includes('chile') || 
+        lower.includes('internacio') || lower.includes('portugal') || lower.includes('espanha') ||
+        lower.includes('espana') || lower.includes('uk') || lower.includes('italia') || lower.includes('france');
+
+      if (isForeign) return 4;
+      if (lower.includes('24h') || lower.includes('24 hrs') || lower.includes('24 horas')) return 3; // 24h
+      if (lower.includes('ppv')) return 2; // PPV
+      
+      return 1; // Canais normais
+    }
+
+    function sortCategoriesSmart(a, b) {
+      const tierA = getCategoryTier(a);
+      const tierB = getCategoryTier(b);
+      if (tierA !== tierB) return tierA - tierB;
+      return a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    }
+
     function moveCategory(catName, direction) {
       const items = getSectionItems();
       const rawCats = [...new Set(items.map(c => c.group))];
-      const nonAdultCats = rawCats.filter(c => !isAdultContent(c) && c !== 'Área do Cliente');
-      const adultCats = rawCats.filter(c => isAdultContent(c));
-      let currentOrder = getStoredCategoryOrder();
+      const hasCliente = rawCats.find(c => c.toLowerCase().includes('área do cliente') || c.toLowerCase().includes('area do cliente'));
+      const hasGuiaJogos = rawCats.find(c => c.toLowerCase().includes('guia de jogos'));
 
-      const fullBaseCats = [...nonAdultCats, ...adultCats];
+      const allBaseCats = rawCats.filter(c => c !== hasCliente && c !== hasGuiaJogos);
+      let currentOrder = getStoredCategoryOrder();
       let orderedCats = [];
-      currentOrder.forEach(c => {
-        if (fullBaseCats.includes(c)) orderedCats.push(c);
-      });
-      fullBaseCats.forEach(c => {
-        if (!orderedCats.includes(c)) orderedCats.push(c);
-      });
+
+      if (currentOrder && currentOrder.length > 0) {
+        currentOrder.forEach(c => {
+          if (allBaseCats.includes(c)) orderedCats.push(c);
+        });
+        const remaining = allBaseCats.filter(c => !orderedCats.includes(c));
+        remaining.sort(sortCategoriesSmart);
+        orderedCats.push(...remaining);
+      } else {
+        orderedCats = [...allBaseCats];
+        orderedCats.sort(sortCategoriesSmart);
+      }
 
       const index = orderedCats.indexOf(catName);
       if (index === -1) return;
@@ -1217,22 +1411,31 @@
       const items = getSectionItems();
       const rawCats = [...new Set(items.map(c => c.group))];
 
-      const hasCliente = rawCats.includes('Área do Cliente');
-      const nonAdultCats = rawCats.filter(c => !isAdultContent(c) && c !== 'Área do Cliente');
-      const adultCats = rawCats.filter(c => isAdultContent(c));
-      const allBaseCats = [...nonAdultCats, ...adultCats];
+      const hasCliente = rawCats.find(c => c.toLowerCase().includes('área do cliente') || c.toLowerCase().includes('area do cliente'));
+      const hasGuiaJogos = rawCats.find(c => c.toLowerCase().includes('guia de jogos'));
+
+      // Isola categorias dinâmicas
+      const allBaseCats = rawCats.filter(c => c !== hasCliente && c !== hasGuiaJogos);
 
       let savedOrder = getStoredCategoryOrder();
       let sortedCats = [];
-      savedOrder.forEach(cat => {
-        if (allBaseCats.includes(cat)) sortedCats.push(cat);
-      });
-      allBaseCats.forEach(cat => {
-        if (!sortedCats.includes(cat)) sortedCats.push(cat);
-      });
 
+      if (savedOrder && savedOrder.length > 0) {
+        savedOrder.forEach(cat => {
+          if (allBaseCats.includes(cat)) sortedCats.push(cat);
+        });
+        const remaining = allBaseCats.filter(c => !sortedCats.includes(c));
+        remaining.sort(sortCategoriesSmart);
+        sortedCats.push(...remaining);
+      } else {
+        sortedCats = [...allBaseCats];
+        sortedCats.sort(sortCategoriesSmart);
+      }
+
+      // Topo fixo ordenado
       const cats = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
-      if (hasCliente) cats.push('Área do Cliente');
+      if (hasCliente) cats.push(hasCliente);
+      if (hasGuiaJogos) cats.push(hasGuiaJogos);
       cats.push(...sortedCats);
 
       const resumeCount = items.filter(c => {
@@ -1254,9 +1457,10 @@
       cats.forEach(cat => {
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
-        const isClienteCat = cat === 'Área do Cliente';
+        const isClienteCat = hasCliente && cat === hasCliente;
+        const isGuiaCat = hasGuiaJogos && cat === hasGuiaJogos;
         const isFavCat = cat === 'Minha Lista';
-        const isFixedTop = isResumeCat || cat === 'Todos' || isClienteCat || isFavCat;
+        const isFixedTop = isResumeCat || cat === 'Todos' || isClienteCat || isGuiaCat || isFavCat;
         
         let count = 0;
         if (cat === 'Todos') count = items.length;
@@ -1267,8 +1471,8 @@
         const btn = document.createElement('div');
         
         const activeClasses = activeCategory === cat 
-          ? (isResumeCat ? 'bg-amber-600/20 text-amber-300 border border-amber-500/50 shadow-sm' : (isClienteCat ? 'bg-blue-600/20 text-blue-300 border border-blue-500/50 shadow-sm' : (isFavCat ? 'bg-rose-600/20 text-rose-300 border border-rose-500/50 shadow-sm' : 'bg-purple-600/20 text-purple-300 border border-purple-500/40 shadow-sm')))
-          : (isResumeCat ? 'text-amber-400/80 hover:bg-amber-950/40 hover:text-amber-200' : (isClienteCat ? 'text-blue-400/90 hover:bg-blue-950/40 hover:text-blue-200' : (isFavCat ? 'text-rose-400/90 hover:bg-rose-950/40 hover:text-rose-200' : 'text-purple-400/70 hover:bg-purple-950/40 hover:text-purple-200')));
+          ? (isResumeCat ? 'bg-amber-600/20 text-amber-300 border border-amber-500/50 shadow-sm' : (isClienteCat ? 'bg-blue-600/20 text-blue-300 border border-blue-500/50 shadow-sm' : (isGuiaCat ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/50 shadow-sm' : (isFavCat ? 'bg-rose-600/20 text-rose-300 border border-rose-500/50 shadow-sm' : 'bg-purple-600/20 text-purple-300 border border-purple-500/40 shadow-sm'))))
+          : (isResumeCat ? 'text-amber-400/80 hover:bg-amber-950/40 hover:text-amber-200' : (isClienteCat ? 'text-blue-400/90 hover:bg-blue-950/40 hover:text-blue-200' : (isGuiaCat ? 'text-emerald-400/90 hover:bg-emerald-950/40 hover:text-emerald-200' : (isFavCat ? 'text-rose-400/90 hover:bg-rose-950/40 hover:text-rose-200' : 'text-purple-400/70 hover:bg-purple-950/40 hover:text-purple-200'))));
 
         btn.className = `px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between ${activeClasses} ${!isSortModeActive ? 'cursor-pointer' : ''}`;
         
@@ -1303,9 +1507,10 @@
         if (isResumeCat) iconHtml = `<i data-lucide="play-circle" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>`;
         else if (isFavCat) iconHtml = `<i data-lucide="heart" class="w-3.5 h-3.5 text-rose-400 shrink-0 fill-rose-400"></i>`;
         else if (isClienteCat) iconHtml = `<i data-lucide="shield" class="w-3.5 h-3.5 text-blue-400 shrink-0"></i>`;
+        else if (isGuiaCat) iconHtml = `<i data-lucide="trophy" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>`;
         else if (isAdultCat) iconHtml = `<i data-lucide="lock" class="w-3 h-3 text-rose-400 shrink-0"></i>`;
 
-        let badgeBg = isResumeCat ? 'text-amber-400/70 bg-[#26180c]' : (isFavCat ? 'text-rose-400/70 bg-[#260c14]' : (isClienteCat ? 'text-blue-400/70 bg-[#0c1a26]' : 'text-purple-400/50 bg-[#170e26]'));
+        let badgeBg = isResumeCat ? 'text-amber-400/70 bg-[#26180c]' : (isFavCat ? 'text-rose-400/70 bg-[#260c14]' : (isClienteCat ? 'text-blue-400/70 bg-[#0c1a26]' : (isGuiaCat ? 'text-emerald-400/70 bg-[#0c2618]' : 'text-purple-400/50 bg-[#170e26]')));
 
         btn.innerHTML = `
           <span class="truncate max-w-[130px] flex items-center gap-1.5">
@@ -1327,7 +1532,8 @@
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
         const isFavCat = cat === 'Minha Lista';
-        const isClienteCat = cat === 'Área do Cliente';
+        const isClienteCat = hasCliente && cat === hasCliente;
+        const isGuiaCat = hasGuiaJogos && cat === hasGuiaJogos;
         const isSpecialAll = cat === 'Todos';
 
         let count = 0;
@@ -1339,12 +1545,12 @@
         const card = document.createElement('div');
         card.onclick = () => selectMobileCategory(cat);
 
-        const iconName = isResumeCat ? 'play-circle' : (isFavCat ? 'heart' : (isClienteCat ? 'shield' : (isAdultCat ? 'lock' : (currentSection === 'live' ? 'tv' : (currentSection === 'movies' ? 'film' : 'clapperboard')))));
+        const iconName = isResumeCat ? 'play-circle' : (isFavCat ? 'heart' : (isClienteCat ? 'shield' : (isGuiaCat ? 'trophy' : (isAdultCat ? 'lock' : (currentSection === 'live' ? 'tv' : (currentSection === 'movies' ? 'film' : 'clapperboard'))))));
         const iconColor = isResumeCat 
           ? 'text-amber-400 bg-amber-950/80 border-amber-800/60' 
           : (isFavCat 
             ? 'text-rose-400 bg-rose-950/80 border-rose-800/60' 
-            : (isClienteCat ? 'text-blue-400 bg-blue-950/80 border-blue-800/60' : (isAdultCat ? 'text-rose-400 bg-rose-950/60 border-rose-800/40' : 'text-purple-400 bg-purple-950/60 border-purple-800/40')));
+            : (isClienteCat ? 'text-blue-400 bg-blue-950/80 border-blue-800/60' : (isGuiaCat ? 'text-emerald-400 bg-emerald-950/80 border-emerald-800/60' : (isAdultCat ? 'text-rose-400 bg-rose-950/60 border-rose-800/40' : 'text-purple-400 bg-purple-950/60 border-purple-800/40'))));
 
         card.className = `relative rounded-2xl border p-4 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.97] shadow-lg ${
           isSpecialAll 
@@ -1355,12 +1561,14 @@
                 ? 'col-span-1 bg-gradient-to-r from-rose-950/60 to-purple-950/60 border-rose-500/50 min-h-[95px]'
                 : (isClienteCat
                   ? 'col-span-1 bg-gradient-to-r from-blue-950/60 to-purple-950/60 border-blue-500/50 min-h-[95px]'
-                  : (isAdultCat 
-                    ? 'bg-[#180d1a] border-rose-900/40 hover:border-rose-600/50 min-h-[105px]' 
-                    : 'bg-[#120c1f] border-purple-950/80 hover:border-purple-600/50 min-h-[105px]'))))
+                  : (isGuiaCat
+                    ? 'col-span-1 bg-gradient-to-r from-emerald-950/60 to-purple-950/60 border-emerald-500/50 min-h-[95px]'
+                    : (isAdultCat 
+                      ? 'bg-[#180d1a] border-rose-900/40 hover:border-rose-600/50 min-h-[105px]' 
+                      : 'bg-[#120c1f] border-purple-950/80 hover:border-purple-600/50 min-h-[105px]')))))
         }`;
 
-        let badgeColor = isResumeCat ? 'bg-amber-950 text-amber-300' : (isFavCat ? 'bg-rose-950 text-rose-300' : (isClienteCat ? 'bg-blue-950 text-blue-300' : (isAdultCat ? 'bg-rose-950 text-rose-300' : 'bg-purple-950 text-purple-300')));
+        let badgeColor = isResumeCat ? 'bg-amber-950 text-amber-300' : (isFavCat ? 'bg-rose-950 text-rose-300' : (isClienteCat ? 'bg-blue-950 text-blue-300' : (isGuiaCat ? 'bg-emerald-950 text-emerald-300' : (isAdultCat ? 'bg-rose-950 text-rose-300' : 'bg-purple-950 text-purple-300'))));
 
         card.innerHTML = `
           <div class="flex items-center justify-between">
@@ -1372,7 +1580,7 @@
             </span>
           </div>
           <div class="mt-2">
-            <h4 class="text-xs font-bold ${isResumeCat ? 'text-amber-200' : (isFavCat ? 'text-rose-200' : (isClienteCat ? 'text-blue-200' : 'text-slate-100'))} line-clamp-2">${cat}</h4>
+            <h4 class="text-xs font-bold ${isResumeCat ? 'text-amber-200' : (isFavCat ? 'text-rose-200' : (isClienteCat ? 'text-blue-200' : (isGuiaCat ? 'text-emerald-200' : 'text-slate-100')))} line-clamp-2">${cat}</h4>
           </div>
         `;
         mobileGrid.appendChild(card);
@@ -1416,6 +1624,106 @@
       filterMedia();
     }
 
+    // --- ALGORITMO DE ORDENAÇÃO EXCLUSIVO PARA TV AO VIVO ---
+    function getChannelSortInfo(name) {
+      const raw = name || '';
+
+      // 1. Resolução: 4K (1) > FHD (2) > HD (3) > SD (4) > Nenhuma (5)
+      let quality = 5;
+      if (/\b(4k|uhd)\b/i.test(raw)) quality = 1;
+      else if (/\b(fhd|1080p)\b/i.test(raw)) quality = 2;
+      else if (/\b(hd|720p)\b/i.test(raw)) quality = 3;
+      else if (/\b(sd|480p|576p)\b/i.test(raw)) quality = 4;
+
+      // 2. Codec: Standard (0) antes de H265 (1)
+      const isH265 = /\[?h\.?265\]?|\bhevc\b/i.test(raw) ? 1 : 0;
+
+      // 3. Limpeza para isolar Nome Base e Numeração
+      let clean = raw
+        .replace(/\[\s*(h\.?265|hevc|fhd|hd|sd|4k|uhd)\s*\]/gi, '')
+        .replace(/\(\s*(h\.?265|hevc|fhd|hd|sd|4k|uhd)\s*\)/gi, '')
+        .replace(/\b(4k|uhd|fhd|1080p|hd|720p|sd|h\.?265|hevc)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Detecta número no final (ex: "ESPN 2" -> base: "ESPN", num: 2)
+      let numMatch = clean.match(/^(.*?)(?:[\s\-_]+)(\d+)$/);
+      let base = clean;
+      let num = 0; // Sem número fica em primeiro (ou equivale a 0)
+
+      if (numMatch && numMatch[1].trim().length > 0) {
+        base = numMatch[1].trim();
+        num = parseInt(numMatch[2], 10);
+      }
+
+      return {
+        base: base.toLowerCase(),
+        num: num,
+        quality: quality,
+        isH265: isH265
+      };
+    }
+
+    function compareLiveChannels(a, b) {
+      // 0. Conteúdo adulto sempre por último
+      if (Boolean(a.isAdult) !== Boolean(b.isAdult)) {
+        return a.isAdult ? 1 : -1;
+      }
+
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      const groupA = (a.group || '').toLowerCase();
+      const groupB = (b.group || '').toLowerCase();
+
+      // PRIORIDADE 1: Globo SP em primeiro no Sudeste
+      const isSudeste = groupA.includes('sudeste') || groupB.includes('sudeste') || activeCategory.toLowerCase().includes('sudeste');
+      const isGloboA = nameA.includes('globo');
+      const isGloboB = nameB.includes('globo');
+      if (isSudeste && isGloboA && isGloboB) {
+        const isSpA = /\b(sp|s[aã]o\s*paulo)\b/i.test(a.name);
+        const isSpB = /\b(sp|s[aã]o\s*paulo)\b/i.test(b.name);
+        if (isSpA !== isSpB) {
+          return isSpA ? -1 : 1;
+        }
+      }
+
+      // PRIORIDADE 2: Premiere Clubes em primeiro nos canais Premiere
+      const isPremiereGroup = groupA.includes('premiere') || groupB.includes('premiere') || activeCategory.toLowerCase().includes('premiere');
+      const isPremA = nameA.includes('premiere') || nameA.includes('pfc');
+      const isPremB = nameB.includes('premiere') || nameB.includes('pfc');
+      if (isPremiereGroup || (isPremA && isPremB)) {
+        const isClubesA = /\b(clube|clubes)\b/i.test(a.name);
+        const isClubesB = /\b(clube|clubes)\b/i.test(b.name);
+        if (isClubesA !== isClubesB) {
+          return isClubesA ? -1 : 1;
+        }
+      }
+
+      const infoA = getChannelSortInfo(a.name);
+      const infoB = getChannelSortInfo(b.name);
+
+      // 1. Ordem alfabética do Nome Base
+      const cmpBase = infoA.base.localeCompare(infoB.base, 'pt-BR', { sensitivity: 'base' });
+      if (cmpBase !== 0) return cmpBase;
+
+      // 2. Ordem Numérica (sem número ou 1 primeiro, depois 2, 3...)
+      if (infoA.num !== infoB.num) {
+        return infoA.num - infoB.num;
+      }
+
+      // 3. Qualidade (4K > FHD > HD > SD)
+      if (infoA.quality !== infoB.quality) {
+        return infoA.quality - infoB.quality;
+      }
+
+      // 4. Codec (Normal antes de [H265])
+      if (infoA.isH265 !== infoB.isH265) {
+        return infoA.isH265 - infoB.isH265;
+      }
+
+      return a.name.localeCompare(b.name, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    }
+
     function filterMedia() {
       const query = document.getElementById('searchInput').value.toLowerCase();
       const currentList = getSectionItems();
@@ -1436,10 +1744,15 @@
         return matchesCat && matchesQuery;
       });
 
-      currentFilteredItems.sort((a, b) => {
-        if (Boolean(a.isAdult) === Boolean(b.isAdult)) return 0;
-        return a.isAdult ? 1 : -1;
-      });
+      // Aplica a nova ordenação estritamente na TV Ao Vivo
+      if (currentSection === 'live') {
+        currentFilteredItems.sort(compareLiveChannels);
+      } else {
+        currentFilteredItems.sort((a, b) => {
+          if (Boolean(a.isAdult) === Boolean(b.isAdult)) return 0;
+          return a.isAdult ? 1 : -1;
+        });
+      }
 
       document.getElementById('liveCategoryTitle').innerText = activeCategory;
       document.getElementById('vodCategoryTitle').innerText = activeCategory;
@@ -1995,7 +2308,6 @@
       const video = document.getElementById('videoPlayerVod');
       if (hlsVodInstance) hlsVodInstance.destroy();
 
-      // Utiliza diretamente a URL fornecida sem tentar bater em rotas de backend inativas no .exe
       let finalStreamUrl = item.url;
 
       const resumeKey = getResumeKey(item);
