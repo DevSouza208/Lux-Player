@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+  <meta name="referrer" content="no-referrer">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>LUX Play - Web Streaming</title>
+  <link rel="icon" href="lux.ico" type="image/x-icon">
+  <title>LUX Play</title>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -11,6 +13,8 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -44,6 +48,48 @@
     .screen-visible {
       opacity: 1;
       transform: translateY(0) scale(1);
+    }
+
+    /* Animação suave da barra lateral */
+    #desktopSidebar {
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease-in-out, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+    }
+    #desktopSidebar.sidebar-collapsed {
+      width: 0px !important;
+      min-width: 0px !important;
+      opacity: 0;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      border-right-width: 0 !important;
+      transform: translateX(-20px);
+      pointer-events: none;
+    }
+
+    /* Lingueta na borda direita para recolher/expandir */
+    .sidebar-toggle-tab {
+      position: absolute;
+      right: -14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 48px;
+      background: #2e1d47;
+      border-top-right-radius: 6px;
+      border-bottom-right-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #c084fc;
+      z-index: 30;
+      transition: background 0.2s, width 0.2s;
+    }
+    .sidebar-toggle-tab:hover {
+      background: #a855f7;
+      color: #ffffff;
+      width: 18px;
+      right: -18px;
     }
   </style>
 </head>
@@ -80,8 +126,7 @@
         <p id="authStatusText" class="text-xs text-center font-medium"></p>
       </div>
 
-      <!-- Versão no canto inferior direito da tela de login -->
-      <div class="absolute bottom-3 right-4 text-[10px] text-purple-400/40 font-mono pointer-events-none">versão 1.0</div>
+      <div class="absolute bottom-3 right-4 text-[10px] text-purple-400/40 font-mono pointer-events-none">versão 2.0</div>
     </div>
   </div>
 
@@ -116,11 +161,13 @@
       <span class="text-xl font-black tracking-widest text-white">LUX<span class="text-purple-400 font-light">PLAY</span></span>
     </div>
 
-    <!-- Abas Desktop (Top Nav) -->
     <nav id="desktopNav" class="relative hidden md:flex items-center bg-[#180f29] p-1 rounded-2xl border border-purple-900/40">
       <div id="navSlider" class="absolute top-1 bottom-1 bg-purple-600 rounded-xl shadow-md transition-all duration-300 ease-out pointer-events-none z-0"></div>
       
-      <button onclick="setSection('live')" id="navLive" class="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-white">
+      <button onclick="setSection('home')" id="navHome" class="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-white">
+        <i data-lucide="home" class="w-3.5 h-3.5"></i> Início
+      </button>
+      <button onclick="setSection('live')" id="navLive" class="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
         <i data-lucide="tv" class="w-3.5 h-3.5"></i> TV Ao Vivo
       </button>
       <button onclick="setSection('movies')" id="navMovies" class="relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
@@ -131,7 +178,6 @@
       </button>
     </nav>
 
-    <!-- Busca Rápida (Desktop) -->
     <div class="flex-1 max-w-xs mx-4 hidden md:block">
       <div class="relative">
         <input id="searchInput" oninput="handleSearchInput()" type="text" placeholder="Buscar canal, filme ou série..." class="w-full bg-[#180f29] border border-purple-900/40 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-purple-400/40 focus:outline-none focus:border-purple-500">
@@ -139,24 +185,21 @@
       </div>
     </div>
 
-    <!-- Perfil & Admin -->
     <div class="flex items-center gap-3">
-      <a id="sheetAdminBtn" href="https://docs.google.com/spreadsheets/d/1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0/edit" target="_blank" class="hidden bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
-        <i data-lucide="database" class="w-3.5 h-3.5"></i> Banco de Dados
-      </a>
+      <button id="adminPanelBtn" onclick="toggleAdminModal()" class="hidden bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
+        <i data-lucide="users" class="w-3.5 h-3.5"></i> Painel Admin
+      </button>
 
-      <!-- Botão Conexão (Exclusivo Admin) -->
       <button id="connectionConfigBtn" onclick="toggleConfigModal()" title="Adicionar / Trocar Lista" class="hidden bg-[#180f29] hover:bg-[#23153b] text-purple-200 px-3 py-1.5 rounded-xl text-xs font-semibold border border-purple-900/50 transition-all flex items-center gap-1.5">
         <i data-lucide="link" class="w-3.5 h-3.5"></i> Conexão
       </button>
 
-      <!-- Botão do Sino de Notificações -->
       <button id="notificationBellBtn" onclick="reopenNotifications()" title="Ver Avisos" class="relative bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
         <i data-lucide="bell" class="w-3.5 h-3.5"></i>
         <span id="notificationBadge" class="absolute top-1 right-1 w-2.5 h-2.5 bg-purple-500 rounded-full ring-2 ring-[#100a1c] hidden"></span>
       </button>
 
-      <button onclick="reloadFromSheet()" title="Recarregar Banco de Dados" class="bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
+      <button onclick="reloadUserData()" title="Recarregar Dados" class="bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
         <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
       </button>
 
@@ -175,10 +218,13 @@
   <!-- ================= CORPO PRINCIPAL ================= -->
   <div id="mainDashboard" class="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden relative pb-14 md:pb-0">
     
-    <!-- 1. Coluna de Categorias (Sidebar no Desktop) -->
-    <aside id="desktopSidebar" class="hidden lg:flex w-60 bg-[#0d0817] border-r border-purple-950/70 flex-col p-3 shrink-0">
+    <aside id="desktopSidebar" class="hidden lg:flex w-80 bg-[#0d0817] border-r border-purple-950/70 flex-col p-3 shrink-0 relative">
+      <div class="sidebar-toggle-tab" onclick="toggleSidebar()" title="Recolher Menu">
+        <i data-lucide="chevron-left" id="sidebarToggleIcon" class="w-3.5 h-3.5"></i>
+      </div>
+
       <div class="flex items-center justify-between px-2 mb-2">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400">Gêneros</span>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400">GÊNEROS</span>
         <div class="flex items-center gap-2">
           <button onclick="toggleSortMode()" id="sortModeBtn" title="Organizar Gêneros" class="text-[10px] bg-purple-950 hover:bg-purple-900 text-purple-300 p-1.5 rounded-md transition-all flex items-center justify-center">
             <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
@@ -189,8 +235,75 @@
       <div id="categoriesList" class="flex flex-col gap-1.5 overflow-y-auto pr-1"></div>
     </aside>
 
-    <!-- 2. ETAPA 1 (MOBILE ONLY): Grade de Categorias em Cards -->
-    <section id="mobileCategoriesSection" class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col lg:hidden">
+    <div id="sidebarOpenTab" onclick="toggleSidebar()" title="Expandir Gêneros" class="hidden fixed left-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-[#2e1d47] hover:bg-[#a855f7] text-purple-200 hover:text-white rounded-r-lg z-30 cursor-pointer items-center justify-center transition-colors">
+      <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+    </div>
+
+    <!-- TELA DE INÍCIO (HOME DASHBOARD) -->
+    <section id="homeSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex flex-col overflow-y-auto p-4 md:p-6 space-y-6 hidden">
+      <div class="flex items-center justify-between shrink-0 mb-1">
+        <h2 class="text-xl font-black text-white tracking-wide flex items-center gap-2.5">
+          <span class="w-1.5 h-6 bg-purple-600 rounded-full inline-block"></span>
+          <span>Início</span>
+        </h2>
+      </div>
+
+<!-- Banner Em Alta (TMDB validado) -->
+      <div id="homeHeroBanner" class="w-full bg-[#120c1f] border border-purple-900/40 rounded-3xl p-6 md:p-8 relative overflow-hidden lux-glow min-h-[280px] flex items-center">
+        <!-- Background desfocado -->
+        <div class="absolute inset-0 bg-cover bg-center opacity-25 filter blur-sm transition-all duration-700 ease-in-out" id="heroBgImage"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-[#120c1f] via-[#120c1f]/80 to-transparent z-0"></div>
+        
+        <!-- Wrap do Conteúdo (Texto na Esquerda, Capa na Direita) -->
+        <div class="relative z-10 w-full flex items-center justify-between gap-6 transition-opacity duration-500" id="heroContentWrap">
+          
+          <!-- Lado Esquerdo: Textos e Botão -->
+          <div class="max-w-xl space-y-4">
+            <span class="text-[10px] bg-purple-600 text-white px-2.5 py-1 rounded-md font-bold uppercase tracking-wider">Em alta 🔥</span>
+            <h3 id="heroTitle" class="text-2xl md:text-4xl font-extrabold text-white">Buscando Tendências...</h3>
+            <p id="heroOverview" class="text-xs md:text-sm text-slate-300 line-clamp-3 md:line-clamp-4 leading-relaxed">Cruzando dados globais com o seu catálogo...</p>
+            <div class="flex items-center gap-3 pt-2">
+              <button id="heroPlayBtn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg shadow-purple-900/40 cursor-pointer hidden">
+                <i data-lucide="play" class="w-4 h-4 fill-white"></i> Assistir Agora
+              </button>
+            </div>
+          </div>
+
+          <!-- Lado Direito: Capa (Poster) -->
+          <div class="hidden sm:block shrink-0">
+            <img id="heroPosterImage" src="" alt="Poster" class="w-32 md:w-40 rounded-xl shadow-2xl border border-purple-900/40 hidden transition-transform hover:scale-105 object-cover aspect-[2/3]">
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Continuar Assistindo -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-white tracking-wide uppercase text-purple-300">Continuar Assistindo</h3>
+        <div id="homeResumeContainer" class="flex gap-4 overflow-x-auto pb-2 min-h-[140px] items-center">
+          <p class="text-xs text-purple-400/60">Nenhuma mídia em andamento.</p>
+        </div>
+      </div>
+
+      <!-- Jogos do Dia (Carrossel) -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-white tracking-wide uppercase text-emerald-400">Jogos e Esportes Ao Vivo</h3>
+        <div id="homeJogosContainer" class="flex gap-4 overflow-x-auto pb-2 min-h-[100px] items-center">
+          <p class="text-xs text-purple-400/60">Carregando jogos...</p>
+        </div>
+      </div>
+
+      <!-- Filmes Lançamentos 2026 -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-white tracking-wide uppercase text-purple-300">Filmes | Lançamentos 2026</h3>
+        <div id="homeLancamentosContainer" class="flex gap-4 overflow-x-auto pb-2 min-h-[220px] items-center">
+          <p class="text-xs text-purple-400/60">Carregando lançamentos...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sessões Originais -->
+    <section id="mobileCategoriesSection" class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col lg:hidden hidden">
       <div class="flex items-center justify-between mb-3 px-1">
         <div>
           <h3 class="text-sm font-bold text-white">Selecione uma Categoria</h3>
@@ -199,11 +312,9 @@
         <span id="mobileMediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2.5 py-1 rounded-full font-mono font-bold">0 itens</span>
       </div>
 
-      <!-- Grade de Cards de Categorias Mobile -->
       <div id="mobileCategoryGrid" class="grid grid-cols-2 gap-3 pb-8"></div>
     </section>
 
-    <!-- 3. ETAPA 2 (MOBILE) / GRADE (DESKTOP): Lista de Canais (TV Ao Vivo) -->
     <section id="liveChannelsSection" class="w-full lg:w-80 bg-[#120c1f] border-b lg:border-b-0 lg:border-r border-purple-950/70 flex flex-col flex-1 lg:flex-initial shrink-0 overflow-hidden hidden">
       <div class="p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#150d24]">
         <div class="flex items-center gap-2 min-w-0">
@@ -218,7 +329,6 @@
       <div id="liveItemsContainer" class="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 pb-20 lg:pb-2"></div>
     </section>
 
-    <!-- 4. Player Principal TV Ao Vivo (Desktop Only) -->
     <main id="livePlayerSection" class="hidden flex-1 bg-black flex-col justify-between overflow-hidden relative">
       <div class="flex-1 flex items-center justify-center bg-[#06040a] relative">
         <video id="videoPlayerLive" controls class="w-full h-full max-h-[82vh] object-contain"></video>
@@ -245,14 +355,12 @@
             </div>
           </div>
         </div>
-        <!-- Botão Guia EPG na Barra do Player Ao Vivo -->
         <button onclick="openEpgModal()" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
           <i data-lucide="calendar" class="w-4 h-4"></i> Guia EPG
         </button>
       </div>
     </main>
 
-    <!-- 5. Grade de Filmes / Séries -->
     <section id="vodGridSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex flex-col overflow-hidden hidden">
       <div class="lg:hidden p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#120c1f]">
         <div class="flex items-center gap-2 min-w-0">
@@ -262,20 +370,94 @@
           </button>
           <span id="vodCategoryTitle" class="text-xs font-semibold text-purple-300 truncate">Catálogo</span>
         </div>
-        <span id="vodItemCountBadge" class="text-[10px] bg-purple-950 text-purple-400 px-2 py-0.5 rounded-full font-mono shrink-0">0</span>
+        <span id="vodItemCountBadgeMobile" class="text-[10px] bg-purple-950 text-purple-400 px-2 py-0.5 rounded-full font-mono shrink-0">0</span>
       </div>
 
-      <div id="vodGridContainer" class="flex-1 min-h-0 h-full overflow-y-auto p-3.5 md:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 md:gap-5 content-start auto-rows-max pb-20 lg:pb-6"></div>
+      <div class="hidden lg:flex items-center justify-between px-6 pt-5 pb-2 shrink-0">
+        <h2 class="text-lg font-black text-white tracking-wide flex items-center gap-2.5">
+          <span class="w-1.5 h-5 bg-purple-600 rounded-full inline-block"></span>
+          <span id="activeCategoryHeading">Categoria</span>
+        </h2>
+        <span id="vodItemCountBadge" class="text-xs bg-purple-950/80 border border-purple-900/50 text-purple-300 px-3 py-1 rounded-full font-mono">0 itens</span>
+      </div>
+
+      <div id="vodGridContainer" class="flex-1 min-h-0 h-full overflow-y-auto p-3.5 md:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 md:gap-5 content-start auto-rows-max pb-20 lg:pb-6 transition-all duration-300"></div>
     </section>
 
   </div>
 
-  <!-- ================= BOTÃO FLUTUANTE DE PESQUISA (MOBILE ONLY) ================= -->
   <button id="floatingSearchBtn" onclick="toggleMobileSearchModal()" class="hidden md:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-xl lux-glow transition-all active:scale-95">
     <i data-lucide="search" class="w-6 h-6"></i>
   </button>
 
-  <!-- ================= MODAL DE PESQUISA MOBILE ================= -->
+  <div id="adminModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-6 max-w-2xl w-full max-h-[90vh] flex flex-col lux-glow overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-purple-950 mb-4">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="users" class="w-5 h-5 text-purple-400"></i> Painel de Administração de Clientes
+        </h3>
+        <button onclick="toggleAdminModal()" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+
+      <div class="bg-[#180f29] border border-purple-900/40 rounded-2xl p-4 mb-4">
+        <h4 class="text-xs font-bold uppercase text-purple-300 mb-3">Cadastrar Novo Cliente</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Nome</label>
+            <input id="adminNewName" type="text" placeholder="Nome do cliente" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Usuário (Login)</label>
+            <input id="adminNewUser" type="text" placeholder="usuario123" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Senha</label>
+            <input id="adminNewPass" type="text" placeholder="senha123" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Vencimento (ex: 31/12/2026)</label>
+            <input id="adminNewDue" type="text" placeholder="31/12/2026" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="text-[11px] text-purple-300 font-medium">Link da Lista M3U / Servidor</label>
+            <input id="adminNewM3u" type="text" placeholder="https://..." class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Usuário XC (Opcional)</label>
+            <input id="adminNewUserXc" type="text" placeholder="userxc" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Senha XC (Opcional)</label>
+            <input id="adminNewPassXc" type="text" placeholder="senhaxc" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="text-[11px] text-purple-300 font-medium">URL Servidor XC (Opcional)</label>
+            <input id="adminNewUrlXc" type="text" placeholder="http://servidor.com:80" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">PIN Adulto (+18)</label>
+            <input id="adminNewAdultPin" type="text" placeholder="0000" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Cargo</label>
+            <select id="adminNewRole" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+              <option value="user">Usuário Comum</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="adminCreateUser()" class="mt-3 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-purple-900/40">
+          Salvar Cliente na Nuvem
+        </button>
+      </div>
+
+      <h4 class="text-xs font-bold uppercase text-purple-300 mb-2">Clientes Cadastrados</h4>
+      <div id="adminUsersListContainer" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+        <p class="text-xs text-purple-400/60 text-center py-4">Carregando clientes...</p>
+      </div>
+    </div>
+  </div>
+
   <div id="mobileSearchModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex flex-col p-4 justify-start pt-16">
     <div class="bg-[#120c1f] border border-purple-900/60 rounded-2xl p-4 w-full max-w-md mx-auto lux-glow relative">
       <div class="flex items-center justify-between mb-3">
@@ -294,7 +476,6 @@
     </div>
   </div>
 
-  <!-- ================= MODAL DE DETALHES / SINOPSE DE FILMES ================= -->
   <div id="movieModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
     <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-xl w-full max-h-[85vh] flex flex-col lux-glow overflow-y-auto">
       <div class="flex items-start justify-between pb-4 border-b border-purple-950">
@@ -331,7 +512,6 @@
     </div>
   </div>
 
-  <!-- ================= MODAL DE SÉRIES (COMPLETO COM SINOPSE) ================= -->
   <div id="seriesModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
     <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-2xl w-full max-h-[85vh] flex flex-col lux-glow">
       <div class="flex items-start justify-between pb-4 border-b border-purple-950">
@@ -353,23 +533,19 @@
         <button onclick="closeSeriesModal()" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0">✕</button>
       </div>
 
-      <!-- Sinopse da Série -->
       <div class="py-2">
         <p id="seriesModalPlot" class="text-xs text-slate-300 leading-relaxed line-clamp-3">Carregando sinopse...</p>
       </div>
 
-      <!-- Seletor de Temporadas -->
       <div class="py-2">
         <span class="text-[11px] font-bold uppercase text-purple-400 mb-1.5 block">Temporada:</span>
         <div id="seriesSeasonsContainer" class="flex gap-2 overflow-x-auto pb-1"></div>
       </div>
 
-      <!-- Lista de Episódios -->
       <div class="flex-1 overflow-y-auto pr-1 space-y-1.5" id="seriesEpisodesContainer"></div>
     </div>
   </div>
 
-  <!-- ================= MODAL GUIA EPG (PROGRAMAÇÃO AO VIVO) ================= -->
   <div id="epgModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
     <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-lg w-full max-h-[80vh] flex flex-col lux-glow">
       <div class="flex items-center justify-between pb-3 border-b border-purple-950">
@@ -384,10 +560,16 @@
     </div>
   </div>
 
-  <!-- ================= BARRA DE NAVEGAÇÃO INFERIOR (MOBILE BOTTOM BAR) ================= -->
+  <!-- Navegação Mobile (Início incluso) -->
   <nav class="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#100a1c]/95 backdrop-blur-md border-t border-purple-950/80 flex items-center justify-around z-30 px-2">
-    <button onclick="setSection('live')" id="bNavLive" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-300 transition-all">
+    <button onclick="setSection('home')" id="bNavHome" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-300 transition-all">
       <div class="p-1 rounded-xl bg-purple-600 text-white shadow-md shadow-purple-900/60">
+        <i data-lucide="home" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Início</span>
+    </button>
+    <button onclick="setSection('live')" id="bNavLive" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
         <i data-lucide="tv" class="w-4 h-4"></i>
       </div>
       <span class="text-[10px] font-bold">TV Ao Vivo</span>
@@ -406,7 +588,6 @@
     </button>
   </nav>
 
-  <!-- ================= MODAL DEDICADO DO PLAYER ================= -->
   <div id="vodPlayerModal" class="fixed inset-0 z-50 bg-black flex flex-col hidden">
     <div class="h-14 bg-[#100a1c]/95 backdrop-blur-md border-b border-purple-950 px-3 md:px-4 flex items-center justify-between shrink-0 z-10">
       <div class="flex items-center gap-2.5 min-w-0">
@@ -419,7 +600,6 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <!-- Botão EPG no Player Mobile -->
         <button onclick="openEpgModal()" class="md:hidden bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
           <i data-lucide="calendar" class="w-4 h-4"></i>
         </button>
@@ -434,14 +614,13 @@
     </div>
   </div>
 
-  <!-- ================= MODAL CONTROLE PARENTAL (+18 PIN) ================= -->
   <div id="adultPinModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
     <div class="bg-[#120c1f] border border-rose-900/50 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
       <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-950/60 border border-rose-800/40 flex items-center justify-center mb-3 text-rose-400">
         <i data-lucide="lock" class="w-7 h-7"></i>
       </div>
       <h3 class="text-base font-bold text-white">Conteúdo Protegido (+18)</h3>
-      <p class="text-xs text-slate-400 mt-1 mb-4">Insira o PIN de controle parental da Coluna J para desbloquear.</p>
+      <p class="text-xs text-slate-400 mt-1 mb-4">Insira o PIN de controle parental para desbloquear.</p>
       
       <input id="adultPinInput" type="password" placeholder="Digite o PIN..." class="w-full bg-[#1a122c] border border-rose-900/50 rounded-xl px-4 py-2.5 text-center text-lg text-white font-mono focus:outline-none focus:border-rose-500 mb-2" maxlength="10">
       <p id="adultPinError" class="text-xs text-rose-400 mb-3 hidden font-medium">PIN incorreto!</p>
@@ -453,7 +632,6 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: CONFIGURAR CONEXÃO MANUAL ================= -->
   <div id="configModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
     <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-6 max-w-lg w-full lux-glow">
       <h2 class="text-lg font-bold mb-3 text-white">Conectar Fonte de Vídeo</h2>
@@ -494,17 +672,19 @@
     </div>
   </div>
 
-  <!-- ================= NOTIFICAÇÕES (TOAST FLUTUANTE) ================= -->
   <div id="notificationContainer" class="fixed bottom-16 md:bottom-6 right-4 z-[60] flex flex-col gap-2.5 max-w-xs sm:max-w-sm w-[calc(100%-2rem)] sm:w-80 pointer-events-none"></div>
 
   <script>
-    const SHEET_ID = '1id3H3zu9-h0wpJ-qhpS4ONfHbVxEA9kIpa4aEjwQIA0';
+    const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
     const NOTIFICATION_SHEET_ID = '1BCtYvuyNd7POr1VbKTFRbOCKIh1W6iGewVh-zuk-Et4';
 
     let currentUser = null;
     let allMediaItems = [];
-    let currentSection = 'live';
-    let activeCategory = 'Área do Cliente';
+    let currentSection = 'home'; 
+    let activeCategory = 'Todos';
     let activeLiveChannel = null;
 
     let mobileStep = 'categories';
@@ -638,7 +818,6 @@
       throw new Error(`Falha ao conectar: ${url}`);
     }
 
-    // --- SISTEMA DE NOTIFICAÇÕES FLUTUANTES ---
     async function fetchNotificationsFromSheet() {
       const sheetUrl = `https://docs.google.com/spreadsheets/d/${NOTIFICATION_SHEET_ID}/export?format=csv`;
       try {
@@ -769,51 +948,45 @@
       }
     }
 
-    async function fetchUsersFromSheet() {
-      const sheetUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-      const res = await smartFetch(sheetUrl);
-      const csvText = await res.text();
-      return parseCSV(csvText);
+    async function fetchUsersFromSupabase() {
+      const { data, error } = await supabaseClient
+        .from('usuarios')
+        .select('*');
+      
+      if (error) {
+        throw new Error(error.message);
+      }
+      return data || [];
     }
 
-    function parseCSV(text) {
-      const lines = text.trim().split(/\r?\n/);
-      const users = [];
+    function parseSupabaseUsers(rows) {
+      return rows.map(row => {
+        const nome = row.nome || '';
+        const usuario = row.usuario || '';
+        const senha = row.senha || '';
+        const lista = row.lista_m3u || '';
+        const vencimento = row.vencimento || '';
+        const userXc = row.userxc || '';
+        const senhaXc = row.senhaxc || '';
+        const urlXc = row.urlxc || '';
+        const senhaAdulto = row['senha18+'] || senha;
+        const cargo = row.cargo || 'user';
 
-      for (let i = 0; i < lines.length; i++) {
-        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/^"|"$/g, '').trim());
-        if (i === 0 && (row[0]?.toLowerCase() === 'nome' || row[1]?.toLowerCase() === 'usuario')) continue;
+        const isAdmin = cargo.toLowerCase() === 'admin' || usuario.toLowerCase() === 'admin' || usuario.toLowerCase() === 'admin2' || nome.toLowerCase().includes('admin');
 
-        if (row.length >= 2) {
-          const nome = row[0] || 'Usuário';
-          const usuario = row[1] || '';
-          const senha = row[2] || '';
-          const contato = row[3] || '';
-          const lista = row[4] || '';
-          const vencimento = row[5] || '';
-          const userXc = row[6] || '';
-          const senhaXc = row[7] || '';
-          const urlXc = row[8] || '';
-          const senhaAdulto = row[9] || senha;
-
-          const isAdmin = usuario.toLowerCase() === 'admin' || usuario.toLowerCase() === 'admin2' || nome.toLowerCase().includes('admin');
-
-          users.push({
-            name: nome,
-            user: usuario,
-            pass: senha,
-            contact: contato,
-            m3uUrl: lista,
-            dueDate: vencimento,
-            userXc: userXc,
-            senhaXc: senhaXc,
-            urlXc: urlXc,
-            adultPin: senhaAdulto,
-            role: isAdmin ? 'admin' : 'user'
-          });
-        }
-      }
-      return users;
+        return {
+          name: nome,
+          user: usuario,
+          pass: senha,
+          m3uUrl: lista,
+          dueDate: vencimento,
+          userXc: userXc,
+          senhaXc: senhaXc,
+          urlXc: urlXc,
+          adultPin: senhaAdulto,
+          role: isAdmin ? 'admin' : 'user'
+        };
+      });
     }
 
     function isExpired(dateStr) {
@@ -872,12 +1045,13 @@
         return;
       }
 
-      statusText.innerText = 'Verificando dados...';
+      statusText.innerText = 'Verificando dados no Supabase...';
       statusText.className = 'text-xs text-center text-purple-400 font-medium';
       loginBtn.disabled = true;
 
       try {
-        const users = await fetchUsersFromSheet();
+        const rows = await fetchUsersFromSupabase();
+        const users = parseSupabaseUsers(rows);
         const account = users.find(u => u.user.toLowerCase() === userInput.toLowerCase() && u.pass === passInput);
 
         if (account) {
@@ -902,7 +1076,7 @@
           statusText.className = 'text-xs text-center text-rose-400 font-medium';
         }
       } catch (err) {
-        statusText.innerText = 'Erro ao consultar banco de dados.';
+        statusText.innerText = 'Erro ao consultar banco Supabase.';
         statusText.className = 'text-xs text-center text-rose-400 font-medium';
       } finally {
         loginBtn.disabled = false;
@@ -962,10 +1136,10 @@
       document.getElementById('userExpiryBadge').innerText = currentUser.dueDate ? `Val: ${currentUser.dueDate}` : 'Val: Ilimitada';
 
       if (currentUser.role === 'admin') {
-        document.getElementById('sheetAdminBtn').classList.remove('hidden');
+        document.getElementById('adminPanelBtn').classList.remove('hidden');
         document.getElementById('connectionConfigBtn').classList.remove('hidden');
       } else {
-        document.getElementById('sheetAdminBtn').classList.add('hidden');
+        document.getElementById('adminPanelBtn').classList.add('hidden');
         document.getElementById('connectionConfigBtn').classList.add('hidden');
       }
 
@@ -990,6 +1164,9 @@
       hideSplashScreen();
       lucide.createIcons();
       loadAndShowNotifications();
+
+      // Muda para iniciar na ABA HOME ao invés de tocar o canal de fundo
+      setSection('home');
     }
 
     function handleScroll(container) {
@@ -1001,22 +1178,156 @@
       }
     }
 
-    async function reloadFromSheet() {
+    async function reloadUserData() {
       if (!currentUser) return;
       showSplashScreen();
-      const users = await fetchUsersFromSheet();
-      const updated = users.find(u => u.user.toLowerCase() === currentUser.user.toLowerCase());
-      if (updated) {
-        currentUser = updated;
-        const xcCreds = resolveUserCredentials(currentUser);
-        if (xcCreds.isXc) {
-          await loadFromXtreamApi(xcCreds.server, xcCreds.user, xcCreds.pass);
-        } else if (xcCreds.url) {
-          await loadPlaylist(xcCreds.url);
+      try {
+        const rows = await fetchUsersFromSupabase();
+        const users = parseSupabaseUsers(rows);
+        const updated = users.find(u => u.user.toLowerCase() === currentUser.user.toLowerCase());
+        if (updated) {
+          currentUser = updated;
+          const xcCreds = resolveUserCredentials(currentUser);
+          if (xcCreds.isXc) {
+            await loadFromXtreamApi(xcCreds.server, xcCreds.user, xcCreds.pass);
+          } else if (xcCreds.url) {
+            await loadPlaylist(xcCreds.url);
+          }
         }
-      }
+      } catch (e) {}
       hideSplashScreen();
       loadAndShowNotifications();
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('desktopSidebar');
+      const openTab = document.getElementById('sidebarOpenTab');
+      const vodGrid = document.getElementById('vodGridContainer');
+      if (!sidebar) return;
+
+      sidebar.classList.toggle('sidebar-collapsed');
+      const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+
+      if (openTab) {
+        if (isCollapsed) {
+          openTab.classList.remove('hidden');
+          openTab.classList.add('flex');
+        } else {
+          openTab.classList.remove('flex');
+          openTab.classList.add('hidden');
+        }
+      }
+
+      if (vodGrid) {
+        if (isCollapsed) {
+          vodGrid.className = vodGrid.className.replace('xl:grid-cols-5', 'xl:grid-cols-6 2xl:grid-cols-7');
+        } else {
+          vodGrid.className = vodGrid.className.replace('xl:grid-cols-6 2xl:grid-cols-7', 'xl:grid-cols-5');
+        }
+      }
+
+      lucide.createIcons();
+    }
+
+    async function toggleAdminModal() {
+      const modal = document.getElementById('adminModal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        await loadAdminUsersList();
+      }
+    }
+
+    async function loadAdminUsersList() {
+      const container = document.getElementById('adminUsersListContainer');
+      container.innerHTML = '<p class="text-xs text-purple-400/60 text-center py-4">Carregando clientes...</p>';
+      try {
+        const { data, error } = await supabaseClient.from('usuarios').select('*').order('nome', { ascending: true });
+        if (error || !data) {
+          container.innerHTML = '<p class="text-xs text-rose-400 text-center py-4">Erro ao carregar do Supabase.</p>';
+          return;
+        }
+
+        if (data.length === 0) {
+          container.innerHTML = '<p class="text-xs text-purple-400/60 text-center py-4">Nenhum cliente cadastrado.</p>';
+          return;
+        }
+
+        container.innerHTML = '';
+        data.forEach(u => {
+          const row = document.createElement('div');
+          row.className = "flex items-center justify-between p-2.5 bg-[#180f29] border border-purple-900/40 rounded-xl";
+          row.innerHTML = `
+            <div class="min-w-0 pr-2">
+              <p class="text-xs font-bold text-white truncate">${u.nome} <span class="text-[10px] text-purple-400 font-mono">(${u.usuario})</span></p>
+              <p class="text-[10px] text-slate-400 truncate">Venc: ${u.vencimento || 'Ilimitado'} • Cargo: ${u.cargo || 'user'}</p>
+            </div>
+            <button onclick="adminDeleteUser('${u.usuario}')" class="bg-rose-950/60 hover:bg-rose-900 text-rose-400 p-1.5 rounded-lg text-xs transition-all shrink-0" title="Excluir">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          `;
+          container.appendChild(row);
+        });
+        lucide.createIcons();
+      } catch (e) {
+        container.innerHTML = '<p class="text-xs text-rose-400 text-center py-4">Erro de conexão com Supabase.</p>';
+      }
+    }
+
+    async function adminCreateUser() {
+      const nome = document.getElementById('adminNewName').value.trim();
+      const usuario = document.getElementById('adminNewUser').value.trim();
+      const senha = document.getElementById('adminNewPass').value.trim();
+      const vencimento = document.getElementById('adminNewDue').value.trim();
+      const lista_m3u = document.getElementById('adminNewM3u').value.trim();
+      const userxc = document.getElementById('adminNewUserXc').value.trim();
+      const senhaxc = document.getElementById('adminNewPassXc').value.trim();
+      const urlxc = document.getElementById('adminNewUrlXc').value.trim();
+      const senhaAdulto = document.getElementById('adminNewAdultPin').value.trim() || senha;
+      const cargo = document.getElementById('adminNewRole').value;
+
+      if (!nome || !usuario || !senha) {
+        alert('Preencha pelo menos Nome, Usuário e Senha.');
+        return;
+      }
+
+      const { error } = await supabaseClient.from('usuarios').insert([{
+        usuario,
+        nome,
+        senha,
+        vencimento,
+        lista_m3u,
+        cargo,
+        userxc,
+        senhaxc,
+        urlxc,
+        'senha18+': senhaAdulto
+      }]);
+
+      if (error) {
+        alert('Erro ao cadastrar: ' + error.message);
+      } else {
+        alert('Cliente cadastrado com sucesso!');
+        document.getElementById('adminNewName').value = '';
+        document.getElementById('adminNewUser').value = '';
+        document.getElementById('adminNewPass').value = '';
+        document.getElementById('adminNewDue').value = '';
+        document.getElementById('adminNewM3u').value = '';
+        document.getElementById('adminNewUserXc').value = '';
+        document.getElementById('adminNewPassXc').value = '';
+        document.getElementById('adminNewUrlXc').value = '';
+        document.getElementById('adminNewAdultPin').value = '';
+        loadAdminUsersList();
+      }
+    }
+
+    async function adminDeleteUser(usuarioId) {
+      if (!confirm(`Deseja realmente excluir o usuário ${usuarioId}?`)) return;
+      const { error } = await supabaseClient.from('usuarios').delete().eq('usuario', usuarioId);
+      if (error) {
+        alert('Erro ao excluir: ' + error.message);
+      } else {
+        loadAdminUsersList();
+      }
     }
 
     async function loadFromXtreamApi(server, user, pass) {
@@ -1094,7 +1405,6 @@
         });
 
         allMediaItems = parsedItems;
-        setSection('live');
       } catch (err) {
         const fallbackM3u = `${cleanServer}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=m3u8`;
         await loadPlaylist(fallbackM3u);
@@ -1113,7 +1423,6 @@
         });
 
         allMediaItems = parsed;
-        setSection('live');
       } catch (err) {
         alert('Erro ao carregar lista M3U.');
       }
@@ -1181,27 +1490,76 @@
       updateLayoutForScreen();
     });
 
-    function setSection(section) {
+    // ====== NOVO GERENCIADOR DE SESSÕES COM A TELA DE INÍCIO ======
+function setSection(section) {
       currentSection = section;
       
-      const items = getSectionItems();
-      const rawCats = [...new Set(items.map(c => c.group))];
-      const clienteCat = rawCats.find(c => c.toLowerCase().includes('área do cliente') || c.toLowerCase().includes('area do cliente'));
-      if (currentSection === 'live' && clienteCat) {
-        activeCategory = clienteCat;
+      const sidebar = document.getElementById('desktopSidebar');
+      const openTab = document.getElementById('sidebarOpenTab');
+      const homeSec = document.getElementById('homeSection');
+      const mobCatSec = document.getElementById('mobileCategoriesSection');
+      const liveChanSec = document.getElementById('liveChannelsSection');
+      const livePlySec = document.getElementById('livePlayerSection');
+      const vodSec = document.getElementById('vodGridSection');
+
+      if (homeSec) homeSec.classList.add('hidden');
+      if (mobCatSec) mobCatSec.classList.add('hidden');
+      if (liveChanSec) liveChanSec.classList.add('hidden');
+      if (livePlySec) livePlySec.classList.add('hidden');
+      if (vodSec) vodSec.classList.add('hidden');
+      
+      // Esconder sidebar na Home SEMPRE forçando display none
+      if (sidebar) {
+        sidebar.style.display = 'none';
+      }
+      if (openTab) openTab.classList.add('hidden');
+
+      const isMobile = window.innerWidth < 1024;
+
+      if (section === 'home') {
+        if (homeSec) homeSec.classList.remove('hidden');
+        renderHomeDashboard();
       } else {
-        activeCategory = 'Todos';
+        if (sidebar) sidebar.style.display = '';
+
+        if (sidebar && !isMobile) {
+          sidebar.classList.remove('hidden');
+          sidebar.classList.add('lg:flex');
+        }
+
+        if (section === 'live') {
+          if (isMobile) {
+            if (mobileStep === 'categories') {
+              if (mobCatSec) mobCatSec.classList.remove('hidden');
+            } else {
+              if (liveChanSec) liveChanSec.classList.remove('hidden');
+            }
+          } else {
+            if (liveChanSec) liveChanSec.classList.remove('hidden');
+            if (livePlySec) livePlySec.classList.remove('hidden');
+          }
+          activeCategory = 'Todos'; 
+        } else {
+          if (isMobile && mobileStep === 'categories') {
+            if (mobCatSec) mobCatSec.classList.remove('hidden');
+          } else {
+            if (vodSec) vodSec.classList.remove('hidden');
+          }
+          activeCategory = 'Todos';
+        }
+
+        visibleCount = ITEMS_PER_PAGE;
+        isSortModeActive = false;
+        updateSortButtonUI();
+
+        const liveVideo = document.getElementById('videoPlayerLive');
+        if (liveVideo) liveVideo.pause();
+
+        renderCategories();
+        filterMedia();
       }
 
-      visibleCount = ITEMS_PER_PAGE;
-      mobileStep = 'categories';
-      isSortModeActive = false;
-      updateSortButtonUI();
-
-      const liveVideo = document.getElementById('videoPlayerLive');
-      if (liveVideo) liveVideo.pause();
-
-      ['live', 'movies', 'series'].forEach(sec => {
+      ['home', 'live', 'movies', 'series'].forEach(sec => {
         const btn = document.getElementById('nav' + sec.charAt(0).toUpperCase() + sec.slice(1));
         if (btn) {
           btn.className = sec === section
@@ -1209,9 +1567,8 @@
             : "relative z-10 flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white";
         }
       });
-      updateNavIndicator();
-
-      ['live', 'movies', 'series'].forEach(sec => {
+      
+      ['home', 'live', 'movies', 'series'].forEach(sec => {
         const bBtn = document.getElementById('bNav' + sec.charAt(0).toUpperCase() + sec.slice(1));
         if (bBtn) {
           const iconDiv = bBtn.querySelector('div');
@@ -1220,23 +1577,29 @@
             iconDiv.className = "p-1 rounded-xl bg-purple-600 text-white shadow-md shadow-purple-900/60";
           } else {
             bBtn.className = "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all";
-            iconDiv.className = "p-1 rounded-xl text-purple-400/60";
+            iconDiv.className = "p-1 rounded-xl text-purple-400/60 bg-transparent shadow-none";
           }
         }
       });
 
-      renderCategories();
-      updateLayoutForScreen();
+      updateNavIndicator();
+      lucide.createIcons();
     }
 
     function updateLayoutForScreen() {
+      if (currentSection === 'home') return; 
+      
       const isMobile = window.innerWidth < 1024;
+      const sidebar = document.getElementById('desktopSidebar');
       const mobCatSec = document.getElementById('mobileCategoriesSection');
       const liveChannelsSec = document.getElementById('liveChannelsSection');
       const livePlayerSec = document.getElementById('livePlayerSection');
       const vodGridSec = document.getElementById('vodGridSection');
 
+      if (sidebar) sidebar.style.display = '';
+
       if (isMobile) {
+        if (sidebar) { sidebar.classList.add('hidden'); sidebar.classList.remove('lg:flex'); }
         if (mobileStep === 'categories') {
           mobCatSec.classList.remove('hidden');
           liveChannelsSec.classList.add('hidden');
@@ -1256,6 +1619,10 @@
         }
       } else {
         mobCatSec.classList.add('hidden');
+        if (sidebar && currentSection !== 'home') {
+            sidebar.classList.remove('hidden'); 
+            sidebar.classList.add('lg:flex'); 
+        }
 
         if (currentSection === 'live') {
           liveChannelsSec.classList.remove('hidden');
@@ -1271,6 +1638,258 @@
       filterMedia();
       lucide.createIcons();
     }
+
+
+    // ====== RENDERIZAÇÃO DA TELA DE INÍCIO ======
+    async function renderHomeDashboard() {
+      loadTmdbHeroBanner();
+      renderHomeResume();
+      renderHomeJogos();
+      renderHomeLancamentos2026();
+    }
+
+let heroCarouselInterval = null;
+
+    async function loadTmdbHeroBanner() {
+      const titleEl = document.getElementById('heroTitle');
+      const overviewEl = document.getElementById('heroOverview');
+      const bgEl = document.getElementById('heroBgImage');
+      const playBtn = document.getElementById('heroPlayBtn');
+      const contentWrap = document.getElementById('heroContentWrap');
+      const posterEl = document.getElementById('heroPosterImage');
+
+      try {
+        const res = await fetch('https://api.themoviedb.org/3/trending/all/week?api_key=3fd2be6f0c70a2a598f084ddfb75487c&language=pt-BR');
+        const data = await res.json();
+        const tmdbResults = data.results || [];
+
+        const normalizeTitle = (str) => {
+          if (!str) return '';
+          return str.toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+            .replace(/\(.*?\)/g, '') 
+            .replace(/\[.*?\]/g, '') 
+            .replace(/\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\b/g, '') 
+            .replace(/[^a-z0-9]/g, ' ') 
+            .replace(/\s+/g, ' ') 
+            .trim();
+        };
+
+        const matchedTrends = [];
+
+        for (const tmdb of tmdbResults) {
+          const tmdbTitle = normalizeTitle(tmdb.title || tmdb.name);
+          if (!tmdbTitle) continue;
+
+          // Procura o item correspondente sem aceitar títulos apenas por "contains".
+          // Isso evita, por exemplo, que "Corrida Contra o Tempo" encontre
+          // "Ben 10: Corrida Contra o Tempo".
+          const candidates = allMediaItems
+            .filter(item => item.type !== 'live')
+            .map(item => {
+              const localTitle = normalizeTitle(item.name);
+              let score = 0;
+
+              // Melhor caso: título-base exatamente igual.
+              if (localTitle === tmdbTitle) {
+                score = 100;
+              }
+              // Permite complementos no final do nome, como qualidade,
+              // idioma ou outras informações já normalizadas.
+              else if (localTitle.startsWith(tmdbTitle + ' ')) {
+                score = 80;
+              }
+
+              return { item, score };
+            })
+            .filter(result => result.score > 0)
+            .sort((a, b) => b.score - a.score);
+
+          const found = candidates.length > 0 ? candidates[0].item : null;
+
+          if (found) {
+            if (!matchedTrends.find(m => m.id === found.id)) {
+              matchedTrends.push({ ...found, tmdb });
+            }
+          }
+          if (matchedTrends.length >= 5) break; 
+        }
+
+        if (matchedTrends.length > 0) {
+          let currentIndex = 0;
+
+          const updateBanner = () => {
+            const currentItem = matchedTrends[currentIndex];
+            
+            bgEl.style.opacity = '0';
+            contentWrap.style.opacity = '0';
+            
+            setTimeout(() => {
+              titleEl.innerText = currentItem.tmdb.title || currentItem.tmdb.name || currentItem.name;
+              overviewEl.innerText = currentItem.tmdb.overview || 'Aproveite este destaque no seu catálogo.';
+              
+              if (currentItem.tmdb.backdrop_path) {
+                bgEl.style.backgroundImage = `url('https://image.tmdb.org/t/p/original${currentItem.tmdb.backdrop_path}')`;
+              } else if (currentItem.logo) {
+                bgEl.style.backgroundImage = `url('${currentItem.logo}')`;
+              }
+
+              if (currentItem.tmdb.poster_path) {
+                posterEl.src = `https://image.tmdb.org/t/p/w500${currentItem.tmdb.poster_path}`;
+                posterEl.classList.remove('hidden');
+              } else if (currentItem.logo) {
+                posterEl.src = currentItem.logo;
+                posterEl.classList.remove('hidden');
+              } else {
+                posterEl.classList.add('hidden');
+              }
+              
+              bgEl.style.opacity = '0.3'; 
+              contentWrap.style.opacity = '1';
+              
+              playBtn.classList.remove('hidden');
+              playBtn.onclick = () => openVodPlayer(currentItem);
+
+              currentIndex = (currentIndex + 1) % matchedTrends.length;
+            }, 500); 
+          };
+
+          updateBanner(); 
+
+          if (heroCarouselInterval) clearInterval(heroCarouselInterval);
+          heroCarouselInterval = setInterval(updateBanner, 7000);
+
+        } else {
+          fallbackBanner();
+        }
+      } catch (e) {
+        fallbackBanner();
+      }
+
+      function fallbackBanner() {
+        const movies = allMediaItems.filter(i => i.type === 'movies');
+        if (movies.length > 0) {
+          const fallbackMovie = movies[Math.floor(Math.random() * Math.min(movies.length, 10))];
+          titleEl.innerText = fallbackMovie.name;
+          overviewEl.innerText = 'Destaque disponível em sua lista.';
+          if(fallbackMovie.logo) {
+             bgEl.style.backgroundImage = `url('${fallbackMovie.logo}')`;
+             posterEl.src = fallbackMovie.logo;
+             posterEl.classList.remove('hidden');
+          }
+          bgEl.style.opacity = '0.25';
+          contentWrap.style.opacity = '1';
+          playBtn.classList.remove('hidden');
+          playBtn.onclick = () => openVodPlayer(fallbackMovie);
+        }
+      }
+    }
+    
+    function renderHomeResume() {
+      const container = document.getElementById('homeResumeContainer');
+      container.innerHTML = '';
+      const resumeItems = allMediaItems.filter(i => {
+        const prog = localStorage.getItem(getResumeKey(i));
+        return prog && parseFloat(prog) > 5;
+      });
+
+      if (resumeItems.length === 0) {
+        container.innerHTML = '<p class="text-xs text-purple-400/60">Nenhuma mídia em andamento no momento.</p>';
+        return;
+      }
+
+      resumeItems.forEach(item => {
+        const card = document.createElement('div');
+        card.className = "min-w-[140px] w-[140px] bg-[#120c1f] rounded-2xl border border-purple-950 overflow-hidden cursor-pointer group shrink-0 transition-all hover:-translate-y-1 shadow-lg";
+        card.onclick = () => openVodPlayer(item);
+        card.innerHTML = `
+          <div class="w-full aspect-[2/3] bg-purple-950/40 relative overflow-hidden flex items-center justify-center">
+            ${item.logo ? `<img src="${item.logo}" class="w-full h-full object-cover group-hover:scale-105 transition-transform" onerror="this.outerHTML='<i data-lucide=\\'film\\' class=\\'w-8 h-8 text-purple-700\\'></i>'"/>` : `<i data-lucide="film" class="w-8 h-8 text-purple-700"></i>`}
+          </div>
+          <div class="p-2.5">
+            <h5 class="text-xs font-bold text-white truncate group-hover:text-purple-300">${item.name}</h5>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+function renderHomeJogos() {
+      const container = document.getElementById('homeJogosContainer');
+      container.innerHTML = '';
+      
+      // FILTRO CORRIGIDO: Busca APENAS pela categoria "Guia de Jogos" ou "Jogos do Dia" (ignorando o que tem 'x' no nome)
+      const jogosItems = allMediaItems.filter(i => 
+        i.type === 'live' && 
+        (i.group.toLowerCase().includes('guia de jogos') || i.group.toLowerCase().includes('jogos do dia'))
+      );
+
+      if (jogosItems.length === 0) {
+        container.innerHTML = '<p class="text-xs text-purple-400/60">Nenhum evento esportivo no momento.</p>';
+        return;
+      }
+
+      jogosItems.slice(0, 15).forEach(item => {
+        const card = document.createElement('div');
+        card.className = "min-w-[220px] w-[220px] bg-[#120c1f] border border-emerald-900/40 hover:border-emerald-500/60 rounded-2xl p-3 cursor-pointer group shrink-0 transition-all shadow-lg flex items-center gap-3";
+        card.onclick = () => playLiveChannel(item);
+        
+        const iconHtml = item.logo 
+            ? `<img src="${item.logo}" class="w-full h-full object-contain rounded-lg" onerror="this.outerHTML='<i data-lucide=\\'trophy\\' class=\\'w-5 h-5 text-emerald-400\\'></i>'"/>` 
+            : `<i data-lucide="trophy" class="w-5 h-5 text-emerald-400"></i>`;
+
+        card.innerHTML = `
+          <div class="w-10 h-10 rounded-xl bg-emerald-950/60 border border-emerald-800/40 flex items-center justify-center shrink-0 p-1">
+            ${iconHtml}
+          </div>
+          <div class="min-w-0">
+            <h5 class="text-xs font-bold text-white truncate group-hover:text-emerald-300" title="${item.name}">${item.name}</h5>
+            <span class="text-[10px] text-emerald-400/70 uppercase font-mono">Ao Vivo</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+     
+
+    function renderHomeLancamentos2026() {
+      const container = document.getElementById('homeLancamentosContainer');
+      container.innerHTML = '';
+      const lancamentos = allMediaItems.filter(i => i.type === 'movies' && (i.group.toLowerCase().includes('lançamentos 2026') || i.group.toLowerCase().includes('2026')));
+
+      if (lancamentos.length === 0) {
+        container.innerHTML = '<p class="text-xs text-purple-400/60">Nenhum lançamento de 2026 encontrado na lista.</p>';
+        return;
+      }
+
+      lancamentos.slice(0, 15).forEach(item => {
+        const card = document.createElement('div');
+        card.className = "min-w-[130px] w-[130px] md:min-w-[150px] md:w-[150px] bg-[#120c1f] rounded-2xl border border-purple-950 overflow-hidden cursor-pointer group shrink-0 transition-all hover:-translate-y-1.5 shadow-lg";
+        card.onclick = () => openMovieModal(item);
+        card.innerHTML = `
+          <div class="w-full aspect-[2/3] bg-purple-950/40 relative overflow-hidden flex items-center justify-center">
+            ${item.logo ? `<img src="${item.logo}" class="w-full h-full object-cover group-hover:scale-105 transition-transform" onerror="this.outerHTML='<i data-lucide=\\'film\\' class=\\'w-8 h-8 text-purple-700\\'></i>'"/>` : `<i data-lucide="film" class="w-8 h-8 text-purple-700"></i>`}
+          </div>
+          <div class="p-2.5">
+            <h5 class="text-xs font-bold text-white truncate group-hover:text-purple-300">${item.name}</h5>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function openClientAreaCategory(catName) {
+      setSection('live');
+      activeCategory = catName;
+      mobileStep = 'items';
+      renderCategories();
+      filterMedia();
+    }
+
+    // ====== FIM DA RENDERIZAÇÃO DA TELA DE INÍCIO ======
 
     function backToMobileCategories() {
       mobileStep = 'categories';
@@ -1299,7 +1918,7 @@
 
     function getStoredCategoryOrder() {
       try {
-        const saved = localStorage.getItem('lux_cat_order_' + currentSection);
+        const saved = localStorage.getItem('lux_cat_order_v3_' + currentSection);
         return saved ? JSON.parse(saved) : [];
       } catch (e) {
         return [];
@@ -1307,7 +1926,7 @@
     }
 
     function saveCategoryOrder(orderArray) {
-      localStorage.setItem('lux_cat_order_' + currentSection, JSON.stringify(orderArray));
+      localStorage.setItem('lux_cat_order_v3_' + currentSection, JSON.stringify(orderArray));
     }
 
     function toggleSortMode() {
@@ -1329,45 +1948,63 @@
       }
     }
 
-    // --- REGRAS DE HIERARQUIA PADRÃO DOS GÊNEROS ---
     function getCategoryTier(cat) {
-      if (isAdultContent(cat)) return 5; // +18 por último
-
+      if (isAdultContent(cat)) return 5;
       const lower = cat.toLowerCase();
 
-      // MODO FILMES: Filmes primeiro > Coletâneas depois > Outros para baixo
-      if (currentSection === 'movies') {
-        if (lower.startsWith('filme') || lower.includes('filme') || lower.includes('movie') || lower.includes('cinema')) return 1;
-        if (lower.includes('colet') || lower.includes('saga') || lower.includes('franquia')) return 2;
-        return 3;
+      if (currentSection === 'movies' || currentSection === 'series') {
+        if (lower.includes('lançament') || lower.includes('lancament') || lower.includes('novidade')) {
+          return 1;
+        }
+        const yearMatch = cat.match(/\b(20[2-9][0-9])\b/);
+        if (yearMatch) {
+          return 2;
+        }
+        if (lower.startsWith('filme') || lower.startsWith('série') || lower.startsWith('serie') || lower.includes('filme') || lower.includes('movie') || lower.includes('cinema')) return 3;
+        if (lower.includes('colet') || lower.includes('saga') || lower.includes('franquia')) return 4;
+        return 5;
       }
 
-      // MODO SÉRIES
-      if (currentSection === 'series') {
-        if (lower.startsWith('série') || lower.startsWith('serie') || lower.includes('série') || lower.includes('serie')) return 1;
-        if (lower.includes('novela') || lower.includes('anime') || lower.includes('desenho') || lower.includes('colet')) return 2;
-        return 3;
+      const hasArrow = cat.includes('»') || cat.includes('⫸') || cat.includes('➤') || cat.includes('➜') || cat.includes('->');
+
+      if (hasArrow) {
+        if (lower.includes('24h') || lower.includes('24 horas')) {
+          return 1.3;
+        }
+        if (lower.includes('ppv')) {
+          return 1.2;
+        }
+        return 1;
       }
 
-      // MODO TV AO VIVO (live)
-      const isForeign = cat.includes('|') || 
-        lower.includes('usa') || lower.includes('latino') || lower.includes('mexico') || 
+      if (cat.includes('|') && lower.includes('canais')) return 2;
+
+      const isForeign = lower.includes('usa') || lower.includes('latino') || lower.includes('mexico') || 
         lower.includes('argentina') || lower.includes('colombia') || lower.includes('equador') || 
         lower.includes('paraguay') || lower.includes('uruguay') || lower.includes('chile') || 
         lower.includes('internacio') || lower.includes('portugal') || lower.includes('espanha') ||
         lower.includes('espana') || lower.includes('uk') || lower.includes('italia') || lower.includes('france');
 
-      if (isForeign) return 4;
-      if (lower.includes('24h') || lower.includes('24 hrs') || lower.includes('24 horas')) return 3; // 24h
-      if (lower.includes('ppv')) return 2; // PPV
+      if (isForeign) return 3;
+      if (lower.includes('ppv')) return 3;
+
+      if (lower.includes('24h') || lower.includes('24 hrs') || lower.includes('24 horas')) return 4;
+      if (lower.includes('rádios') || lower.includes('radios') || lower === 'canais') return 5;
       
-      return 1; // Canais normais
+      return 3;
     }
 
     function sortCategoriesSmart(a, b) {
       const tierA = getCategoryTier(a);
       const tierB = getCategoryTier(b);
       if (tierA !== tierB) return tierA - tierB;
+
+      const yearA = a.match(/\b(20[2-9][0-9])\b/);
+      const yearB = b.match(/\b(20[2-9][0-9])\b/);
+      if (yearA && yearB) {
+        return parseInt(yearB[1], 10) - parseInt(yearA[1], 10);
+      }
+
       return a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' });
     }
 
@@ -1414,7 +2051,6 @@
       const hasCliente = rawCats.find(c => c.toLowerCase().includes('área do cliente') || c.toLowerCase().includes('area do cliente'));
       const hasGuiaJogos = rawCats.find(c => c.toLowerCase().includes('guia de jogos'));
 
-      // Isola categorias dinâmicas
       const allBaseCats = rawCats.filter(c => c !== hasCliente && c !== hasGuiaJogos);
 
       let savedOrder = getStoredCategoryOrder();
@@ -1432,7 +2068,6 @@
         sortedCats.sort(sortCategoriesSmart);
       }
 
-      // Topo fixo ordenado
       const cats = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
       if (hasCliente) cats.push(hasCliente);
       if (hasGuiaJogos) cats.push(hasGuiaJogos);
@@ -1513,7 +2148,7 @@
         let badgeBg = isResumeCat ? 'text-amber-400/70 bg-[#26180c]' : (isFavCat ? 'text-rose-400/70 bg-[#260c14]' : (isClienteCat ? 'text-blue-400/70 bg-[#0c1a26]' : (isGuiaCat ? 'text-emerald-400/70 bg-[#0c2618]' : 'text-purple-400/50 bg-[#170e26]')));
 
         btn.innerHTML = `
-          <span class="truncate max-w-[130px] flex items-center gap-1.5">
+          <span class="truncate max-w-[180px] flex items-center gap-1.5" title="${cat}">
             ${iconHtml}
             ${cat}
           </span>
@@ -1624,21 +2259,16 @@
       filterMedia();
     }
 
-    // --- ALGORITMO DE ORDENAÇÃO EXCLUSIVO PARA TV AO VIVO ---
     function getChannelSortInfo(name) {
       const raw = name || '';
-
-      // 1. Resolução: 4K (1) > FHD (2) > HD (3) > SD (4) > Nenhuma (5)
       let quality = 5;
       if (/\b(4k|uhd)\b/i.test(raw)) quality = 1;
       else if (/\b(fhd|1080p)\b/i.test(raw)) quality = 2;
       else if (/\b(hd|720p)\b/i.test(raw)) quality = 3;
       else if (/\b(sd|480p|576p)\b/i.test(raw)) quality = 4;
 
-      // 2. Codec: Standard (0) antes de H265 (1)
       const isH265 = /\[?h\.?265\]?|\bhevc\b/i.test(raw) ? 1 : 0;
 
-      // 3. Limpeza para isolar Nome Base e Numeração
       let clean = raw
         .replace(/\[\s*(h\.?265|hevc|fhd|hd|sd|4k|uhd)\s*\]/gi, '')
         .replace(/\(\s*(h\.?265|hevc|fhd|hd|sd|4k|uhd)\s*\)/gi, '')
@@ -1646,10 +2276,9 @@
         .replace(/\s+/g, ' ')
         .trim();
 
-      // Detecta número no final (ex: "ESPN 2" -> base: "ESPN", num: 2)
       let numMatch = clean.match(/^(.*?)(?:[\s\-_]+)(\d+)$/);
       let base = clean;
-      let num = 0; // Sem número fica em primeiro (ou equivale a 0)
+      let num = 0;
 
       if (numMatch && numMatch[1].trim().length > 0) {
         base = numMatch[1].trim();
@@ -1665,7 +2294,6 @@
     }
 
     function compareLiveChannels(a, b) {
-      // 0. Conteúdo adulto sempre por último
       if (Boolean(a.isAdult) !== Boolean(b.isAdult)) {
         return a.isAdult ? 1 : -1;
       }
@@ -1675,7 +2303,6 @@
       const groupA = (a.group || '').toLowerCase();
       const groupB = (b.group || '').toLowerCase();
 
-      // PRIORIDADE 1: Globo SP em primeiro no Sudeste
       const isSudeste = groupA.includes('sudeste') || groupB.includes('sudeste') || activeCategory.toLowerCase().includes('sudeste');
       const isGloboA = nameA.includes('globo');
       const isGloboB = nameB.includes('globo');
@@ -1687,7 +2314,6 @@
         }
       }
 
-      // PRIORIDADE 2: Premiere Clubes em primeiro nos canais Premiere
       const isPremiereGroup = groupA.includes('premiere') || groupB.includes('premiere') || activeCategory.toLowerCase().includes('premiere');
       const isPremA = nameA.includes('premiere') || nameA.includes('pfc');
       const isPremB = nameB.includes('premiere') || nameB.includes('pfc');
@@ -1702,21 +2328,17 @@
       const infoA = getChannelSortInfo(a.name);
       const infoB = getChannelSortInfo(b.name);
 
-      // 1. Ordem alfabética do Nome Base
       const cmpBase = infoA.base.localeCompare(infoB.base, 'pt-BR', { sensitivity: 'base' });
       if (cmpBase !== 0) return cmpBase;
 
-      // 2. Ordem Numérica (sem número ou 1 primeiro, depois 2, 3...)
       if (infoA.num !== infoB.num) {
         return infoA.num - infoB.num;
       }
 
-      // 3. Qualidade (4K > FHD > HD > SD)
       if (infoA.quality !== infoB.quality) {
         return infoA.quality - infoB.quality;
       }
 
-      // 4. Codec (Normal antes de [H265])
       if (infoA.isH265 !== infoB.isH265) {
         return infoA.isH265 - infoB.isH265;
       }
@@ -1744,7 +2366,6 @@
         return matchesCat && matchesQuery;
       });
 
-      // Aplica a nova ordenação estritamente na TV Ao Vivo
       if (currentSection === 'live') {
         currentFilteredItems.sort(compareLiveChannels);
       } else {
@@ -1757,17 +2378,12 @@
       document.getElementById('liveCategoryTitle').innerText = activeCategory;
       document.getElementById('vodCategoryTitle').innerText = activeCategory;
       document.getElementById('vodItemCountBadge').innerText = `${currentFilteredItems.length} itens`;
+      
+      const headingEl = document.getElementById('activeCategoryHeading');
+      if (headingEl) headingEl.innerText = activeCategory;
 
       visibleCount = ITEMS_PER_PAGE;
       renderCurrentPage();
-    }
-
-    function toggleMobileSearchModal() {
-      const modal = document.getElementById('mobileSearchModal');
-      modal.classList.toggle('hidden');
-      if (!modal.classList.contains('hidden')) {
-        document.getElementById('mobileSearchInput').focus();
-      }
     }
 
     function renderCurrentPage() {
@@ -1829,6 +2445,7 @@
             img.src = c.logo;
             img.className = "w-full h-full object-contain";
             img.onerror = () => {
+              c.logo = '';
               logoDiv.innerHTML = getLiveFallbackHtml(c.isAdult);
               lucide.createIcons();
             };
@@ -1873,6 +2490,7 @@
             img.className = "w-full h-full object-cover group-hover:scale-105 transition-transform duration-300";
             img.loading = "lazy";
             img.onerror = () => {
+              c.logo = '';
               posterContainer.innerHTML = '';
               posterContainer.appendChild(createFallbackPoster(c, isAdult));
               addPosterOverlays(posterContainer, c, fav);
@@ -2296,7 +2914,6 @@
       appendMoreItems();
     }
 
-    // --- CORREÇÃO APLICADA AQUI: REMOVIDO O PROXY /API/PROXY PARA O .EXE ---
     function openVodPlayer(item) {
       const liveVideo = document.getElementById('videoPlayerLive');
       if (liveVideo) liveVideo.pause();
