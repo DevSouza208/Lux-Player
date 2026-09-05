@@ -797,19 +797,53 @@
       return `<div class="w-9 h-9 rounded-lg bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 shrink-0"><i data-lucide="tv" class="w-4 h-4"></i></div>`;
     }
 
+    function luxProxyUrl(url) {
+      if (!url) return url;
+      try {
+        const parsed = new URL(url, window.location.href);
+
+        // URLs que já passam pela API do próprio LUX Play não devem
+        // ser encapsuladas novamente.
+        if (parsed.origin === window.location.origin && parsed.pathname === '/api/proxy') {
+          return parsed.href;
+        }
+
+        // HTTPS pode ser acessado diretamente. HTTP precisa passar pela
+        // Function da Vercel para evitar Mixed Content no navegador.
+        if (parsed.protocol === 'http:') {
+          return `${window.location.origin}/api/proxy?url=${encodeURIComponent(parsed.href)}`;
+        }
+
+        return parsed.href;
+      } catch (e) {
+        return url;
+      }
+    }
+
     async function smartFetch(url) {
       const encoded = encodeURIComponent(url);
-      const endpoints = [
-        url,
-        `https://api.allorigins.win/raw?url=${encoded}`,
-        `https://corsproxy.io/?${encoded}`,
-        `https://thingproxy.freeboard.io/fetch/${url}`
-      ];
+      const isHttp = /^http:\/\//i.test(url);
+      const localProxy = luxProxyUrl(url);
+
+      const endpoints = isHttp
+        ? [
+            localProxy,
+            url,
+            `https://api.allorigins.win/raw?url=${encoded}`,
+            `https://corsproxy.io/?${encoded}`,
+            `https://thingproxy.freeboard.io/fetch/${url}`
+          ]
+        : [
+            url,
+            `https://api.allorigins.win/raw?url=${encoded}`,
+            `https://corsproxy.io/?${encoded}`,
+            `https://thingproxy.freeboard.io/fetch/${url}`
+          ];
 
       for (const target of endpoints) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
           const res = await fetch(target, { signal: controller.signal });
           clearTimeout(timeoutId);
           if (res.ok) return res;
@@ -2901,13 +2935,15 @@ function renderHomeJogos() {
 
       if (hlsLiveInstance) hlsLiveInstance.destroy();
 
-      if (Hls.isSupported() && channel.url.includes('.m3u8')) {
+      const finalLiveUrl = luxProxyUrl(channel.url);
+
+      if (Hls.isSupported() && finalLiveUrl.includes('.m3u8')) {
         hlsLiveInstance = new Hls({ enableWorker: true });
-        hlsLiveInstance.loadSource(channel.url);
+        hlsLiveInstance.loadSource(finalLiveUrl);
         hlsLiveInstance.attachMedia(video);
         hlsLiveInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
       } else {
-        video.src = channel.url;
+        video.src = finalLiveUrl;
         video.play().catch(() => {});
       }
 
@@ -2925,7 +2961,7 @@ function renderHomeJogos() {
       const video = document.getElementById('videoPlayerVod');
       if (hlsVodInstance) hlsVodInstance.destroy();
 
-      let finalStreamUrl = item.url;
+      let finalStreamUrl = luxProxyUrl(item.url);
 
       const resumeKey = getResumeKey(item);
       const savedTime = item.type !== 'live' ? localStorage.getItem(resumeKey) : null;
