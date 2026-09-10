@@ -1,0 +1,14 @@
+{
+  "name": "Lux Controller",
+  "short_name": "Lux Pad",
+  "description": "Gamepad mobile do Lux Play",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0d0d12",
+  "theme_color": "#0d0d12",
+  "icons": [
+    { "src": "../icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
