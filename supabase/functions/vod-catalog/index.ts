@@ -1,0 +1,60 @@
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
+const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type', 'Cache-Control': 'no-store' };
+const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
+function validUrl(value: unknown, optional = false) {
+  if (optional && value === '') return true;
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try { const u = new URL(value); return ['https:', 'http:'].includes(u.protocol) && !u.username && !u.password; } catch { return false; }
+}
+Deno.serve(async (request: Request) => {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+  if (request.method !== 'POST') return json({ error: 'Método não permitido.' }, 405);
+  try {
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'JSON inválido.' }, 400); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'Dados inválidos.' }, 400);
+    const { action, username, password } = body;
+    if (typeof username !== 'string' || !username || username.length > 256 || typeof password !== 'string' || !password || password.length > 1024) return json({ error: 'Login necessário.' }, 401);
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+    const { data: account, error: authError } = await db.from('usuarios').select('cargo,vencimento').eq('usuario', username).eq('senha', password).maybeSingle();
+    if (authError) throw authError;
+    if (!account) return json({ error: 'Credenciais inválidas.' }, 401);
+    const date = String(account.vencimento || '').split('/');
+    if (date.length === 3 && Date.now() > new Date(`${date[2]}-${date[1].padStart(2, '0')}-${date[0].padStart(2, '0')}T23:59:59-03:00`).getTime()) return json({ error: 'Acesso vencido.' }, 403);
+    if (action === 'list') {
+      const offset = body.offset ?? 0;
+      if (!Number.isSafeInteger(offset) || offset < 0) return json({ error: 'Página inválida.' }, 400);
+      const { data, error } = await db.from('vod_catalog').select('*').order('id').range(offset, offset + 499);
+      if (error) throw error;
+      return json({ vods: data || [] });
+    }
+    if (String(account.cargo).trim().toLowerCase() !== 'admin') return json({ error: 'Apenas administradores podem alterar o catálogo.' }, 403);
+    if (action === 'publish') {
+      if (!Array.isArray(body.vods) || !body.vods.length || body.vods.length > 100) return json({ error: 'Envie de 1 a 100 vídeos.' }, 400);
+      const records = [];
+      for (const vod of body.vods) {
+        if (!vod || typeof vod.title !== 'string' || !vod.title.trim() || vod.title.length > 300 ||
+            !validUrl(vod.url) || !validUrl(vod.poster ?? '', true) ||
+            (vod.category != null && (typeof vod.category !== 'string' || vod.category.length > 200)) ||
+            (vod.objectKey != null && (typeof vod.objectKey !== 'string' || vod.objectKey.length > 1024))) return json({ error: 'Título, categoria ou URL de vídeo inválidos.' }, 400);
+        records.push({ title: vod.title.trim(), url: vod.url, category: vod.category?.trim() || 'VOD R2',
+          poster: vod.poster || '', objectKey: vod.objectKey || '', bucket: 'luxvod' });
+      }
+      const unique = [...new Map(records.map(vod => [vod.url, vod])).values()];
+      const { data, error } = await db.from('vod_catalog').upsert(unique, { onConflict: 'url' }).select('*');
+      if (error) throw error;
+      return json({ vods: data || [] });
+    }
+    if (action === 'remove') {
+      if (typeof body.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.id)) return json({ error: 'Vídeo inválido.' }, 400);
+      const { error } = await db.from('vod_catalog').delete().eq('id', body.id);
+      if (error) throw error;
+      return json({ removed: true });
+    }
+    return json({ error: 'Ação inválida.' }, 400);
+  } catch {
+    return json({ error: 'Não foi possível acessar o catálogo compartilhado. Tente novamente.' }, 500);
+  }
+});

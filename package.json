@@ -1,0 +1,74 @@
+{
+  "name": "lux-play",
+  "productName": "Lux Play",
+  "version": "1.4.0",
+  "description": "Lux Play - filmes, séries, TV, jogos retrô e leitura.",
+  "main": "electron/main.js",
+  "author": "DevSouza208",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "dist:store": "electron-builder --config electron-builder.store.cjs --publish never",
+    "publish": "electron-builder --win --publish always",
+    "build:reader": "node scripts/build-reader.cjs",
+    "prestart": "npm run build:reader",
+    "predist": "npm run build:reader",
+    "predist:store": "npm run build:reader",
+    "prepublish": "npm run build:reader",
+    "test": "node --test tests/*.test.cjs",
+    "test:reader": "node scripts/test-reader-electron.cjs"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "0.28.2",
+    "fake-indexeddb": "6.2.5"
+  },
+  "dependencies": {
+    "dompurify": "3.4.15",
+    "electron-updater": "^6.8.9",
+    "epubjs": "0.3.93",
+    "jszip": "3.10.2",
+    "marked": "18.0.12",
+    "node-unrar-js": "2.0.2",
+    "pdfjs-dist": "6.3.289"
+  },
+  "build": {
+    "appId": "com.devsouza208.luxplay",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "index.html",
+      "icon.png",
+      "lux.ico",
+      "css/**/*",
+      "js/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "lux.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DevSouza208",
+        "repo": "lux-play",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "overrides": {
+    "epubjs": {
+      "@xmldom/xmldom": "^0.8.11"
+    }
+  }
+}

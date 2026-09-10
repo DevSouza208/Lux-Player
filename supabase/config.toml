@@ -1,0 +1,26 @@
+project_id = "fvcvshppvxihhttwyyvr"
+
+[functions.r2-upload-url]
+# A função valida o login legado e cargo=admin no servidor.
+verify_jwt = false
+
+[functions.vod-catalog]
+verify_jwt = false
+
+[functions.game-save-sync]
+verify_jwt = false
+
+[functions.profiles]
+verify_jwt = false
+
+[functions.progress-sync]
+verify_jwt = false
+
+[functions.reading-sync]
+verify_jwt = false
+
+[functions.reading-catalog]
+verify_jwt = false
+
+[functions.game-metadata]
+verify_jwt = false
