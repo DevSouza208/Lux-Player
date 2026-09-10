@@ -37,21 +37,50 @@ function openGameEmulator(gameItem) {
   document.getElementById('emulatorIntroConsole').textContent = gameItem.consoleLabel || String(gameItem.console || 'Console').toUpperCase();
   const header=document.querySelector('#emulatorModal .border-b');
   if(header&&!document.getElementById('emulatorFastForward')){
-    const button=document.createElement('button');button.id='emulatorFastForward';button.type='button';button.className='text-[10px] text-purple-300 bg-purple-950/70 border border-purple-800/60 rounded-lg px-2 py-1';button.textContent='Fast-forward';button.onclick=toggleEmulatorFastForward;header.querySelector('.flex.items-center.gap-2:last-child')?.prepend(button);
+    const button=document.createElement('button');button.id='emulatorFastForward';button.type='button';button.className='text-[10px] text-purple-300 bg-purple-950/70 border border-purple-800/60 rounded-lg px-2 py-1';button.textContent='Velocidade normal';button.onclick=toggleEmulatorFastForward;header.querySelector('.flex.items-center.gap-2:last-child')?.prepend(button);
   }
   lucide.createIcons();
 }
 
-function toggleEmulatorFastForward(){
-  emulatorFastForward=!emulatorFastForward;
-  const emulator=window.EJS_emulator;
+function updateEmulatorSpeedButton(){
+  const button=document.getElementById('emulatorFastForward');
+  if(!button)return;
+  button.classList.toggle('bg-purple-600',emulatorFastForward);
+  button.textContent=emulatorFastForward?'Velocidade 2x':'Velocidade normal';
+}
+
+function resetEmulatorSpeed(){
+  const manager=window.EJS_emulator?.gameManager;
   try{
-    const manager=emulator?.gameManager;
-    if(manager&&typeof manager.setFastForwardRatio==='function'&&typeof manager.toggleFastForward==='function'){
-      manager.setFastForwardRatio(3);manager.toggleFastForward(emulatorFastForward?1:0);
-    }else console.warn('API de fast-forward do EmulatorJS ainda não está pronta.');
-  }catch(error){console.warn('Velocidade do emulador indisponível:',error);}
-  const button=document.getElementById('emulatorFastForward');if(button){button.classList.toggle('bg-purple-600',emulatorFastForward);button.textContent=emulatorFastForward?'Fast-forward ligado':'Fast-forward';}
+    if(manager&&typeof manager.toggleFastForward==='function') manager.toggleFastForward(0);
+    if(manager&&typeof manager.setFastForwardRatio==='function') manager.setFastForwardRatio(1);
+  }catch(error){console.warn('Não foi possível restaurar a velocidade normal:',error);}
+  emulatorFastForward=false;
+  updateEmulatorSpeedButton();
+}
+
+function toggleEmulatorFastForward(){
+  const manager=window.EJS_emulator?.gameManager;
+  if(!manager||typeof manager.setFastForwardRatio!=='function'||typeof manager.toggleFastForward!=='function'){
+    console.warn('API de fast-forward do EmulatorJS ainda não está pronta.');
+    return;
+  }
+  try{
+    if(emulatorFastForward){
+      manager.toggleFastForward(0);
+      manager.setFastForwardRatio(1);
+      emulatorFastForward=false;
+    }else{
+      manager.setFastForwardRatio(2);
+      manager.toggleFastForward(1);
+      emulatorFastForward=true;
+    }
+  }catch(error){
+    emulatorFastForward=false;
+    console.warn('Velocidade do emulador indisponível:',error);
+    try{manager.toggleFastForward(0);manager.setFastForwardRatio(1);}catch(_){}
+  }
+  updateEmulatorSpeedButton();
 }
 
 function startEmulatorSession() {
@@ -66,7 +95,7 @@ function startEmulatorSession() {
   window.EJS_gameName = getGameSaveKey(gameItem);
   window.EJS_defaultOptions = { 'save-state-location': 'browser' };
   window.EJS_startOnLoaded = true;
-  window.EJS_onGameStart = () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); loadRequestedGameSlot(); };
+  window.EJS_onGameStart = () => { resetEmulatorSpeed(); document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); loadRequestedGameSlot(); };
   const script = document.createElement('script');
   script.id = 'ejs-script';
   script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
@@ -82,6 +111,7 @@ function getEmulatorCore(consoleType) {
 }
 
 function closeGameEmulator() {
+  resetEmulatorSpeed();
   pauseGamePlayTimer();if(gamePlayTimer?.interval)clearInterval(gamePlayTimer.interval);gamePlayTimer=null;
   finishGameSaveChoice(null);
   try { window.EJS_emulator?.pause?.(); window.EJS_emulator?.callEvent?.('exit'); if (window.EJS_emulator && typeof window.EJS_emulator.destroy === 'function') window.EJS_emulator.destroy(); } catch (error) { console.warn('Não foi possível encerrar o emulador:', error); }
@@ -215,7 +245,6 @@ async function loadRequestedGameSlot() {
         local = cloud;
         await writeLocalGameSave(game, slot, cloud.state, cloud.updatedAt, false, user);
       } else {
-        // The user explicitly chose this version; synchronize it as a new save.
         local = { ...local, updatedAt: Date.now() };
         await writeLocalGameSave(game, slot, local.state, local.updatedAt, true, user, cloud.updatedAt);
         const result = await uploadLocalGameSave(await readLocalGameSave(game, slot, user), user).catch(() => null);
