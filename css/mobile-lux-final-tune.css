@@ -1,0 +1,69 @@
+/* Final mobile control polish. Desktop is untouched. */
+@media (max-width: 767px) {
+  /* Game Boy / Game Boy Color: stack A above B. Other consoles keep their own layouts. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gb .lux-console-face-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gbc .lux-console-face-2 {
+    width: var(--lux-face-key);
+    height: calc((var(--lux-face-key) * 2) + 12px);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gb .lux-console-face-2 .lux-face-button-1,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gbc .lux-console-face-2 .lux-face-button-1 {
+    left: 0;
+    right: auto;
+    top: auto;
+    bottom: 0;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gb .lux-console-face-2 .lux-face-button-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gbc .lux-console-face-2 .lux-face-button-2 {
+    left: 0;
+    right: auto;
+    top: 0;
+    bottom: auto;
+  }
+}
+
+@media (max-width: 767px) and (orientation: landscape) {
+  /* Portrait is already approved. Only landscape gets this ergonomic pass. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    --lux-shoulder-width: 92px;
+    --lux-shoulder-height: 68px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-shoulder {
+    width: var(--lux-shoulder-width);
+    height: var(--lux-shoulder-height);
+    border-radius: 10px;
+    font-size: 18px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-system-button {
+    width: 84px;
+    min-width: 84px;
+    height: 62px;
+    padding: 0 7px;
+    border-radius: 10px;
+    font-size: 9px;
+    letter-spacing: .07em;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-2 .lux-shoulder-1,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-3 .lux-shoulder-1 {
+    left: max(6px, env(safe-area-inset-left, 0px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-2 .lux-shoulder-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-3 .lux-shoulder-3 {
+    right: max(6px, env(safe-area-inset-right, 0px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-1 {
+    left: max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-1 .lux-system-button-1 {
+    right: max(8px, env(safe-area-inset-right, 0px));
+  }
+}
