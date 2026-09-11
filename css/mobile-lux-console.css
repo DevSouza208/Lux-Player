@@ -1,4 +1,4 @@
-/* Stage 3 — isolated Lux Console layers. Desktop is untouched. */
+/* Lux Console mobile layer system. Desktop is untouched. */
 @media (max-width: 767px) {
   body.lux-console-open {
     overflow: hidden;
@@ -13,7 +13,7 @@
     --lux-visible-screen-left: 0px;
     --lux-visible-screen-top: 0px;
     --lux-visible-screen-width: 100vw;
-    --lux-visible-screen-height: 66.666vw;
+    --lux-visible-screen-height: 75vw;
 
     position: fixed !important;
     inset: 0 !important;
@@ -38,10 +38,10 @@
     z-index: 0;
     background: #000;
     pointer-events: none;
+    transition: background .2s ease;
   }
 
-  /* Layer 1 host: only the original emulator frame receives these rules.
-     Extra overlay divs are never treated as the player frame. */
+  /* Layer 1 host: only the original emulator frame receives these rules. */
   #emulatorModal.lux-console-mobile-stage1 > .lux-console-player-frame {
     position: fixed !important;
     inset: 0 !important;
@@ -63,8 +63,7 @@
     display: none !important;
   }
 
-  /* The game screen is anchored independently from every other layer.
-     Future layout tuning only needs to change the four --lux-screen-* variables. */
+  /* The game screen is anchored independently from every other layer. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-screen-layer {
     position: fixed !important;
     left: var(--lux-screen-left) !important;
@@ -82,10 +81,10 @@
     background: #000 !important;
     overflow: hidden !important;
     z-index: 10 !important;
+    transition: left .2s ease, top .2s ease, width .2s ease, height .2s ease, border-radius .2s ease;
   }
 
-  /* Layer 2: bezel/decorations. It follows the visible game area but never
-     participates in layout and never intercepts touch. */
+  /* Layer 2: visual frame / branding. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-bezel-layer {
     position: fixed;
     inset: 0;
@@ -101,49 +100,154 @@
     height: var(--lux-visible-screen-height);
     pointer-events: none;
     box-sizing: border-box;
+    transition: left .2s ease, top .2s ease, width .2s ease, height .2s ease;
   }
 
-  /* GBA portrait shell. The actual EmulatorJS screen remains untouched underneath.
-     Only the black area below the 3:2 game picture receives the Lux body. */
-  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::before {
-    content: '';
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) - 1px);
-    bottom: 0;
-    background:
-      radial-gradient(circle at 50% 16%, rgba(168,85,247,.18), transparent 34%),
-      linear-gradient(180deg, rgba(43,18,73,.98) 0%, rgba(28,10,49,.995) 44%, rgba(12,5,23,1) 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(216,180,254,.22),
-      inset 0 18px 36px rgba(147,51,234,.08);
-  }
-
-  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-window {
-    border-bottom: 2px solid rgba(192,132,252,.58);
-    box-shadow:
-      inset 0 -10px 18px rgba(15,5,28,.18),
-      0 8px 28px rgba(76,29,149,.24),
-      0 0 22px rgba(168,85,247,.12);
-  }
-
-  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::after {
-    content: 'LUX CONSOLE';
+  /* Header exists only in Moldura mode. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-header-brand {
     position: fixed;
     left: 50%;
-    top: calc(var(--lux-visible-screen-height) + 77px);
+    top: calc(7px + env(safe-area-inset-top, 0px));
     transform: translateX(-50%);
-    color: rgba(216,180,254,.58);
-    font-size: 8px;
-    font-weight: 800;
-    letter-spacing: .28em;
-    text-shadow: 0 0 12px rgba(168,85,247,.34);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    color: #f8f1ff;
     white-space: nowrap;
+    text-shadow: 0 0 14px rgba(168,85,247,.30);
   }
 
-  /* Layer 3: game controls. The layer itself is transparent/non-interactive;
-     individual controls opt back into pointer events in mobile-lux-controls.css. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-header-brand img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 8px rgba(168,85,247,.38));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-header-wordmark {
+    display: inline-flex;
+    align-items: baseline;
+    font-size: 15px;
+    line-height: 1;
+    letter-spacing: .04em;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-header-wordmark strong {
+    font-style: normal;
+    font-weight: 900;
+    color: #fff;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-header-wordmark em {
+    font-style: normal;
+    font-weight: 800;
+    color: #c084fc;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-header-brand small {
+    position: absolute;
+    left: 31px;
+    top: 18px;
+    font-size: 5px;
+    font-weight: 800;
+    letter-spacing: .28em;
+    color: rgba(216,180,254,.55);
+  }
+
+  /* =========================
+     MOLDURA MODE
+     ========================= */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    /* Default portrait aspect is 4:3. Console-specific rules below override it. */
+    --lux-screen-left: 4vw;
+    --lux-screen-top: calc(52px + env(safe-area-inset-top, 0px));
+    --lux-screen-width: 92vw;
+    --lux-screen-height: 69vw;
+    --lux-visible-screen-left: var(--lux-screen-left);
+    --lux-visible-screen-top: var(--lux-screen-top);
+    --lux-visible-screen-width: var(--lux-screen-width);
+    --lux-visible-screen-height: var(--lux-screen-height);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gba {
+    --lux-screen-left: 3vw;
+    --lux-screen-width: 94vw;
+    --lux-screen-height: 62.667vw;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gb,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gbc {
+    --lux-screen-left: 9vw;
+    --lux-screen-width: 82vw;
+    --lux-screen-height: 73.8vw;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-background-layer {
+    background:
+      radial-gradient(circle at 50% 18%, rgba(168,85,247,.19), transparent 31%),
+      radial-gradient(circle at 8% 62%, rgba(126,34,206,.10), transparent 34%),
+      linear-gradient(180deg, #170826 0%, #10051d 48%, #08030f 100%);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-screen-layer {
+    border-radius: 16px !important;
+    box-shadow:
+      0 0 0 1px rgba(216,180,254,.22) !important,
+      0 10px 34px rgba(0,0,0,.30) !important,
+      0 0 30px rgba(126,34,206,.13) !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-bezel-window {
+    border: 1px solid rgba(216,180,254,.36);
+    border-radius: 16px;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,.03),
+      0 0 22px rgba(168,85,247,.14);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand {
+    display: flex;
+  }
+
+  /* =========================
+     FULLSCREEN / CLEAN MODE
+     ========================= */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen {
+    --lux-screen-left: 0px;
+    --lux-screen-top: 0px;
+    --lux-screen-width: 100vw;
+    --lux-screen-height: 100dvh;
+    --lux-visible-screen-left: 0px;
+    --lux-visible-screen-top: 0px;
+    --lux-visible-screen-width: 100vw;
+    --lux-visible-screen-height: 75vw;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen.lux-console-system-gba {
+    --lux-visible-screen-height: 66.666vw;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen.lux-console-system-gb,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen.lux-console-system-gbc {
+    --lux-visible-screen-height: 90vw;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen .lux-console-background-layer {
+    background: #000;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen .lux-console-bezel-window {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen .lux-console-header-brand {
+    display: none;
+  }
+
+  /* Layer 3: controls. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-controls-layer {
     position: fixed;
     inset: 0;
@@ -152,16 +256,102 @@
     pointer-events: none;
   }
 
-  /* Layer 4: save/load/settings/exit context UI. Empty for now. */
+  /* Layer 4: save/load/settings/exit context UI. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-context-layer {
     position: fixed;
     inset: 0;
     z-index: 40;
     background: transparent;
     pointer-events: none;
+    transition: background .16s ease;
   }
 
-  /* Layer 5: alerts/toasts. Empty for now. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-context-layer.lux-context-open {
+    pointer-events: auto;
+    background: rgba(7,3,13,.48);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-sheet {
+    position: absolute;
+    left: 50%;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    width: min(88vw, 330px);
+    padding: 12px;
+    border: 1px solid rgba(216,180,254,.30);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(35,13,58,.96), rgba(14,6,25,.98));
+    box-shadow: 0 18px 48px rgba(0,0,0,.42), 0 0 28px rgba(126,34,206,.14);
+    color: #f7efff;
+    pointer-events: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-sheet-title {
+    font-size: 12px;
+    font-weight: 850;
+    letter-spacing: .02em;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-sheet-close {
+    appearance: none;
+    border: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.06);
+    color: #e9d5ff;
+    font-size: 16px;
+    pointer-events: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-option {
+    appearance: none;
+    min-height: 58px;
+    padding: 8px 10px;
+    border: 1px solid rgba(216,180,254,.20);
+    border-radius: 14px;
+    background: rgba(255,255,255,.035);
+    color: #e9d5ff;
+    text-align: left;
+    pointer-events: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-option strong {
+    display: block;
+    font-size: 11px;
+    margin-bottom: 3px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-option span {
+    display: block;
+    font-size: 8px;
+    line-height: 1.25;
+    color: rgba(233,213,255,.62);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-option.is-active {
+    border-color: rgba(192,132,252,.72);
+    background: linear-gradient(180deg, rgba(126,34,206,.26), rgba(76,29,149,.18));
+    box-shadow: inset 0 0 0 1px rgba(216,180,254,.08), 0 0 16px rgba(126,34,206,.14);
+  }
+
+  /* Layer 5: alerts/toasts. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-alerts-layer {
     position: fixed;
     inset: 0;
@@ -207,29 +397,76 @@
   }
 
   @media (orientation: landscape) {
-    #emulatorModal.lux-console-mobile-stage1 {
-      --lux-visible-screen-width: min(100vw, 150dvh);
-      --lux-visible-screen-height: min(100dvh, 66.666vw);
+    /* Moldura intentionally shrinks the game to create real control gutters and
+       a top branding lane instead of drawing controls over gameplay. */
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+      --lux-screen-top: calc(34px + env(safe-area-inset-top, 0px));
+      --lux-screen-width: min(64vw, calc(133.333dvh - 96px));
+      --lux-screen-height: min(48vw, calc(100dvh - 72px));
+      --lux-screen-left: calc((100vw - var(--lux-screen-width)) / 2);
+      --lux-visible-screen-left: var(--lux-screen-left);
+      --lux-visible-screen-top: var(--lux-screen-top);
+      --lux-visible-screen-width: var(--lux-screen-width);
+      --lux-visible-screen-height: var(--lux-screen-height);
+    }
+
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gba {
+      --lux-screen-width: min(68vw, calc(150dvh - 108px));
+      --lux-screen-height: min(45.333vw, calc(100dvh - 72px));
+      --lux-screen-left: calc((100vw - var(--lux-screen-width)) / 2);
+    }
+
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gb,
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gbc {
+      --lux-screen-width: min(54vw, calc(111.111dvh - 80px));
+      --lux-screen-height: min(48.6vw, calc(100dvh - 72px));
+      --lux-screen-left: calc((100vw - var(--lux-screen-width)) / 2);
+    }
+
+    /* Fullscreen keeps the old clean game-first geometry. */
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen {
+      --lux-visible-screen-width: min(100vw, 133.333dvh);
+      --lux-visible-screen-height: min(75vw, 100dvh);
       --lux-visible-screen-left: calc((100vw - var(--lux-visible-screen-width)) / 2);
       --lux-visible-screen-top: 0px;
     }
 
-    /* The portrait body is replaced by a transparent frame in landscape. */
-    #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::before {
-      top: 0;
-      bottom: 0;
-      background: transparent;
-      box-shadow: none;
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen.lux-console-system-gba {
+      --lux-visible-screen-width: min(100vw, 150dvh);
+      --lux-visible-screen-height: min(66.666vw, 100dvh);
+      --lux-visible-screen-left: calc((100vw - var(--lux-visible-screen-width)) / 2);
     }
 
-    #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-window {
-      border: 1px solid rgba(192,132,252,.46);
-      border-radius: 16px;
-      box-shadow: 0 0 24px rgba(168,85,247,.18);
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen.lux-console-system-gb,
+    #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen.lux-console-system-gbc {
+      --lux-visible-screen-width: min(100vw, 111.111dvh);
+      --lux-visible-screen-height: min(90vw, 100dvh);
+      --lux-visible-screen-left: calc((100vw - var(--lux-visible-screen-width)) / 2);
     }
 
-    #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::after {
-      display: none;
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-header-brand {
+      top: calc(4px + env(safe-area-inset-top, 0px));
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-header-brand img {
+      width: 20px;
+      height: 20px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-header-wordmark {
+      font-size: 12px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-header-brand small {
+      left: 26px;
+      top: 15px;
+      font-size: 4px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-mode-sheet {
+      bottom: calc(42px + env(safe-area-inset-bottom, 0px));
+      width: min(48vw, 320px);
+      padding: 9px;
     }
   }
 
