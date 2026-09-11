@@ -1,4 +1,4 @@
-/* Stage 2 — mobile emulator edge-to-edge with native buttons hidden. Desktop is untouched. */
+/* Stage 2b — mobile emulator edge-to-edge with native gamepad/chrome hidden. Desktop is untouched. */
 @media (max-width: 767px) {
   body.lux-console-open {
     overflow: hidden;
@@ -51,12 +51,40 @@
     background: #000 !important;
   }
 
-  /* Stage 2: hide ONLY native EmulatorJS controls/chrome buttons. The renderer,
-     canvas/video and all WebGL wrappers remain untouched. The Lux JOGAR button is
-     outside #emulatorContainer, so it remains visible before the ROM starts. */
-  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer button,
-  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_menu_button {
+  /* EmulatorJS puts its whole touch controller inside .ejs-vgamepad-active.
+     Hide that container and the native menu bar instead of hiding every button.
+     This deliberately leaves the Safari "resume emulator" button available. */
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs-vgamepad-active,
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_menu_bar,
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_virtualGamepad_open {
     display: none !important;
+    pointer-events: none !important;
+  }
+
+  /* iOS/Safari may require one extra user gesture before audio/emulation can
+     resume. Keep that required action, but present it as a single Lux play action. */
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .lux-ejs-resume-popup h4 {
+    display: none !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .lux-ejs-resume-popup .ejs_menu_button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 190px !important;
+    min-height: 58px !important;
+    padding: 0 26px !important;
+    border: 1px solid rgba(216,180,254,.7) !important;
+    border-radius: 20px !important;
+    background: linear-gradient(135deg,#9333ea,#7c3aed) !important;
+    color: #fff !important;
+    font-size: 15px !important;
+    font-weight: 900 !important;
+    letter-spacing: .04em !important;
+    box-shadow: 0 14px 45px rgba(76,29,149,.42) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
   }
 
   /* Do not size, move, fade or hide #emulatorContainer, canvas, video or any
