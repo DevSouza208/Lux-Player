@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Lux Controller</title>
+  <desc id="desc">Ícone roxo do Lux Controller com gamepad estilizado.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f03cff"/>
+      <stop offset="0.42" stop-color="#9718ff"/>
+      <stop offset="1" stop-color="#24103f"/>
+    </linearGradient>
+    <linearGradient id="pad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#44205f"/>
+      <stop offset="1" stop-color="#12091e"/>
+    </linearGradient>
+    <filter id="glow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="16" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="#100718"/>
+  <rect x="70" y="70" width="884" height="884" rx="200" fill="url(#bg)"/>
+  <rect x="72" y="72" width="880" height="880" rx="198" fill="none" stroke="#d75cff" stroke-width="6" opacity=".75"/>
+  <path d="M316 352c-68 0-116 35-147 107-24 55-41 117-55 191-11 58-14 109-8 153 8 57 38 90 84 97 48 7 84-18 117-79l52-95c13-24 32-35 59-35h188c27 0 46 11 59 35l52 95c33 61 69 86 117 79 46-7 76-40 84-97 6-44 3-95-8-153-14-74-31-136-55-191-31-72-79-107-147-107h-78l-31 38c-13 16-29 24-49 24H494c-20 0-36-8-49-24l-31-38h-98z" fill="url(#pad)" stroke="#ffb8ff" stroke-width="18" filter="url(#glow)"/>
+  <g fill="#ffb2ff" filter="url(#glow)">
+    <rect x="286" y="487" width="76" height="190" rx="24"/>
+    <rect x="229" y="544" width="190" height="76" rx="24"/>
+    <circle cx="713" cy="507" r="38"/>
+    <circle cx="650" cy="570" r="38"/>
+    <circle cx="776" cy="570" r="38"/>
+    <circle cx="713" cy="633" r="38"/>
+  </g>
+</svg>
