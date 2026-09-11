@@ -96,7 +96,7 @@ function animateDashboardEntry() {
     ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260911-landscape1'],
     ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260911-ergonomics2'],
     ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260911-context1'],
-    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260911-final1'],
+    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260911-final2'],
     ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260911-settings1']
   ];
   styles.forEach(([name, href]) => {
