@@ -94,7 +94,8 @@ function animateDashboardEntry() {
     ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260911-viewmodes1'],
     ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260911-viewmodes1'],
     ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260911-landscape1'],
-    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260911-ergonomics1']
+    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260911-ergonomics2'],
+    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260911-context1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
@@ -110,7 +111,7 @@ function animateDashboardEntry() {
     const scripts = [
       ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-nativeemu1'],
       ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-viewmodes1'],
-      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260911-viewmodes1']
+      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260911-actions2']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;
