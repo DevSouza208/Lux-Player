@@ -31,7 +31,7 @@ function animateDashboardEntry() {
 (() => {
   if (document.querySelector('script[data-lux-gamepad-host]')) return;
   const script = document.createElement('script');
-  script.src = 'js/lux-gamepad-host.js?v=20260910-layout-pwa';
+  script.src = 'js/lux-gamepad-host.js?v=20260910-webrtc-pwa';
   script.dataset.luxGamepadHost = '1';
   script.async = true;
   document.head.appendChild(script);
