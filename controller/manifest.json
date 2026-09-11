@@ -1,7 +1,7 @@
 {
   "name": "Lux Controller",
-  "short_name": "Lux Pad",
-  "description": "Gamepad mobile do Lux Play",
+  "short_name": "Lux Control",
+  "description": "Controle remoto e gamepad mobile do Lux Play",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
