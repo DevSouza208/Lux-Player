@@ -106,7 +106,7 @@ function animateDashboardEntry() {
   const loadMobileScripts = () => {
     const scripts = [
       ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-nativeemu1'],
-      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-stage2b']
+      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-stage2c']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;
