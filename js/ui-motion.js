@@ -89,23 +89,34 @@ function animateDashboardEntry() {
 (() => {
   if (!window.matchMedia('(max-width: 767px)').matches) return;
 
-  if (!document.querySelector('link[data-lux-mobile-ux]')) {
+  const styles = [
+    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-4'],
+    ['lux-mobile-emulator-polish', 'css/mobile-emulator-polish.css?v=20260911-1']
+  ];
+  styles.forEach(([name, href]) => {
+    if (document.querySelector(`link[data-${name}]`)) return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'css/mobile-ux.css?v=20260911-3';
+    link.href = href;
     link.media = '(max-width: 767px)';
-    link.dataset.luxMobileUx = '1';
+    link.setAttribute(`data-${name}`, '1');
     document.head.appendChild(link);
-  }
+  });
 
-  const loadMobileUx = () => {
-    if (document.querySelector('script[data-lux-mobile-ux]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/mobile-ux.js?v=20260911-3';
-    script.dataset.luxMobileUx = '1';
-    document.body.appendChild(script);
+  const loadMobileScripts = () => {
+    const scripts = [
+      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-4'],
+      ['lux-mobile-emulator-polish', 'js/mobile-emulator-polish.js?v=20260911-1']
+    ];
+    scripts.forEach(([name, src]) => {
+      if (document.querySelector(`script[data-${name}]`)) return;
+      const script = document.createElement('script');
+      script.src = src;
+      script.setAttribute(`data-${name}`, '1');
+      document.body.appendChild(script);
+    });
   };
 
-  if (document.readyState === 'complete') loadMobileUx();
-  else window.addEventListener('load', loadMobileUx, { once: true });
+  if (document.readyState === 'complete') loadMobileScripts();
+  else window.addEventListener('load', loadMobileScripts, { once: true });
 })();
