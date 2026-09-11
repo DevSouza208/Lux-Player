@@ -91,7 +91,7 @@ function animateDashboardEntry() {
 
   const styles = [
     ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-4'],
-    ['lux-mobile-emulator-polish', 'css/mobile-emulator-polish.css?v=20260911-5']
+    ['lux-mobile-emulator-polish', 'css/mobile-emulator-polish.css?v=20260911-6']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
