@@ -26,3 +26,13 @@ function animateDashboardEntry() {
     { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' }
   );
 }
+
+// Lux Gamepad é carregado como módulo isolado para não acoplar sua lógica ao script principal.
+(() => {
+  if (document.querySelector('script[data-lux-gamepad-host]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/lux-gamepad-host.js';
+  script.dataset.luxGamepadHost = '1';
+  script.async = true;
+  document.head.appendChild(script);
+})();
