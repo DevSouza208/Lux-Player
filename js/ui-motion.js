@@ -98,7 +98,8 @@ function animateDashboardEntry() {
     ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260911-context1'],
     ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260911-final2'],
     ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260911-settings1'],
-    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260911-landscapefinal1']
+    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260911-landscapefinal1'],
+    ['lux-mobile-158-polish', 'css/mobile-lux-158-polish.css?v=20260911-158polish1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
