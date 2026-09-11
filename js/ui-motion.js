@@ -42,8 +42,8 @@ function animateDashboardEntry() {
 // Controles móveis ficam isolados do script principal.
 (() => {
   const modules = [
-    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260910-v150'],
-    ['lux-remote-host', 'js/lux-remote-host.js?v=20260910-v150']
+    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260910-v151'],
+    ['lux-remote-host', 'js/lux-remote-host.js?v=20260910-v151']
   ];
   modules.forEach(([name, src]) => {
     if (document.querySelector(`script[data-${name}]`)) return;
