@@ -1,0 +1,144 @@
+/* Final ergonomics pass for Lux Console mobile.
+   Loaded after the base controls and landscape tune so this file can stay small
+   and only adjust the tested Moldura layout. The emulator renderer is untouched. */
+
+/* Portrait: move the main thumb controls a little lower for a more natural grip. */
+@media (max-width: 767px) and (orientation: portrait) {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    --lux-dpad-top: max(
+      calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) + 130px),
+      calc(53dvh + 24px)
+    );
+    --lux-face-top: max(
+      calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) + 134px),
+      calc(53.5dvh + 24px)
+    );
+    --lux-system-bottom: 64px;
+  }
+}
+
+/* Landscape: larger gameplay targets, stronger edge reach, same screen size. */
+@media (max-width: 767px) and (orientation: landscape) {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    /* D-pad grows ~13% without changing its vertical center. */
+    --lux-dpad-size: 124px;
+    --lux-dpad-key: 44px;
+    --lux-dpad-offset: 40px;
+
+    /* Face controls grow ~11% without moving the cluster. */
+    --lux-face-size: 124px;
+    --lux-face-key: 54px;
+
+    /* Shoulders get a larger, squarer touch target. */
+    --lux-shoulder-width: 90px;
+    --lux-shoulder-height: 46px;
+    --lux-shoulder-top: calc(9px + env(safe-area-inset-top, 0px));
+  }
+
+  /* Preserve the D-pad / face cluster positions; only their hit areas grow. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-4 {
+    width: 134px;
+    height: 134px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-4 .lux-face-button-1 {
+    left: 0;
+    top: 40px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-4 .lux-face-button-2 {
+    left: 40px;
+    top: 0;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-4 .lux-face-button-3 {
+    left: 40px;
+    bottom: 0;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-4 .lux-face-button-4 {
+    right: 0;
+    top: 40px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-6 {
+    width: 130px;
+    height: 90px;
+    gap: 5px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-6 .lux-face-button {
+    width: 40px;
+    height: 40px;
+    font-size: 13px;
+  }
+
+  /* L/R sit nearer the physical edges while respecting iPhone/Android safe areas. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-shoulder {
+    width: var(--lux-shoulder-width);
+    height: var(--lux-shoulder-height);
+    border-radius: 11px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-2 .lux-shoulder-1,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-3 .lux-shoulder-1 {
+    left: max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-2 .lux-shoulder-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-3 .lux-shoulder-3 {
+    right: max(8px, env(safe-area-inset-right, 0px));
+  }
+
+  /* Select / Start: taller, squarer and farther outward for thumb reach. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-system-button {
+    bottom: calc(46px + env(safe-area-inset-bottom, 0px));
+    min-width: 80px;
+    width: 80px;
+    height: 40px;
+    padding: 0 8px;
+    border-radius: 10px;
+    font-size: 8px;
+    letter-spacing: .08em;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-1 {
+    left: max(10px, env(safe-area-inset-left, 0px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-2 {
+    right: max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-1 .lux-system-button-1 {
+    right: max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  /* Keep the two-by-two action groups aligned beneath Select / Start. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    --lux-landscape-action-width: 60px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button {
+    width: var(--lux-landscape-action-width);
+    min-width: var(--lux-landscape-action-width);
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(1) {
+    left: max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(2) {
+    left: max(72px, calc(env(safe-area-inset-left, 0px) + 64px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(3) {
+    right: max(72px, calc(env(safe-area-inset-right, 0px) + 64px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(4) {
+    right: max(8px, env(safe-area-inset-right, 0px));
+  }
+}
