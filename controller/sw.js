@@ -1,5 +1,5 @@
-const CACHE='lux-controller-v0.3.2';
-const ASSETS=['./','./index.html','./gamepad-layout.css','./hub.css','./manifest.json','./gamepad-core.js','./hub.js','./orientation.js','../icon.png'];
+const CACHE='lux-controller-v0.3.3';
+const ASSETS=['./','./index.html','./gamepad-layout.css','./hub.css','./manifest.json','./controller-icon.svg','./gamepad-core.js','./hub.js','./orientation.js','../icon.png'];
 
 self.addEventListener('install',event=>{
   self.skipWaiting();
