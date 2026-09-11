@@ -1,8 +1,8 @@
 (() => {
   'use strict';
 
-  if (!window.matchMedia('(max-width: 767px)').matches || window.__luxMobileEmulatorPolishV3) return;
-  window.__luxMobileEmulatorPolishV3 = true;
+  if (!window.matchMedia('(max-width: 767px)').matches || window.__luxMobileEmulatorPolishV4) return;
+  window.__luxMobileEmulatorPolishV4 = true;
 
   const RETROPAD = { B:0, Y:1, SELECT:2, START:3, UP:4, DOWN:5, LEFT:6, RIGHT:7, A:8, X:9, L:10, R:11 };
   const $ = id => document.getElementById(id);
@@ -10,6 +10,7 @@
   const container = () => $('emulatorContainer');
   const luxMenu = () => document.querySelector('.lux-mobile-game-menu');
   let observer = null;
+  let readyPoll = null;
 
   function getLayout() {
     const type = String(typeof activeEmulatorGame !== 'undefined' ? activeEmulatorGame?.console || '' : '').toLowerCase();
@@ -78,40 +79,73 @@
     pad.querySelectorAll('[data-input]').forEach(bindPadButton);
   }
 
-  function deepElements(root) {
-    const out = [];
-    const visit = node => {
-      if (!node?.querySelectorAll) return;
-      node.querySelectorAll('*').forEach(el => {
-        out.push(el);
-        if (el.shadowRoot) visit(el.shadowRoot);
-        if (el.tagName === 'IFRAME') { try { visit(el.contentDocument); } catch (_) {} }
-      });
-    };
-    visit(root);
-    return out;
+  function markGameReady() {
+    const host = modal();
+    if (!host) return;
+    host.classList.add('lux-game-ready');
+    const play = $('luxMobileStartOverlay');
+    if (play) play.hidden = true;
+    $('luxMobilePadOverlay')?.classList.add('lux-pad-active');
+    if (readyPoll) { clearInterval(readyPoll); readyPoll = null; }
   }
 
-  function hideNativeChrome() {
-    const root = container();
-    if (!root) return;
-    root.querySelectorAll('canvas,video').forEach(surface => surface.classList.add('lux-mobile-game-surface'));
+  function beginReadyWatch() {
+    if (readyPoll) clearInterval(readyPoll);
+    let checks = 0;
+    readyPoll = setInterval(() => {
+      checks += 1;
+      const hasManager = !!window.EJS_emulator?.gameManager;
+      const hasSurface = !!container()?.querySelector('canvas, video');
+      if (hasManager || hasSurface) markGameReady();
+      if (checks >= 200 && readyPoll) {
+        clearInterval(readyPoll);
+        readyPoll = null;
+        const button = $('luxMobileStartButton');
+        if (button) {
+          button.disabled = false;
+          button.innerHTML = '<span class="lux-play-symbol">▶</span><span>Tentar iniciar novamente</span>';
+        }
+      }
+    }, 100);
+  }
 
-    // Important: do NOT hide every EmulatorJS button. iOS uses a native
-    // "Click to resume Emulator" control to unlock audio/game execution.
-    // Hide only the chrome/touch controls that Lux replaces.
-    deepElements(root).forEach(el => {
-      if (!el?.classList) return;
-      const text = String(el.textContent || '').trim();
-      const meta = `${el.title || ''} ${el.getAttribute?.('aria-label') || ''} ${text}`.trim();
-      const isButton = el.tagName === 'BUTTON' || el.getAttribute?.('role') === 'button' || el.classList.contains('ejs_menu_button');
-      if (!isButton) return;
+  function startRomFromLux() {
+    const button = $('luxMobileStartButton');
+    if (!button || button.disabled) return;
+    if (window.EJS_emulator?.gameManager) return markGameReady();
+    if (typeof startEmulatorSession !== 'function') {
+      button.innerHTML = '<span>Não foi possível iniciar o emulador.</span>';
+      return;
+    }
 
-      const nativeTouch = /^(ESQ|DIR|L|R|A|B|Select|Start|Rápido|Rapido|Lento|▲|▼|◀|▶|↑|↓|←|→)$/i.test(text);
-      const nativeMenu = el.classList.contains('ejs_menu_button') || /^☰$/.test(text) || /context\s*menu|menu\s*button/i.test(meta);
-      const nativeSpeed = /fast\s*forward|slow\s*motion|rápido|rapido|lento/i.test(meta);
-      if (nativeTouch || nativeMenu || nativeSpeed) el.classList.add('lux-native-hidden');
-    });
+    button.disabled = true;
+    button.innerHTML = '<span class="lux-play-spinner"></span><span>Iniciando jogo…</span>';
+
+    try {
+      // Keep EmulatorJS untouched. This button simply fires the same session start
+      // the original JOGAR button used, preserving the user gesture required by iOS.
+      startEmulatorSession();
+      const nativeOnStart = window.EJS_onGameStart;
+      window.EJS_onGameStart = (...args) => {
+        try { nativeOnStart?.(...args); } finally { markGameReady(); }
+      };
+      beginReadyWatch();
+    } catch (error) {
+      console.warn('Falha ao iniciar ROM pelo botão Lux:', error);
+      button.disabled = false;
+      button.innerHTML = '<span class="lux-play-symbol">▶</span><span>Tentar novamente</span>';
+    }
+  }
+
+  function ensureStartOverlay() {
+    const host = modal();
+    if (!host || $('luxMobileStartOverlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'luxMobileStartOverlay';
+    overlay.className = 'lux-mobile-start-overlay';
+    overlay.innerHTML = `<button id="luxMobileStartButton" type="button" class="lux-mobile-start-button"><span class="lux-play-symbol">▶</span><span>Jogar</span></button>`;
+    host.appendChild(overlay);
+    $('luxMobileStartButton').addEventListener('click', startRomFromLux);
   }
 
   function closeLuxMenu() {
@@ -196,6 +230,20 @@
     } catch (error) { status.textContent = error?.message || 'Não foi possível carregar.'; }
   }
 
+  function deepElements(root) {
+    const out = [];
+    const visit = node => {
+      if (!node?.querySelectorAll) return;
+      node.querySelectorAll('*').forEach(el => {
+        out.push(el);
+        if (el.shadowRoot) visit(el.shadowRoot);
+        if (el.tagName === 'IFRAME') { try { visit(el.contentDocument); } catch (_) {} }
+      });
+    };
+    visit(root);
+    return out;
+  }
+
   function nativeClick(patterns) {
     const root = container();
     if (!root) return false;
@@ -219,8 +267,8 @@
 
   function polishLuxMenu() {
     const actions = document.querySelector('.lux-mobile-game-menu .lux-mobile-game-actions');
-    if (!actions || actions.dataset.luxV3 === '1') return;
-    actions.dataset.luxV3 = '1';
+    if (!actions || actions.dataset.luxV4 === '1') return;
+    actions.dataset.luxV4 = '1';
     actions.innerHTML = `
       <button type="button" class="primary" data-game-action="resume"><i data-lucide="play"></i> Continuar</button>
       <button type="button" data-lux-action="save"><i data-lucide="save"></i> Salvar jogo</button>
@@ -248,16 +296,26 @@
   function attach() {
     if (!modal() || !container()) return;
     ensureLuxPad();
-    hideNativeChrome();
+    ensureStartOverlay();
     polishLuxMenu();
+    container().querySelectorAll('canvas,video').forEach(surface => surface.classList.add('lux-mobile-game-surface'));
+    if (window.EJS_emulator?.gameManager || container().querySelector('canvas,video')) markGameReady();
     observer?.disconnect();
-    observer = new MutationObserver(() => { hideNativeChrome(); polishLuxMenu(); });
+    observer = new MutationObserver(() => {
+      container()?.querySelectorAll('canvas,video').forEach(surface => surface.classList.add('lux-mobile-game-surface'));
+      polishLuxMenu();
+      if (window.EJS_emulator?.gameManager || container()?.querySelector('canvas,video')) markGameReady();
+    });
     observer.observe(container(), { childList:true, subtree:true });
   }
 
   new MutationObserver(() => {
     if (modal()) attach();
-    else { observer?.disconnect(); observer=null; $('luxGameSlotSheet')?.remove(); }
+    else {
+      observer?.disconnect(); observer=null;
+      if (readyPoll) { clearInterval(readyPoll); readyPoll=null; }
+      $('luxGameSlotSheet')?.remove();
+    }
   }).observe(document.body, { childList:true, subtree:true });
 
   window.addEventListener('orientationchange', () => setTimeout(attach, 180));
