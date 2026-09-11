@@ -19,8 +19,7 @@
   #mainDashboard { padding-bottom: var(--lux-mobile-bottom) !important; }
   #mobileBottomNav, nav.fixed.bottom-0 { padding-bottom: env(safe-area-inset-bottom, 0px) !important; min-height: var(--lux-mobile-bottom); }
 
-  /* Search FAB must never float over immersive/temporary screens. */
-  body.lux-mobile-immersive #floatingSearchBtn,
+  /* Search FAB must never float over temporary overlays. */
   body.lux-mobile-overlay-open #floatingSearchBtn,
   #loadingSplash:not(.hidden) ~ #floatingSearchBtn { display: none !important; }
 
@@ -85,27 +84,4 @@
   .lux-mobile-filter-toggle.active { border-color: #fb7185; background: rgba(244,63,94,.14); color: #fecdd3; }
   .lux-mobile-sheet-primary { width: 100%; min-height: 50px; margin-top: 18px; border-radius: 14px; background: linear-gradient(135deg,#9333ea,#7c3aed); color: #fff; font-weight: 900; }
   .lux-mobile-sheet-secondary { width: 100%; min-height: 46px; margin-top: 9px; border-radius: 14px; border: 1px solid #5b2b83; color: #e9d5ff; background: transparent; font-weight: 750; }
-
-  /* ---------------- Immersive emulator ---------------- */
-  #emulatorModal.lux-mobile-emulator { padding: 0 !important; background: #000 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-  #emulatorModal.lux-mobile-emulator > div { width: 100vw !important; max-width: none !important; height: 100dvh !important; max-height: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: #000 !important; }
-  #emulatorModal.lux-mobile-emulator > div > .border-b,
-  #emulatorModal.lux-mobile-emulator > div > .border-t { display: none !important; }
-  #emulatorModal.lux-mobile-emulator #emulatorContainer { position: absolute; inset: 0; width: 100% !important; height: 100% !important; background: #000; }
-  #emulatorModal.lux-mobile-emulator #emulatorIntro { inset: 0 !important; min-height: 100dvh; padding: calc(24px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
-  .lux-mobile-game-menu-button { position: fixed; z-index: 75; top: calc(10px + env(safe-area-inset-top, 0px)); right: 12px; width: 46px; height: 46px; border-radius: 15px; border: 1px solid rgba(216,180,254,.28); background: rgba(18,12,31,.78); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #fff; font-size: 22px; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
-  .lux-mobile-game-menu { position: fixed; inset: 0; z-index: 130; display: flex; align-items: flex-end; background: rgba(0,0,0,.62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-  .lux-mobile-game-menu[hidden] { display: none !important; }
-  .lux-mobile-game-menu-card { width: 100%; padding: 18px 16px calc(20px + env(safe-area-inset-bottom, 0px)); border-radius: 26px 26px 0 0; border: 1px solid rgba(168,85,247,.35); border-bottom: 0; background: #140c22; }
-  .lux-mobile-game-menu-title { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
-  .lux-mobile-game-menu-title strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
-  .lux-mobile-game-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
-  .lux-mobile-game-actions button { min-height: 54px; padding: 10px; border-radius: 14px; border: 1px solid #5b2b83; background: #211134; color: #f3e8ff; font-size: 12px; font-weight: 800; }
-  .lux-mobile-game-actions button.primary { background: #7c3aed; border-color: #a855f7; color: #fff; }
-  .lux-mobile-game-actions button.danger { color: #fecdd3; border-color: rgba(244,63,94,.42); background: rgba(127,29,29,.22); }
-
-  /* Hide EmulatorJS chrome in mobile play mode. Lux menu is the gateway. */
-  #emulatorModal.lux-mobile-emulator.lux-mobile-playing #emulatorContainer .ejs_menu_bar,
-  #emulatorModal.lux-mobile-emulator.lux-mobile-playing #emulatorContainer [class*="menu_bar"],
-  #emulatorModal.lux-mobile-emulator.lux-mobile-playing #emulatorContainer [class*="menu-bar"] { opacity: 0 !important; pointer-events: none !important; }
 }
