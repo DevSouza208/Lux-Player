@@ -4,6 +4,7 @@
   const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
   const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  const CONTROLLER_ORIGIN = location.protocol === 'file:' ? 'https://lux-player.vercel.app' : location.origin;
 
   const state = {
     code: null,
@@ -35,7 +36,7 @@
   }
 
   function controllerUrl() {
-    return `${location.origin}/controller/?code=${ensureCode()}`;
+    return `${CONTROLLER_ORIGIN}/controller/?code=${ensureCode()}`;
   }
 
   function getSignalClient() {
