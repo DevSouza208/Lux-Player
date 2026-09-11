@@ -27,12 +27,19 @@ function animateDashboardEntry() {
   );
 }
 
-// Lux Gamepad é carregado como módulo isolado para não acoplar sua lógica ao script principal.
+// Controles móveis ficam isolados do script principal.
 (() => {
-  if (document.querySelector('script[data-lux-gamepad-host]')) return;
-  const script = document.createElement('script');
-  script.src = 'js/lux-gamepad-host.js?v=20260910-webrtc-pwa';
-  script.dataset.luxGamepadHost = '1';
-  script.async = true;
-  document.head.appendChild(script);
+  const modules = [
+    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260910-webrtc-pwa'],
+    ['lux-remote-host', 'js/lux-remote-host.js?v=20260910-1']
+  ];
+  modules.forEach(([name, src]) => {
+    if (document.querySelector(`script[data-${name}]`)) return;
+    const script = document.createElement('script');
+    script.src = src;
+    script.dataset[name.replaceAll('-', '')] = '1';
+    script.setAttribute(`data-${name}`, '1');
+    script.async = true;
+    document.head.appendChild(script);
+  });
 })();
