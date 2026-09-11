@@ -1,23 +1,24 @@
 /* Lux Console mobile controls only. Change size/position here without touching the emulator screen. */
 @media (max-width: 767px) {
   #emulatorModal.lux-console-mobile-stage1 {
-    --lux-dpad-left: 28px;
-    --lux-dpad-bottom: 14dvh;
+    /* Portrait: Manic-inspired hierarchy, Lux Play visual language. */
+    --lux-dpad-left: 24px;
+    --lux-dpad-top: 54dvh;
     --lux-dpad-size: 154px;
     --lux-dpad-key: 54px;
     --lux-dpad-offset: 50px;
 
-    --lux-face-right: 28px;
-    --lux-face-bottom: 15.5dvh;
+    --lux-face-right: 24px;
+    --lux-face-top: 54.5dvh;
     --lux-face-size: 148px;
     --lux-face-key: 66px;
 
-    --lux-shoulder-top: calc(var(--lux-visible-screen-height, 66.666vw) + 18px);
+    --lux-shoulder-top: calc(var(--lux-visible-screen-height, 66.666vw) + 16px);
     --lux-shoulder-side: 20px;
-    --lux-shoulder-width: 112px;
-    --lux-shoulder-height: 52px;
+    --lux-shoulder-width: 108px;
+    --lux-shoulder-height: 48px;
 
-    --lux-system-bottom: 7.5dvh;
+    --lux-system-bottom: 72px;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-controls-layer {
@@ -29,19 +30,19 @@
     visibility: hidden;
   }
 
+  /* Shared Lux control language: translucent, app-like, not hardware-like. */
   #emulatorModal.lux-console-mobile-stage1 .lux-game-control {
     appearance: none;
     -webkit-appearance: none;
     margin: 0;
     padding: 0;
-    border: 1px solid rgba(216,180,254,.62);
-    background: linear-gradient(155deg, rgba(71,31,112,.98), rgba(24,11,43,.98));
-    color: #f6edff;
+    border: 1px solid rgba(216,180,254,.50);
+    background: linear-gradient(180deg, rgba(77,34,126,.90), rgba(29,12,50,.94));
+    color: #f8f2ff;
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.16),
-      inset 0 -9px 20px rgba(0,0,0,.26),
-      0 9px 24px rgba(44,14,91,.34),
-      0 0 20px rgba(168,85,247,.14);
+      inset 0 1px 0 rgba(255,255,255,.14),
+      0 8px 20px rgba(24,7,43,.28),
+      0 0 18px rgba(168,85,247,.12);
     font: inherit;
     font-weight: 900;
     pointer-events: auto;
@@ -54,22 +55,22 @@
 
   #emulatorModal.lux-console-mobile-stage1 .lux-game-control span {
     pointer-events: none;
-    text-shadow: 0 0 12px rgba(216,180,254,.7);
+    text-shadow: 0 0 10px rgba(216,180,254,.56);
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-control-pressed {
-    transform: scale(.92) !important;
-    filter: brightness(1.32);
+    transform: scale(.93) !important;
+    filter: brightness(1.25);
     box-shadow:
-      inset 0 2px 12px rgba(0,0,0,.48),
-      0 0 26px rgba(168,85,247,.38);
+      inset 0 2px 9px rgba(0,0,0,.34),
+      0 0 22px rgba(168,85,247,.32);
   }
 
   /* D-pad */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-dpad {
     position: absolute;
     left: var(--lux-dpad-left);
-    bottom: var(--lux-dpad-bottom);
+    top: var(--lux-dpad-top);
     width: var(--lux-dpad-size);
     height: var(--lux-dpad-size);
     pointer-events: none;
@@ -116,12 +117,10 @@
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center {
     top: var(--lux-dpad-offset);
     left: var(--lux-dpad-offset);
-    border: 1px solid rgba(192,132,252,.34);
+    border: 1px solid rgba(192,132,252,.28);
     border-radius: 9px;
-    background: linear-gradient(155deg, rgba(71,31,112,.98), rgba(24,11,43,.98));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.12),
-      inset 0 -8px 18px rgba(0,0,0,.24);
+    background: linear-gradient(180deg, rgba(67,28,108,.88), rgba(27,11,47,.94));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
     display: grid;
     place-items: center;
     pointer-events: none;
@@ -131,16 +130,16 @@
     width: 19px;
     height: 19px;
     border-radius: 50%;
-    border: 1px solid rgba(216,180,254,.38);
-    background: radial-gradient(circle at 35% 30%, rgba(168,85,247,.55), rgba(46,16,101,.34));
-    box-shadow: inset 0 0 8px rgba(0,0,0,.45), 0 0 10px rgba(168,85,247,.14);
+    border: 1px solid rgba(216,180,254,.32);
+    background: radial-gradient(circle at 35% 30%, rgba(168,85,247,.48), rgba(46,16,101,.28));
+    box-shadow: inset 0 0 7px rgba(0,0,0,.38), 0 0 8px rgba(168,85,247,.10);
   }
 
   /* Face buttons */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-face {
     position: absolute;
     right: var(--lux-face-right);
-    bottom: var(--lux-face-bottom);
+    top: var(--lux-face-top);
     width: var(--lux-face-size);
     height: var(--lux-face-size);
     pointer-events: none;
@@ -156,6 +155,7 @@
     font-size: 24px;
   }
 
+  /* AB stays as-is: it already felt good in hand. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-1 {
     left: 2px;
     bottom: 8px;
@@ -166,10 +166,16 @@
     top: 8px;
   }
 
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-1 { left: 0; top: 41px; }
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-2 { left: 41px; top: 0; }
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-3 { left: 41px; bottom: 0; }
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-4 { right: 0; top: 41px; }
+  /* ABXY breathes a little more without making the buttons smaller. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 {
+    width: 168px;
+    height: 168px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-1 { left: 0; top: 51px; }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-2 { left: 51px; top: 0; }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-3 { left: 51px; bottom: 0; }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-4 { right: 0; top: 51px; }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-face-6 {
     width: 176px;
@@ -187,7 +193,7 @@
     font-size: 17px;
   }
 
-  /* Shoulders */
+  /* L / R dock directly under the screen. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-shoulders {
     position: absolute;
     left: 0;
@@ -202,8 +208,8 @@
     top: 0;
     width: var(--lux-shoulder-width);
     height: var(--lux-shoulder-height);
-    border-radius: 18px 18px 24px 24px;
-    font-size: 19px;
+    border-radius: 18px;
+    font-size: 18px;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-shoulder-1 { left: var(--lux-shoulder-side); }
@@ -214,7 +220,7 @@
     left: 50%;
     right: auto;
     transform: translateX(-50%);
-    width: 76px;
+    width: 72px;
   }
   #emulatorModal.lux-console-mobile-stage1 .lux-console-shoulders-3 .lux-shoulder-3 { right: var(--lux-shoulder-side); }
 
@@ -226,70 +232,69 @@
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
     pointer-events: none;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-system-button {
-    min-width: 78px;
-    height: 36px;
+    min-width: 82px;
+    height: 38px;
     padding: 0 14px;
-    border-radius: 18px;
+    border-radius: 19px;
     font-size: 10px;
-    letter-spacing: .11em;
+    letter-spacing: .10em;
   }
 
-  /* Center Lux button: visual anchor for the future action menu. */
+  /* Center Lux button: visual anchor, deliberately quieter than gameplay controls. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
     position: absolute;
     left: 50%;
-    top: calc(var(--lux-visible-screen-height, 66.666vw) + 18px);
+    top: calc(var(--lux-visible-screen-height, 66.666vw) + 17px);
     transform: translateX(-50%);
-    width: 52px;
-    height: 52px;
+    width: 46px;
+    height: 46px;
     border-radius: 50%;
-    border: 1px solid rgba(216,180,254,.55);
-    background: radial-gradient(circle at 35% 30%, #7e22ce, #35105c 62%, #180727 100%);
-    box-shadow: 0 0 24px rgba(147,51,234,.38), inset 0 1px 0 rgba(255,255,255,.22);
+    border: 1px solid rgba(216,180,254,.42);
+    background: radial-gradient(circle at 35% 30%, rgba(126,34,206,.94), rgba(53,16,92,.94) 62%, rgba(24,7,39,.96) 100%);
+    box-shadow: 0 0 18px rgba(147,51,234,.25), inset 0 1px 0 rgba(255,255,255,.16);
     display: grid;
     place-items: center;
     pointer-events: none;
-    opacity: 1;
+    opacity: .94;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button img {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     object-fit: contain;
-    filter: drop-shadow(0 0 8px rgba(216,180,254,.45));
+    filter: drop-shadow(0 0 6px rgba(216,180,254,.36));
   }
 
-  /* Keep the shell visually balanced when a console has no shoulder buttons. */
   #emulatorModal.lux-console-mobile-stage1:not(.lux-console-system-gba):not(.lux-console-system-snes):not(.lux-console-system-n64) .lux-console-brand-button {
-    top: calc(var(--lux-visible-screen-height, 66.666vw) + 16px);
+    top: calc(var(--lux-visible-screen-height, 66.666vw) + 15px);
   }
 
-  /* Compact bottom action bar — visual only for now. */
+  /* Small app-style action dock. Visual only for now. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
     position: absolute;
     left: 50%;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
-    width: min(88vw, 330px);
-    height: 50px;
-    padding: 5px 8px;
+    width: min(90vw, 320px);
+    height: 44px;
+    padding: 4px 7px;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     align-items: stretch;
-    border: 1px solid rgba(192,132,252,.5);
-    border-radius: 18px;
-    background: linear-gradient(180deg, rgba(51,16,87,.92), rgba(18,7,34,.96));
+    border: 1px solid rgba(192,132,252,.38);
+    border-radius: 17px;
+    background: linear-gradient(180deg, rgba(45,18,76,.86), rgba(16,7,30,.92));
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.1),
-      0 0 24px rgba(126,34,206,.22),
-      0 10px 30px rgba(0,0,0,.26);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+      inset 0 1px 0 rgba(255,255,255,.08),
+      0 0 18px rgba(126,34,206,.15),
+      0 8px 24px rgba(0,0,0,.20);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     pointer-events: none !important;
     box-sizing: border-box;
   }
@@ -299,16 +304,16 @@
     -webkit-appearance: none;
     min-width: 0;
     margin: 0;
-    padding: 3px 4px;
+    padding: 2px 3px;
     border: 0;
-    border-right: 1px solid rgba(216,180,254,.17);
+    border-right: 1px solid rgba(216,180,254,.10);
     background: transparent;
-    color: #eadbff;
+    color: #e9dcfa;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 1px;
     opacity: 1 !important;
     font: inherit;
     pointer-events: none !important;
@@ -319,17 +324,17 @@
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     display: grid;
     place-items: center;
     color: #d8b4fe;
-    filter: drop-shadow(0 0 6px rgba(168,85,247,.42));
+    filter: drop-shadow(0 0 5px rgba(168,85,247,.32));
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.8;
@@ -338,10 +343,10 @@
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-action-label {
-    font-size: 9px;
+    font-size: 8.5px;
     line-height: 1;
     font-weight: 700;
-    letter-spacing: .02em;
+    letter-spacing: .015em;
     white-space: nowrap;
   }
 
@@ -350,57 +355,146 @@
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-action-exit .lux-console-action-icon {
-    color: #f0a8c0;
+    color: #ef9dbb;
   }
 
+  /* Landscape: use the black side gutters as control zones, like Manic's
+     structure, while keeping the visual language unmistakably Lux Play. */
   @media (orientation: landscape) {
     #emulatorModal.lux-console-mobile-stage1 {
-      --lux-dpad-left: calc(24px + env(safe-area-inset-left, 0px));
-      --lux-dpad-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-      --lux-dpad-size: 140px;
-      --lux-dpad-key: 50px;
-      --lux-dpad-offset: 45px;
+      --lux-landscape-gutter: calc((100vw - var(--lux-visible-screen-width, min(100vw, 150dvh))) / 2);
 
-      --lux-face-right: calc(24px + env(safe-area-inset-right, 0px));
-      --lux-face-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-      --lux-face-size: 138px;
-      --lux-face-key: 60px;
+      --lux-dpad-size: 110px;
+      --lux-dpad-key: 40px;
+      --lux-dpad-offset: 35px;
+      --lux-dpad-left: max(calc(6px + env(safe-area-inset-left, 0px)), calc((var(--lux-landscape-gutter) - var(--lux-dpad-size)) / 2));
+      --lux-dpad-top: 50%;
 
-      --lux-shoulder-top: calc(12px + env(safe-area-inset-top, 0px));
-      --lux-shoulder-side: calc(18px + env(safe-area-inset-left, 0px));
-      --lux-shoulder-width: 96px;
-      --lux-shoulder-height: 46px;
+      --lux-face-size: 112px;
+      --lux-face-key: 48px;
+      --lux-face-right: max(calc(6px + env(safe-area-inset-right, 0px)), calc((var(--lux-landscape-gutter) - var(--lux-face-size)) / 2));
+      --lux-face-top: 50%;
 
-      --lux-system-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+      --lux-shoulder-top: calc(8px + env(safe-area-inset-top, 0px));
+      --lux-shoulder-side: max(6px, calc((var(--lux-landscape-gutter) - 82px) / 2));
+      --lux-shoulder-width: 82px;
+      --lux-shoulder-height: 38px;
     }
 
-    #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
-      top: calc(12px + env(safe-area-inset-top, 0px));
-      width: 46px;
-      height: 46px;
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-dpad,
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face {
+      transform: translateY(-50%);
     }
 
-    #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button img {
-      width: 24px;
-      height: 24px;
+    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button {
+      font-size: 14px;
+      border-radius: 12px;
     }
 
-    #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
-      bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-      width: min(46vw, 292px);
-      height: 40px;
-      padding: 3px 6px;
+    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-up { left: var(--lux-dpad-offset); }
+    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-left { top: var(--lux-dpad-offset); }
+    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-right { top: var(--lux-dpad-offset); }
+    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-down { left: var(--lux-dpad-offset); }
+    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center { top: var(--lux-dpad-offset); left: var(--lux-dpad-offset); }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-face-button {
+      font-size: 18px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-1 {
+      left: 0;
+      bottom: 0;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-2 {
+      right: 0;
+      top: 0;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 {
+      width: 120px;
+      height: 120px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-1 { left: 0; top: 36px; }
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-2 { left: 36px; top: 0; }
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-3 { left: 36px; bottom: 0; }
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-4 { right: 0; top: 36px; }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-6 {
+      width: 118px;
+      height: 82px;
+      gap: 5px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-face-6 .lux-face-button {
+      width: 36px;
+      height: 36px;
+      font-size: 12px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-shoulder {
+      height: var(--lux-shoulder-height);
       border-radius: 15px;
+      font-size: 15px;
+    }
+
+    /* Center logo is unnecessary in landscape; preserving the game view matters more. */
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
+      display: none;
+    }
+
+    /* Put Select and Start into the side gutters instead of over the game. */
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-system-buttons {
+      position: fixed;
+      inset: 0;
+      transform: none;
+      display: block;
+      pointer-events: none;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-system-button {
+      position: absolute;
+      bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+      min-width: 70px;
+      width: 70px;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 14px;
+      font-size: 8px;
+      letter-spacing: .08em;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-system-buttons-2 .lux-system-button-1 {
+      left: max(6px, calc((var(--lux-landscape-gutter) - 70px) / 2));
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-system-buttons-2 .lux-system-button-2 {
+      right: max(6px, calc((var(--lux-landscape-gutter) - 70px) / 2));
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-system-buttons-1 .lux-system-button-1 {
+      right: max(6px, calc((var(--lux-landscape-gutter) - 70px) / 2));
+    }
+
+    /* Slim context dock centered at the bottom; it stays secondary to gameplay. */
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
+      bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+      width: min(38vw, 240px);
+      height: 32px;
+      padding: 2px 5px;
+      border-radius: 13px;
+      background: linear-gradient(180deg, rgba(36,14,62,.80), rgba(12,5,23,.88));
     }
 
     #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon,
     #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon svg {
-      width: 14px;
-      height: 14px;
+      width: 11px;
+      height: 11px;
     }
 
     #emulatorModal.lux-console-mobile-stage1 .lux-console-action-label {
-      font-size: 8px;
+      font-size: 7px;
     }
   }
 }
