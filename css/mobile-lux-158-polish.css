@@ -12,7 +12,7 @@
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 {
-    width: calc((var(--lux-portrait-face-tall-width) * 2) + var(--lux-portrait-face-tall-gap));
+    width: calc(var(--lux-portrait-face-tall-width) + var(--lux-portrait-face-tall-width) + var(--lux-portrait-face-tall-gap));
     height: var(--lux-portrait-face-tall-height);
   }
 
@@ -41,9 +41,10 @@
 @media (max-width: 767px) and (orientation: landscape) {
   #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
     /* One visual module = the full D-pad width. */
-    --lux-module-width: var(--lux-dpad-size);
+    --lux-dpad-size: 124px;
+    --lux-module-width: 124px;
     --lux-module-gap: 6px;
-    --lux-module-half: calc((var(--lux-module-width) - var(--lux-module-gap)) / 2);
+    --lux-module-half: 59px;
     --lux-module-left: var(--lux-dpad-left);
     --lux-module-right: max(
       calc(6px + env(safe-area-inset-right, 0px)),
