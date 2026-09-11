@@ -1,0 +1,25 @@
+{
+  "name": "Lux Play",
+  "short_name": "Lux Play",
+  "description": "TV, filmes, séries, jogos retrô e leitura em um só lugar.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#09060e",
+  "theme_color": "#09060e",
+  "icons": [
+    {
+      "src": "./lux-play-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
