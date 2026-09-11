@@ -1,0 +1,119 @@
+/* Mobile-only emulator polish. Desktop/tablet >= 768px is untouched. */
+@media (max-width: 767px) {
+  /* Hide only EmulatorJS chrome/speed helpers. Lux hamburger remains visible. */
+  #emulatorModal.lux-mobile-emulator #emulatorContainer .ejs_menu_button,
+  #emulatorModal.lux-mobile-emulator #emulatorContainer .ejs_menu_bar,
+  #emulatorModal.lux-mobile-emulator #emulatorContainer [class*="menu_bar"],
+  #emulatorModal.lux-mobile-emulator #emulatorContainer [class*="menu-bar"],
+  #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-native-speed-hidden {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+
+  #emulatorModal.lux-mobile-emulator #emulatorContainer {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    background: #000 !important;
+  }
+
+  #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-mobile-game-surface-wrap {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-mobile-game-surface {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    z-index: 1 !important;
+  }
+
+  /* Native touch controls always stay above the game surface. */
+  #emulatorModal.lux-mobile-emulator #emulatorContainer button {
+    z-index: 20;
+  }
+
+  @media (orientation: landscape) {
+    #emulatorModal.lux-mobile-emulator,
+    #emulatorModal.lux-mobile-emulator > div,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer {
+      width: 100vw !important;
+      height: 100dvh !important;
+      max-width: none !important;
+      max-height: none !important;
+    }
+
+    /* Game occupies the whole viewport; touch buttons float over it. */
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-L,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-R,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-A,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-B,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-select,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-start,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-up,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-down,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-left,
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-right {
+      position: fixed !important;
+      margin: 0 !important;
+      transform: none !important;
+      z-index: 35 !important;
+      opacity: .78 !important;
+      pointer-events: auto !important;
+      visibility: visible !important;
+      touch-action: none;
+    }
+
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-L {
+      top: calc(58px + env(safe-area-inset-top, 0px)); left: calc(18px + env(safe-area-inset-left, 0px));
+    }
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-R {
+      top: calc(58px + env(safe-area-inset-top, 0px)); right: calc(18px + env(safe-area-inset-right, 0px));
+    }
+
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-A {
+      right: calc(28px + env(safe-area-inset-right, 0px)); bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+    }
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-B {
+      right: calc(112px + env(safe-area-inset-right, 0px)); bottom: calc(54px + env(safe-area-inset-bottom, 0px));
+    }
+
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-select {
+      left: 43%; bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-start {
+      right: 43%; bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
+
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-up {
+      left: calc(104px + env(safe-area-inset-left, 0px)); bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+    }
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-down {
+      left: calc(104px + env(safe-area-inset-left, 0px)); bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+    }
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-left {
+      left: calc(60px + env(safe-area-inset-left, 0px)); bottom: calc(106px + env(safe-area-inset-bottom, 0px));
+    }
+    #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-touch-right {
+      left: calc(148px + env(safe-area-inset-left, 0px)); bottom: calc(106px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .lux-mobile-game-menu-button {
+      top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+      right: calc(10px + env(safe-area-inset-right, 0px)) !important;
+      z-index: 80 !important;
+    }
+  }
+}
