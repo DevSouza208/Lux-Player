@@ -95,7 +95,9 @@ function animateDashboardEntry() {
     ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260911-viewmodes1'],
     ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260911-landscape1'],
     ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260911-ergonomics2'],
-    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260911-context1']
+    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260911-context1'],
+    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260911-final1'],
+    ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260911-settings1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
@@ -111,7 +113,8 @@ function animateDashboardEntry() {
     const scripts = [
       ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-nativeemu1'],
       ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-viewmodes1'],
-      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260911-actions2']
+      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260911-actions2'],
+      ['lux-mobile-settings', 'js/mobile-lux-settings.js?v=20260911-settings1']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;
