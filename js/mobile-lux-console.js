@@ -20,9 +20,22 @@
       if (title) title.textContent = '';
       if (button.dataset.luxResumeLabel !== '1') {
         button.dataset.luxResumeLabel = '1';
-        button.textContent = '▶ CONTINUAR';
+        button.textContent = '▶ JOGAR';
       }
     });
+  };
+
+  const startMobileSessionOnce = modal => {
+    if (!modal || modal.dataset.luxMobileSessionStarted === '1') return;
+    const intro = document.getElementById('emulatorIntro');
+    if (!intro || intro.classList.contains('hidden')) return;
+    if (typeof window.startEmulatorSession !== 'function') return;
+
+    // On iOS/Safari the EmulatorJS resume button needs to receive the real user
+    // gesture. Starting the loader here removes Lux's extra confirmation, so the
+    // only tap the user makes is on the EmulatorJS action styled as Lux "JOGAR".
+    modal.dataset.luxMobileSessionStarted = '1';
+    window.startEmulatorSession();
   };
 
   const applyStage1 = () => {
@@ -30,6 +43,7 @@
     if (!modal) return false;
     modal.classList.add('lux-console-mobile-stage1');
     document.body.classList.add('lux-console-open');
+    startMobileSessionOnce(modal);
     polishSafariResumePopup();
     return true;
   };
