@@ -1,4 +1,4 @@
-/* Stage 1 — mobile emulator shell only. Desktop is untouched. */
+/* Stage 2 — mobile emulator edge-to-edge with native buttons hidden. Desktop is untouched. */
 @media (max-width: 767px) {
   body.lux-console-open {
     overflow: hidden;
@@ -33,8 +33,7 @@
     background: #000 !important;
   }
 
-  /* Stage 1 is intentionally display-only: remove the Lux/player frame so the
-     EmulatorJS area occupies the viewport. Native EmulatorJS UI stays intact. */
+  /* Remove only the Lux/player frame. */
   #emulatorModal.lux-console-mobile-stage1 > div > .border-b,
   #emulatorModal.lux-console-mobile-stage1 > div > .border-t {
     display: none !important;
@@ -52,6 +51,14 @@
     background: #000 !important;
   }
 
-  /* Do not touch #emulatorContainer, canvas, video, WebGL wrappers or native
-     control coordinates in this stage. The renderer remains fully native. */
+  /* Stage 2: hide ONLY native EmulatorJS controls/chrome buttons. The renderer,
+     canvas/video and all WebGL wrappers remain untouched. The Lux JOGAR button is
+     outside #emulatorContainer, so it remains visible before the ROM starts. */
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer button,
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_menu_button {
+    display: none !important;
+  }
+
+  /* Do not size, move, fade or hide #emulatorContainer, canvas, video or any
+     EmulatorJS rendering wrapper in this stage. */
 }
