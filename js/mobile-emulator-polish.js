@@ -1,8 +1,8 @@
 (() => {
   'use strict';
 
-  if (!window.matchMedia('(max-width: 767px)').matches || window.__luxMobileEmulatorPolishV2) return;
-  window.__luxMobileEmulatorPolishV2 = true;
+  if (!window.matchMedia('(max-width: 767px)').matches || window.__luxMobileEmulatorPolishV3) return;
+  window.__luxMobileEmulatorPolishV3 = true;
 
   const RETROPAD = { B:0, Y:1, SELECT:2, START:3, UP:4, DOWN:5, LEFT:6, RIGHT:7, A:8, X:9, L:10, R:11 };
   const $ = id => document.getElementById(id);
@@ -78,11 +78,40 @@
     pad.querySelectorAll('[data-input]').forEach(bindPadButton);
   }
 
+  function deepElements(root) {
+    const out = [];
+    const visit = node => {
+      if (!node?.querySelectorAll) return;
+      node.querySelectorAll('*').forEach(el => {
+        out.push(el);
+        if (el.shadowRoot) visit(el.shadowRoot);
+        if (el.tagName === 'IFRAME') { try { visit(el.contentDocument); } catch (_) {} }
+      });
+    };
+    visit(root);
+    return out;
+  }
+
   function hideNativeChrome() {
     const root = container();
     if (!root) return;
-    root.classList.add('lux-hide-native-controls');
     root.querySelectorAll('canvas,video').forEach(surface => surface.classList.add('lux-mobile-game-surface'));
+
+    // Important: do NOT hide every EmulatorJS button. iOS uses a native
+    // "Click to resume Emulator" control to unlock audio/game execution.
+    // Hide only the chrome/touch controls that Lux replaces.
+    deepElements(root).forEach(el => {
+      if (!el?.classList) return;
+      const text = String(el.textContent || '').trim();
+      const meta = `${el.title || ''} ${el.getAttribute?.('aria-label') || ''} ${text}`.trim();
+      const isButton = el.tagName === 'BUTTON' || el.getAttribute?.('role') === 'button' || el.classList.contains('ejs_menu_button');
+      if (!isButton) return;
+
+      const nativeTouch = /^(ESQ|DIR|L|R|A|B|Select|Start|Rápido|Rapido|Lento|▲|▼|◀|▶|↑|↓|←|→)$/i.test(text);
+      const nativeMenu = el.classList.contains('ejs_menu_button') || /^☰$/.test(text) || /context\s*menu|menu\s*button/i.test(meta);
+      const nativeSpeed = /fast\s*forward|slow\s*motion|rápido|rapido|lento/i.test(meta);
+      if (nativeTouch || nativeMenu || nativeSpeed) el.classList.add('lux-native-hidden');
+    });
   }
 
   function closeLuxMenu() {
@@ -167,20 +196,6 @@
     } catch (error) { status.textContent = error?.message || 'Não foi possível carregar.'; }
   }
 
-  function deepElements(root) {
-    const out = [];
-    const visit = node => {
-      if (!node?.querySelectorAll) return;
-      node.querySelectorAll('*').forEach(el => {
-        out.push(el);
-        if (el.shadowRoot) visit(el.shadowRoot);
-        if (el.tagName === 'IFRAME') { try { visit(el.contentDocument); } catch (_) {} }
-      });
-    };
-    visit(root);
-    return out;
-  }
-
   function nativeClick(patterns) {
     const root = container();
     if (!root) return false;
@@ -194,7 +209,6 @@
 
   function openNativePanel(type) {
     closeLuxMenu();
-    document.body.classList.add('lux-native-panel-open');
     const settingsPatterns = [/settings/i,/configura/i,/ajustes/i,/controls?/i,/controles?/i];
     const cheatPatterns = [/cheat/i,/trapaç/i];
     if (nativeClick(type === 'cheats' ? cheatPatterns : settingsPatterns)) return;
@@ -205,8 +219,8 @@
 
   function polishLuxMenu() {
     const actions = document.querySelector('.lux-mobile-game-menu .lux-mobile-game-actions');
-    if (!actions || actions.dataset.luxV2 === '1') return;
-    actions.dataset.luxV2 = '1';
+    if (!actions || actions.dataset.luxV3 === '1') return;
+    actions.dataset.luxV3 = '1';
     actions.innerHTML = `
       <button type="button" class="primary" data-game-action="resume"><i data-lucide="play"></i> Continuar</button>
       <button type="button" data-lux-action="save"><i data-lucide="save"></i> Salvar jogo</button>
@@ -215,7 +229,7 @@
       <button type="button" data-lux-action="cheats"><i data-lucide="sparkles"></i> Trapaças</button>
       <button type="button" data-lux-action="settings"><i data-lucide="settings"></i> Configurações</button>
       <button type="button" data-lux-action="reset"><i data-lucide="rotate-ccw"></i> Reiniciar</button>
-      <button type="button" class="danger" data-game-action="exit"><i data-lucide="log-out"></i> Sair do jogo</button>`;
+      <button type="button" class="danger" data-game-action="save-exit"><i data-lucide="save"></i> Salvar / Sair</button>`;
     try { window.lucide?.createIcons?.(); } catch (_) {}
   }
 
