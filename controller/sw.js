@@ -1,4 +1,4 @@
-const CACHE='lux-controller-v0.1.6';
+const CACHE='lux-controller-v0.1.7';
 const ASSETS=['./','./index.html','./gamepad-layout.css','./manifest.json','./touchpad.js','./touchpad.css','../icon.png'];
 const TOUCHPAD_SCRIPT='<script src="./touchpad.js"></script>';
 
