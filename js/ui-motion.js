@@ -29,23 +29,10 @@ function animateDashboardEntry() {
 
 // Lux Gamepad é carregado como módulo isolado para não acoplar sua lógica ao script principal.
 (() => {
-  const loadScript = (src, dataKey) => new Promise(resolve => {
-    const existing = document.querySelector(`script[${dataKey}]`);
-    if (existing) {
-      if (existing.dataset.loaded === '1') resolve();
-      else existing.addEventListener('load', resolve, { once: true });
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.setAttribute(dataKey, '1');
-    script.onload = () => { script.dataset.loaded = '1'; resolve(); };
-    script.onerror = () => resolve();
-    document.head.appendChild(script);
-  });
-
-  (async () => {
-    await loadScript('js/lux-gamepad-pointer-host.js?v=20260911-touchpad', 'data-lux-gamepad-pointer-host');
-    await loadScript('js/lux-gamepad-host.js?v=20260910-webrtc-pwa', 'data-lux-gamepad-host');
-  })();
+  if (document.querySelector('script[data-lux-gamepad-host]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/lux-gamepad-host.js?v=20260910-webrtc-pwa';
+  script.dataset.luxGamepadHost = '1';
+  script.async = true;
+  document.head.appendChild(script);
 })();
