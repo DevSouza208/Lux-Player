@@ -1,16 +1,20 @@
-const CACHE='lux-controller-v0.1.8';
-const ASSETS=['./','./index.html','./gamepad-layout.css','./manifest.json','./touchpad.js','./touchpad.css','../icon.png'];
-const TOUCHPAD_SCRIPT='<script src="./touchpad.js"></script>';
+const CACHE='lux-controller-v0.1.9';
+const ASSETS=['./','./index.html','./gamepad-layout.css','./manifest.json','./touchpad.js','./orientation.js','../icon.png'];
+const RUNTIME_SCRIPTS=['./touchpad.js','./orientation.js'];
 
-function injectTouchpad(html){
-  if(html.includes('src="./touchpad.js"')||html.includes("src='./touchpad.js'")) return html;
-  return html.replace('</body>',`${TOUCHPAD_SCRIPT}</body>`);
+function injectRuntime(html){
+  let output=html;
+  for(const src of RUNTIME_SCRIPTS){
+    if(output.includes(`src="${src}"`)||output.includes(`src='${src}'`)) continue;
+    output=output.replace('</body>',`<script src="${src}"></script></body>`);
+  }
+  return output;
 }
 
 async function buildNavigationResponse(request){
   try{
     const response=await fetch(request);
-    const html=injectTouchpad(await response.text());
+    const html=injectRuntime(await response.text());
     const headers=new Headers(response.headers);
     headers.delete('content-length');
     headers.delete('content-encoding');
@@ -21,7 +25,7 @@ async function buildNavigationResponse(request){
   }catch(_){
     const cached=await caches.match('./index.html');
     if(!cached) throw _;
-    const html=injectTouchpad(await cached.text());
+    const html=injectRuntime(await cached.text());
     const headers=new Headers(cached.headers);
     headers.delete('content-length');
     headers.delete('content-encoding');
