@@ -1,6 +1,6 @@
-const CACHE='lux-controller-v0.1.9';
-const ASSETS=['./','./index.html','./gamepad-layout.css','./manifest.json','./touchpad.js','./orientation.js','../icon.png'];
-const RUNTIME_SCRIPTS=['./touchpad.js','./orientation.js'];
+const CACHE='lux-controller-v0.2.0';
+const ASSETS=['./','./index.html','./gamepad-layout.css','./hub.css','./manifest.json','./touchpad.js','./hub.js','./orientation.js','../icon.png'];
+const RUNTIME_SCRIPTS=['./touchpad.js','./hub.js','./orientation.js'];
 
 function injectRuntime(html){
   let output=html;
