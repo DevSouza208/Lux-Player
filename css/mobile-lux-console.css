@@ -10,6 +10,10 @@
     --lux-screen-top: 0px;
     --lux-screen-width: 100vw;
     --lux-screen-height: 100dvh;
+    --lux-visible-screen-left: 0px;
+    --lux-visible-screen-top: 0px;
+    --lux-visible-screen-width: 100vw;
+    --lux-visible-screen-height: 66.666vw;
 
     position: fixed !important;
     inset: 0 !important;
@@ -80,7 +84,7 @@
     z-index: 10 !important;
   }
 
-  /* Layer 2: bezel/decorations. It follows the screen coordinates but never
+  /* Layer 2: bezel/decorations. It follows the visible game area but never
      participates in layout and never intercepts touch. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-bezel-layer {
     position: fixed;
@@ -91,12 +95,51 @@
 
   #emulatorModal.lux-console-mobile-stage1 .lux-console-bezel-window {
     position: fixed;
-    left: var(--lux-screen-left);
-    top: var(--lux-screen-top);
-    width: var(--lux-screen-width);
-    height: var(--lux-screen-height);
+    left: var(--lux-visible-screen-left);
+    top: var(--lux-visible-screen-top);
+    width: var(--lux-visible-screen-width);
+    height: var(--lux-visible-screen-height);
     pointer-events: none;
     box-sizing: border-box;
+  }
+
+  /* GBA portrait shell. The actual EmulatorJS screen remains untouched underneath.
+     Only the black area below the 3:2 game picture receives the Lux body. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::before {
+    content: '';
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) - 1px);
+    bottom: 0;
+    background:
+      radial-gradient(circle at 50% 16%, rgba(168,85,247,.18), transparent 34%),
+      linear-gradient(180deg, rgba(43,18,73,.98) 0%, rgba(28,10,49,.995) 44%, rgba(12,5,23,1) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(216,180,254,.22),
+      inset 0 18px 36px rgba(147,51,234,.08);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-window {
+    border-bottom: 2px solid rgba(192,132,252,.58);
+    box-shadow:
+      inset 0 -10px 18px rgba(15,5,28,.18),
+      0 8px 28px rgba(76,29,149,.24),
+      0 0 22px rgba(168,85,247,.12);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::after {
+    content: 'LUX CONSOLE';
+    position: fixed;
+    left: 50%;
+    top: calc(var(--lux-visible-screen-height) + 77px);
+    transform: translateX(-50%);
+    color: rgba(216,180,254,.58);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .28em;
+    text-shadow: 0 0 12px rgba(168,85,247,.34);
+    white-space: nowrap;
   }
 
   /* Layer 3: game controls. The layer itself is transparent/non-interactive;
@@ -161,6 +204,33 @@
     opacity: 1 !important;
     visibility: visible !important;
     pointer-events: auto !important;
+  }
+
+  @media (orientation: landscape) {
+    #emulatorModal.lux-console-mobile-stage1 {
+      --lux-visible-screen-width: min(100vw, 150dvh);
+      --lux-visible-screen-height: min(100dvh, 66.666vw);
+      --lux-visible-screen-left: calc((100vw - var(--lux-visible-screen-width)) / 2);
+      --lux-visible-screen-top: 0px;
+    }
+
+    /* The portrait body is replaced by a transparent frame in landscape. */
+    #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::before {
+      top: 0;
+      bottom: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-window {
+      border: 1px solid rgba(192,132,252,.46);
+      border-radius: 16px;
+      box-shadow: 0 0 24px rgba(168,85,247,.18);
+    }
+
+    #emulatorModal.lux-console-mobile-stage1.lux-console-system-gba .lux-console-bezel-layer::after {
+      display: none;
+    }
   }
 
   /* Renderer internals remain untouched. */
