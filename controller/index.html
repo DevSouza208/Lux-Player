@@ -4,82 +4,50 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#0d0d12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Lux Controller</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="gamepad-layout.css">
+  <link rel="stylesheet" href="hub.css?v=150">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="skin-lux layout-gba">
-  <section id="joinScreen" class="screen active"><div class="panel"><div class="brand">LUX CONTROLLER</div><p>Seu celular como gamepad.</p><label for="roomCode">Código da sala</label><input id="roomCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"><div class="player-grid"><button class="player active" data-player="1">Jogador 1</button><button class="player" data-player="2">Jogador 2</button></div><button id="connectBtn" class="primary">Conectar controle</button><div id="joinStatus" class="status offline">● Desconectado</div><small>O código pode ser preenchido automaticamente pelo QR Code do Lux Play.</small></div></section>
-
-  <section id="controllerScreen" class="screen"><header class="topbar"><div><strong>Lux Controller</strong><span id="sessionLabel">Sem sessão</span></div><div class="toolbar"><select id="layoutSelect" aria-label="Console"><option value="gb">GB / GBC</option><option value="gba" selected>GBA</option><option value="nes">NES</option><option value="snes">SNES</option><option value="megadrive3">Mega Drive 3B</option><option value="megadrive6">Mega Drive 6B</option><option value="n64">N64</option></select><select id="skinSelect" aria-label="Skin"><option value="lux">Lux</option><option value="classic">Classic</option><option value="dark">Dark</option></select><button id="disconnectBtn" class="danger">Desconectar</button></div></header><main id="gamepad" class="gamepad locked"><div class="dpad-zone"><div class="dpad"><button class="pad-btn up" data-input="UP">▲</button><button class="pad-btn left" data-input="LEFT">◀</button><div class="dpad-center"></div><button class="pad-btn right" data-input="RIGHT">▶</button><button class="pad-btn down" data-input="DOWN">▼</button></div></div><div id="shoulderZone" class="shoulder-zone"></div><div id="centerZone" class="center-zone"></div><div id="actionZone" class="action-zone"></div><div id="analogZone" class="analog-zone hidden"><div id="analogStick" class="analog-stick"><div class="analog-knob"></div></div></div></main><aside id="debugPanel" class="debug-panel"><strong>Input log</strong><pre id="debugLog"></pre></aside><div id="rotateMessage" class="rotate-message">↻<br><strong>Gire o celular para jogar</strong></div></section>
-
-  <div id="installGuide" class="install-guide hidden" role="dialog" aria-modal="true" aria-labelledby="installGuideTitle">
-    <div class="install-card">
-      <span class="install-eyebrow">ANTES DE JOGAR</span>
-      <h2 id="installGuideTitle">Adicione o Lux Controller à tela inicial</h2>
-      <p class="install-intro">Para jogar direito, abra o controle como PWA. No navegador, a barra de endereço rouba espaço e deixa o gamepad desconfortável.</p>
-      <div class="install-tabs"><button type="button" class="install-tab active" data-install-tab="android">Android</button><button type="button" class="install-tab" data-install-tab="ios">iPhone / iPad</button></div>
-      <div id="installAndroid" class="install-steps"><strong>Android · Chrome</strong><ol><li>Toque no menu <b>⋮</b> do Chrome.</li><li>Escolha <b>Adicionar à tela inicial</b> ou <b>Instalar app</b>.</li><li>Depois, feche esta aba e abra o <b>Lux Controller</b> pelo ícone criado.</li></ol></div>
-      <div id="installIos" class="install-steps hidden"><strong>iPhone / iPad · Safari</strong><ol><li>Abra este link no <b>Safari</b>.</li><li>Toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b> e abra o <b>Lux Controller</b> pelo novo ícone.</li></ol></div>
-      <div class="install-note">O código da sala já foi salvo neste aparelho. Quando você abrir o Lux Controller pela tela inicial, ele continuará preenchido.</div>
-      <button id="installGuideClose" type="button" class="primary">Entendi — vou abrir pela tela inicial</button><button id="installGuideBrowser" type="button" class="install-secondary">Continuar no navegador mesmo assim</button>
+  <!-- O hub decide o que fica visível. No navegador comum o controle nunca é liberado. -->
+  <section id="joinScreen" class="screen" aria-label="Conectar Lux Pad">
+    <div class="panel">
+      <div class="brand">LUX PAD</div>
+      <p>Seu celular como gamepad.</p>
+      <label for="roomCode">Código da sala</label>
+      <input id="roomCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000">
+      <div class="player-grid"><button class="player active" data-player="1">Jogador 1</button><button class="player" data-player="2">Jogador 2</button></div>
+      <button id="connectBtn" class="primary">Conectar controle</button>
+      <div id="joinStatus" class="status offline">● Desconectado</div>
+      <small>O código pode ser preenchido automaticamente pelo QR Code do Lux Play.</small>
     </div>
-  </div>
+  </section>
 
-<script>
-(()=>{'use strict';
-const SUPABASE_URL='https://fvcvshppvxihhttwyyvr.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY='sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
-const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
-const STORAGE_KEY='lux-controller-v014';
-const DEVICE_KEY='lux-controller-device-id';
-const PENDING_ROOM_KEY='lux-controller-pending-room';
-const layouts={gb:{cls:'layout-gb',shoulders:[],center:['SELECT','START'],actions:['B','A'],analog:false},gba:{cls:'layout-gba',shoulders:['L','R'],center:['SELECT','START'],actions:['B','A'],analog:false},nes:{cls:'layout-nes',shoulders:[],center:['SELECT','START'],actions:['B','A'],analog:false},snes:{cls:'layout-snes',shoulders:['L','R'],center:['SELECT','START'],actions:['Y','X','B','A'],analog:false},megadrive3:{cls:'layout-megadrive3',shoulders:[],center:['START'],actions:['A','B','C'],analog:false},megadrive6:{cls:'layout-megadrive6',shoulders:[],center:['MODE','START'],actions:['X','Y','Z','A','B','C'],analog:false},n64:{cls:'layout-n64',shoulders:['L','Z','R'],center:['START'],actions:['B','A','C_UP','C_LEFT','C_RIGHT','C_DOWN'],analog:true}};
-const state={connected:false,player:1,room:'',layout:'gba',skin:'lux',haptics:true,pressed:new Map(),analogPointer:null,analog:{x:0,y:0},signalClient:null,signalChannel:null,pc:null,dataChannel:null,pendingIce:[],connectTimer:null,controllerId:''};
-const $=s=>document.querySelector(s);
-const els={join:$('#joinScreen'),controller:$('#controllerScreen'),room:$('#roomCode'),connect:$('#connectBtn'),joinStatus:$('#joinStatus'),session:$('#sessionLabel'),layout:$('#layoutSelect'),skin:$('#skinSelect'),disconnect:$('#disconnectBtn'),gamepad:$('#gamepad'),shoulder:$('#shoulderZone'),center:$('#centerZone'),action:$('#actionZone'),analog:$('#analogZone'),stick:$('#analogStick'),log:$('#debugLog'),installGuide:$('#installGuide')};
-function sanitizeCode(v){return String(v||'').replace(/\D/g,'').slice(0,6)}
-function pretty(v){return({SELECT:'Select',START:'Start',MODE:'Mode',C_UP:'C▲',C_LEFT:'C◀',C_RIGHT:'C▶',C_DOWN:'C▼'})[v]||v}
-function isStandalone(){return window.matchMedia?.('(display-mode: standalone)').matches||window.navigator.standalone===true}
-function isIos(){return /iphone|ipad|ipod/i.test(navigator.userAgent)||(/macintosh/i.test(navigator.userAgent)&&navigator.maxTouchPoints>1)}
-function showInstallGuide(){if(isStandalone()||!els.installGuide)return;els.installGuide.classList.remove('hidden');setInstallTab(isIos()?'ios':'android')}
-function hideInstallGuide(){els.installGuide?.classList.add('hidden')}
-function setInstallTab(tab){document.querySelectorAll('[data-install-tab]').forEach(btn=>btn.classList.toggle('active',btn.dataset.installTab===tab));$('#installAndroid')?.classList.toggle('hidden',tab!=='android');$('#installIos')?.classList.toggle('hidden',tab!=='ios')}
-function deviceId(){let id=localStorage.getItem(DEVICE_KEY);if(!id){id=crypto.randomUUID?.()||`lux-${Date.now()}-${Math.random().toString(36).slice(2)}`;localStorage.setItem(DEVICE_KEY,id)}return id}
-function deviceName(){if(isIos())return /ipad/i.test(navigator.userAgent)?'iPad':'iPhone';if(/android/i.test(navigator.userAgent))return 'Android';return navigator.userAgentData?.platform||navigator.platform||'Celular'}
-function getSignalClient(){if(state.signalClient)return state.signalClient;if(!window.supabase?.createClient)throw new Error('Não foi possível iniciar a conexão.');state.signalClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});return state.signalClient}
-function signalPayload(message){return message?.payload||message||{}}
-async function sendSignal(payload){if(!state.signalChannel)return;try{await state.signalChannel.send({type:'broadcast',event:'signal',payload:{...payload,session:state.room,controllerId:state.controllerId,player:state.player}})}catch(error){console.warn('Lux Controller sinal:',error)}}
-async function closeSignalChannel(){if(state.signalChannel&&state.signalClient){try{await state.signalClient.removeChannel(state.signalChannel)}catch(_){}}state.signalChannel=null}
-function closePeer(){try{state.dataChannel?.close()}catch(_){}try{state.pc?.close()}catch(_){}state.dataChannel=null;state.pc=null;state.pendingIce=[]}
-async function cleanup(sendLeave=true){clearTimeout(state.connectTimer);state.connectTimer=null;if(sendLeave&&state.signalChannel&&state.room)await sendSignal({type:'leave'});closePeer();await closeSignalChannel()}
-function loadPrefs(){try{const p=JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}');if(layouts[p.layout])state.layout=p.layout;if(['lux','classic','dark'].includes(p.skin))state.skin=p.skin;if(p.player===1||p.player===2)state.player=p.player}catch{}}
-function savePrefs(){localStorage.setItem(STORAGE_KEY,JSON.stringify({layout:state.layout,skin:state.skin,player:state.player}))}
-function setPlayer(n){state.player=n;document.querySelectorAll('.player').forEach(b=>b.classList.toggle('active',Number(b.dataset.player)===n));savePrefs()}
-function makeButton(input,extra=''){const b=document.createElement('button');b.className=`pad-btn ${extra}`;b.dataset.input=input;b.textContent=pretty(input);return b}
-function renderLayout(){const cfg=layouts[state.layout];document.body.className=`skin-${state.skin} ${cfg.cls}`;els.shoulder.innerHTML='';els.center.innerHTML='';els.action.innerHTML='';cfg.shoulders.forEach(x=>els.shoulder.appendChild(makeButton(x,'shoulder-btn')));cfg.center.forEach(x=>els.center.appendChild(makeButton(x,'center-btn')));cfg.actions.forEach(x=>els.action.appendChild(makeButton(x,`action-btn action-${x.toLowerCase().replaceAll('_','-')}`)));els.analog.classList.toggle('hidden',!cfg.analog);bindButtons();savePrefs()}
-function setConnection(connected){state.connected=connected;els.gamepad.classList.toggle('locked',!connected);els.joinStatus.className=`status ${connected?'online':'offline'}`;els.joinStatus.textContent=connected?'● Conectado ao Lux Play':'● Desconectado';if(!connected)releaseEverything()}
-function setJoinStatus(text,kind='offline'){els.joinStatus.className=`status ${kind}`;els.joinStatus.textContent=text}
-function showController(){setConnection(true);localStorage.removeItem(PENDING_ROOM_KEY);els.session.textContent=`Sala ${state.room.slice(0,3)} ${state.room.slice(3)} • P${state.player}`;els.join.classList.remove('active');els.controller.classList.add('active');els.connect.disabled=false;els.connect.textContent='Conectar controle';if(document.documentElement.requestFullscreen&&innerWidth>innerHeight){document.documentElement.requestFullscreen().catch(()=>{})}}
-function connectionLost(message='Conexão perdida. Tente novamente.'){setConnection(false);els.controller.classList.remove('active');els.join.classList.add('active');setJoinStatus(`● ${message}`,'offline');cleanup(false)}
-async function addRemoteIce(candidate){if(!candidate)return;if(!state.pc?.remoteDescription){state.pendingIce.push(candidate);return}try{await state.pc.addIceCandidate(candidate)}catch(error){console.warn('Lux Controller ICE:',error)}}
-async function flushRemoteIce(){const list=state.pendingIce.splice(0);for(const candidate of list)await addRemoteIce(candidate)}
-function bindDataChannel(channel){state.dataChannel=channel;channel.onopen=()=>{clearTimeout(state.connectTimer);state.connectTimer=null;showController()};channel.onmessage=event=>{try{const msg=JSON.parse(event.data);if(msg.type==='host-state'&&msg.layout&&layouts[msg.layout]){releaseEverything();state.layout=msg.layout;els.layout.value=msg.layout;renderLayout()}}catch(_){}};channel.onclose=()=>{if(state.connected)connectionLost()};channel.onerror=()=>{if(state.connected)connectionLost('Erro na conexão.')}}
-async function ensurePeer(){if(state.pc)return state.pc;const pc=new RTCPeerConnection(RTC_CONFIG);state.pc=pc;pc.onicecandidate=event=>{if(event.candidate)sendSignal({type:'ice',candidate:event.candidate.toJSON?.()||event.candidate})};pc.ondatachannel=event=>bindDataChannel(event.channel);pc.onconnectionstatechange=()=>{if(['failed','closed'].includes(pc.connectionState)&&state.connected)connectionLost();if(pc.connectionState==='disconnected'&&state.connected)setJoinStatus('● Reconectando...','offline')};return pc}
-async function handleSignal(raw){const msg=signalPayload(raw);if(!msg||msg.session!==state.room||msg.target&&msg.target!==state.controllerId)return;try{if(msg.type==='offer'){const pc=await ensurePeer();await pc.setRemoteDescription(msg.description);await flushRemoteIce();const answer=await pc.createAnswer();await pc.setLocalDescription(answer);await sendSignal({type:'answer',description:pc.localDescription});return}if(msg.type==='ice'){await addRemoteIce(msg.candidate);return}if(msg.type==='reject'){clearTimeout(state.connectTimer);state.connectTimer=null;els.connect.disabled=false;els.connect.textContent='Conectar controle';setJoinStatus(`● ${msg.reason||'Este jogador já está em uso.'}`,'offline');await cleanup(false);return}if(msg.type==='host-disconnect'){connectionLost('Sessão encerrada pelo Lux Play.')}}catch(error){console.warn('Lux Controller pareamento:',error);setJoinStatus('● Não foi possível concluir a conexão.','offline')}}
-function openSignalChannel(code){return new Promise((resolve,reject)=>{try{const client=getSignalClient();const channel=client.channel(`lux-gamepad:${code}`,{config:{broadcast:{self:false}}});state.signalChannel=channel;channel.on('broadcast',{event:'signal'},handleSignal);const timer=setTimeout(()=>reject(new Error('Tempo esgotado ao localizar a sessão.')),7000);channel.subscribe(status=>{if(status==='SUBSCRIBED'){clearTimeout(timer);resolve()}else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){clearTimeout(timer);reject(new Error('Não foi possível entrar na sala.'))}})}catch(error){reject(error)}})}
-async function connect(){const code=sanitizeCode(els.room.value);if(code.length!==6){els.room.focus();return}await cleanup(false);state.room=code;state.controllerId=deviceId();els.connect.disabled=true;els.connect.textContent='Conectando...';setJoinStatus('● Procurando o Lux Play...','offline');try{await openSignalChannel(code);setJoinStatus('● Pareando controle...','offline');await sendSignal({type:'join',deviceName:deviceName()});state.connectTimer=setTimeout(async()=>{els.connect.disabled=false;els.connect.textContent='Conectar controle';setJoinStatus('● Sessão não encontrada ou conexão bloqueada.','offline');await cleanup(false)},12000)}catch(error){els.connect.disabled=false;els.connect.textContent='Conectar controle';setJoinStatus(`● ${error.message||'Falha ao conectar.'}`,'offline');await cleanup(false)}}
-async function disconnect(){await cleanup(true);setConnection(false);state.room='';els.controller.classList.remove('active');els.join.classList.add('active');setJoinStatus('● Desconectado','offline');document.exitFullscreen?.().catch?.(()=>{})}
-function emitInput(payload){if(!state.connected||state.dataChannel?.readyState!=='open')return;const packet={type:payload.type||'digital',player:state.player,room:state.room,layout:state.layout,input:payload.input,pressed:payload.pressed??null,value:payload.value??null,timestamp:performance.now()};try{state.dataChannel.send(JSON.stringify(packet))}catch(_){return}window.dispatchEvent(new CustomEvent('luxcontrollerinput',{detail:packet}));const line=packet.type==='analog'?`P${packet.player} ${packet.input} ${Number(packet.value).toFixed(2)}`:`P${packet.player} ${packet.input} ${packet.pressed?'DOWN':'UP'}`;const rows=els.log.textContent.split('\n').filter(Boolean);rows.unshift(line);els.log.textContent=rows.slice(0,14).join('\n')}
-function vibrate(){if(state.haptics&&navigator.vibrate)navigator.vibrate(8)}
-function press(el,pointerId){if(!state.connected)return;const input=el.dataset.input,key=`${input}:${pointerId}`;if(!input||state.pressed.has(key))return;state.pressed.set(key,{input,el,pointerId});el.classList.add('pressed');emitInput({input,pressed:true});vibrate()}
-function releasePointer(pointerId){[...state.pressed.entries()].filter(([,v])=>v.pointerId===pointerId).forEach(([key,v])=>{state.pressed.delete(key);if(![...state.pressed.values()].some(x=>x.input===v.input))v.el.classList.remove('pressed');emitInput({input:v.input,pressed:false})})}
-function bindButtons(){document.querySelectorAll('[data-input]').forEach(btn=>{if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('pointerdown',e=>{e.preventDefault();try{btn.setPointerCapture(e.pointerId)}catch{}press(btn,e.pointerId)});['pointerup','pointercancel','lostpointercapture'].forEach(ev=>btn.addEventListener(ev,e=>{e.preventDefault();releasePointer(e.pointerId)}));btn.addEventListener('contextmenu',e=>e.preventDefault())})}
-function releaseEverything(){[...new Set([...state.pressed.values()].map(v=>v.pointerId))].forEach(releasePointer);resetAnalog()}
-function setAnalog(x,y){if(!state.connected)return;if(Math.abs(x-state.analog.x)>.02){state.analog.x=x;emitInput({type:'analog',input:'ANALOG_X',value:x})}if(Math.abs(y-state.analog.y)>.02){state.analog.y=y;emitInput({type:'analog',input:'ANALOG_Y',value:y})}}
-function resetAnalog(){const knob=els.stick.querySelector('.analog-knob');knob.style.transform='translate(0,0)';if(state.analog.x!==0)emitInput({type:'analog',input:'ANALOG_X',value:0});if(state.analog.y!==0)emitInput({type:'analog',input:'ANALOG_Y',value:0});state.analog={x:0,y:0};state.analogPointer=null}
-function setupAnalog(){const knob=els.stick.querySelector('.analog-knob');const update=e=>{const r=els.stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,max=r.width*.33;let dx=e.clientX-cx,dy=e.clientY-cy,d=Math.hypot(dx,dy);if(d>max){const k=max/d;dx*=k;dy*=k}knob.style.transform=`translate(${dx}px,${dy}px)`;setAnalog(Math.max(-1,Math.min(1,dx/max)),Math.max(-1,Math.min(1,dy/max)))};els.stick.addEventListener('pointerdown',e=>{if(!state.connected)return;e.preventDefault();state.analogPointer=e.pointerId;try{els.stick.setPointerCapture(e.pointerId)}catch{}update(e);vibrate()});els.stick.addEventListener('pointermove',e=>{if(state.analogPointer===e.pointerId){e.preventDefault();update(e)}});['pointerup','pointercancel','lostpointercapture'].forEach(ev=>els.stick.addEventListener(ev,e=>{if(state.analogPointer===e.pointerId)resetAnalog()}))}
-document.querySelectorAll('.player').forEach(b=>b.addEventListener('click',()=>setPlayer(Number(b.dataset.player))));document.querySelectorAll('[data-install-tab]').forEach(b=>b.addEventListener('click',()=>setInstallTab(b.dataset.installTab)));$('#installGuideClose')?.addEventListener('click',hideInstallGuide);$('#installGuideBrowser')?.addEventListener('click',hideInstallGuide);els.room.addEventListener('input',()=>els.room.value=sanitizeCode(els.room.value));els.room.addEventListener('keydown',e=>{if(e.key==='Enter')connect()});els.connect.addEventListener('click',connect);els.disconnect.addEventListener('click',disconnect);els.layout.addEventListener('change',()=>{releaseEverything();state.layout=els.layout.value;renderLayout()});els.skin.addEventListener('change',()=>{state.skin=els.skin.value;renderLayout()});window.addEventListener('blur',releaseEverything);window.addEventListener('beforeunload',()=>cleanup(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseEverything()});document.addEventListener('touchmove',e=>{if(els.controller.classList.contains('active'))e.preventDefault()},{passive:false});
-loadPrefs();const urlCode=sanitizeCode(new URL(location.href).searchParams.get('code'));if(urlCode){localStorage.setItem(PENDING_ROOM_KEY,urlCode);els.room.value=urlCode}else{const pending=sanitizeCode(localStorage.getItem(PENDING_ROOM_KEY));if(pending)els.room.value=pending}els.layout.value=state.layout;els.skin.value=state.skin;setPlayer(state.player);renderLayout();setupAnalog();setConnection(false);if(urlCode&&!isStandalone())setTimeout(showInstallGuide,120);if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});window.LuxController={connect,disconnect,getState:()=>({...state,pressed:[...state.pressed.values()]}),setLayout(name){if(!layouts[name])return false;releaseEverything();state.layout=name;els.layout.value=name;renderLayout();return true},emitInput};})();
-</script></body></html>
+  <section id="controllerScreen" class="screen" aria-label="Lux Pad">
+    <header class="topbar">
+      <div><strong>Lux Pad</strong><span id="sessionLabel">Sem sessão</span></div>
+      <div class="toolbar">
+        <select id="layoutSelect" aria-label="Console"><option value="gb">GB / GBC</option><option value="gba" selected>GBA</option><option value="nes">NES</option><option value="snes">SNES</option><option value="megadrive3">Mega Drive 3B</option><option value="megadrive6">Mega Drive 6B</option><option value="n64">N64</option></select>
+        <select id="skinSelect" aria-label="Skin"><option value="lux">Lux</option><option value="classic">Classic</option><option value="dark">Dark</option></select>
+        <button id="disconnectBtn" class="danger">Desconectar</button>
+      </div>
+    </header>
+    <main id="gamepad" class="gamepad locked">
+      <div class="dpad-zone"><div class="dpad"><button class="pad-btn up" data-input="UP">▲</button><button class="pad-btn left" data-input="LEFT">◀</button><div class="dpad-center"></div><button class="pad-btn right" data-input="RIGHT">▶</button><button class="pad-btn down" data-input="DOWN">▼</button></div></div>
+      <div id="shoulderZone" class="shoulder-zone"></div>
+      <div id="centerZone" class="center-zone"></div>
+      <div id="actionZone" class="action-zone"></div>
+      <div id="analogZone" class="analog-zone hidden"><div id="analogStick" class="analog-stick"><div class="analog-knob"></div></div></div>
+    </main>
+    <div id="rotateMessage" class="rotate-message">↻<br><strong>Gire o celular para jogar</strong></div>
+  </section>
+
+  <script src="./gamepad-core.js?v=150"></script>
+  <script src="./hub.js?v=150"></script>
+  <script src="./orientation.js?v=150"></script>
+</body>
+</html>
