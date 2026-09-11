@@ -1,37 +1,5 @@
-const CACHE='lux-controller-v0.3.0';
-const ASSETS=['./','./index.html','./gamepad-layout.css','./hub.css','./manifest.json','./touchpad.js','./hub.js','./orientation.js','../icon.png'];
-const RUNTIME_SCRIPTS=['./touchpad.js','./hub.js','./orientation.js'];
-
-function injectRuntime(html){
-  let output=html;
-  for(const src of RUNTIME_SCRIPTS){
-    if(output.includes(`src="${src}"`)||output.includes(`src='${src}'`)) continue;
-    output=output.replace('</body>',`<script src="${src}?v=150"></script></body>`);
-  }
-  return output;
-}
-
-async function buildNavigationResponse(request){
-  try{
-    const response=await fetch(request,{cache:'no-store'});
-    const html=injectRuntime(await response.text());
-    const headers=new Headers(response.headers);
-    headers.delete('content-length');
-    headers.delete('content-encoding');
-    const modified=new Response(html,{status:response.status,statusText:response.statusText,headers});
-    const cache=await caches.open(CACHE);
-    await cache.put('./index.html',modified.clone());
-    return modified;
-  }catch(error){
-    const cached=await caches.match('./index.html');
-    if(!cached) throw error;
-    const html=injectRuntime(await cached.text());
-    const headers=new Headers(cached.headers);
-    headers.delete('content-length');
-    headers.delete('content-encoding');
-    return new Response(html,{status:cached.status,statusText:cached.statusText,headers});
-  }
-}
+const CACHE='lux-controller-v0.3.1';
+const ASSETS=['./','./index.html','./gamepad-layout.css','./hub.css','./manifest.json','./gamepad-core.js','./hub.js','./orientation.js','../icon.png'];
 
 self.addEventListener('install',event=>{
   self.skipWaiting();
@@ -53,14 +21,18 @@ self.addEventListener('activate',event=>event.waitUntil((async()=>{
 })()));
 
 self.addEventListener('fetch',event=>{
-  if(event.request.method!=='GET') return;
+  if(event.request.method!=='GET')return;
   if(event.request.mode==='navigate'){
-    event.respondWith(buildNavigationResponse(event.request));
+    event.respondWith(fetch(event.request,{cache:'no-store'}).then(response=>{
+      const copy=response.clone();
+      caches.open(CACHE).then(cache=>cache.put('./index.html',copy));
+      return response;
+    }).catch(()=>caches.match('./index.html')));
     return;
   }
   event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request).then(response=>{
     const copy=response.clone();
     caches.open(CACHE).then(cache=>cache.put(event.request,copy));
     return response;
-  }).catch(()=>cached)));
+  })));
 });
