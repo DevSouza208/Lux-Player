@@ -1,21 +1,21 @@
-/* Lux Console mobile controls only. Change size/position here without touching the emulator screen. */
+/* Lux Console mobile controls only. Size/position stays isolated from the emulator renderer. */
 @media (max-width: 767px) {
   #emulatorModal.lux-console-mobile-stage1 {
-    /* Portrait: Manic-inspired hierarchy, Lux Play visual language. */
-    --lux-dpad-left: 24px;
-    --lux-dpad-top: 54dvh;
-    --lux-dpad-size: 154px;
-    --lux-dpad-key: 54px;
-    --lux-dpad-offset: 50px;
+    /* Portrait geometry follows the game screen instead of one phone model. */
+    --lux-dpad-left: clamp(18px, 6vw, 28px);
+    --lux-dpad-top: max(calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) + 106px), 53dvh);
+    --lux-dpad-size: clamp(142px, 39vw, 158px);
+    --lux-dpad-key: clamp(50px, 13.7vw, 55px);
+    --lux-dpad-offset: clamp(46px, 12.7vw, 51px);
 
-    --lux-face-right: 24px;
-    --lux-face-top: 54.5dvh;
-    --lux-face-size: 148px;
-    --lux-face-key: 66px;
+    --lux-face-right: clamp(18px, 6vw, 28px);
+    --lux-face-top: max(calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) + 110px), 53.5dvh);
+    --lux-face-size: clamp(142px, 38vw, 154px);
+    --lux-face-key: clamp(62px, 16.5vw, 68px);
 
-    --lux-shoulder-top: calc(var(--lux-visible-screen-height, 66.666vw) + 16px);
-    --lux-shoulder-side: 20px;
-    --lux-shoulder-width: 108px;
+    --lux-shoulder-top: calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) + 14px);
+    --lux-shoulder-side: clamp(16px, 5vw, 22px);
+    --lux-shoulder-width: clamp(100px, 28vw, 112px);
     --lux-shoulder-height: 48px;
 
     --lux-system-bottom: 72px;
@@ -155,7 +155,7 @@
     font-size: 24px;
   }
 
-  /* AB stays as-is: it already felt good in hand. */
+  /* AB stays comfortably separated. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-1 {
     left: 2px;
     bottom: 8px;
@@ -166,7 +166,7 @@
     top: 8px;
   }
 
-  /* ABXY breathes a little more without making the buttons smaller. */
+  /* ABXY gets extra breathing room. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 {
     width: 168px;
     height: 168px;
@@ -193,7 +193,7 @@
     font-size: 17px;
   }
 
-  /* L / R dock directly under the screen. */
+  /* L / R dock follows the lower edge of the visible game screen. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-shoulders {
     position: absolute;
     left: 0;
@@ -245,11 +245,11 @@
     letter-spacing: .10em;
   }
 
-  /* Center Lux button: visual anchor, deliberately quieter than gameplay controls. */
+  /* Center Lux button follows the game rather than the device edges. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
     position: absolute;
     left: 50%;
-    top: calc(var(--lux-visible-screen-height, 66.666vw) + 17px);
+    top: calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) + 15px);
     transform: translateX(-50%);
     width: 46px;
     height: 46px;
@@ -270,11 +270,7 @@
     filter: drop-shadow(0 0 6px rgba(216,180,254,.36));
   }
 
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-system-gba):not(.lux-console-system-snes):not(.lux-console-system-n64) .lux-console-brand-button {
-    top: calc(var(--lux-visible-screen-height, 66.666vw) + 15px);
-  }
-
-  /* Small app-style action dock. Visual only for now. */
+  /* Small app-style action dock. Config is the only active item in this stage. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
     position: absolute;
     left: 50%;
@@ -323,6 +319,16 @@
     border-right: 0;
   }
 
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-settings {
+    pointer-events: auto !important;
+    cursor: pointer;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-settings:active {
+    background: rgba(168,85,247,.10);
+    border-radius: 10px;
+  }
+
   #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon {
     width: 14px;
     height: 14px;
@@ -358,24 +364,23 @@
     color: #ef9dbb;
   }
 
-  /* Landscape: use the black side gutters as control zones, like Manic's
-     structure, while keeping the visual language unmistakably Lux Play. */
+  /* Landscape: Moldura gains generous gutters; Fullscreen keeps controls overlayed. */
   @media (orientation: landscape) {
     #emulatorModal.lux-console-mobile-stage1 {
-      --lux-landscape-gutter: calc((100vw - var(--lux-visible-screen-width, min(100vw, 150dvh))) / 2);
+      --lux-landscape-gutter: calc((100vw - var(--lux-visible-screen-width)) / 2);
 
       --lux-dpad-size: 110px;
       --lux-dpad-key: 40px;
       --lux-dpad-offset: 35px;
       --lux-dpad-left: max(calc(6px + env(safe-area-inset-left, 0px)), calc((var(--lux-landscape-gutter) - var(--lux-dpad-size)) / 2));
-      --lux-dpad-top: 50%;
+      --lux-dpad-top: 52%;
 
       --lux-face-size: 112px;
       --lux-face-key: 48px;
       --lux-face-right: max(calc(6px + env(safe-area-inset-right, 0px)), calc((var(--lux-landscape-gutter) - var(--lux-face-size)) / 2));
-      --lux-face-top: 50%;
+      --lux-face-top: 52%;
 
-      --lux-shoulder-top: calc(8px + env(safe-area-inset-top, 0px));
+      --lux-shoulder-top: calc(7px + env(safe-area-inset-top, 0px));
       --lux-shoulder-side: max(6px, calc((var(--lux-landscape-gutter) - 82px) / 2));
       --lux-shoulder-width: 82px;
       --lux-shoulder-height: 38px;
@@ -439,12 +444,11 @@
       font-size: 15px;
     }
 
-    /* Center logo is unnecessary in landscape; preserving the game view matters more. */
     #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
       display: none;
     }
 
-    /* Put Select and Start into the side gutters instead of over the game. */
+    /* Select / Start live in the side gutters in landscape. */
     #emulatorModal.lux-console-mobile-stage1 .lux-console-system-buttons {
       position: fixed;
       inset: 0;
@@ -477,7 +481,6 @@
       right: max(6px, calc((var(--lux-landscape-gutter) - 70px) / 2));
     }
 
-    /* Slim context dock centered at the bottom; it stays secondary to gameplay. */
     #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
       bottom: calc(4px + env(safe-area-inset-bottom, 0px));
       width: min(38vw, 240px);
