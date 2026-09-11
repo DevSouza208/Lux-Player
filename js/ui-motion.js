@@ -56,3 +56,30 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   });
 })();
+
+// UX dedicada a celular. Não carrega JS e não aplica CSS em desktop/tablet >= 768px.
+(() => {
+  if (!window.matchMedia('(max-width: 767px)').matches) return;
+
+  if (!document.querySelector('link[data-lux-mobile-ux]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'css/mobile-ux.css?v=20260911-1';
+    link.media = '(max-width: 767px)';
+    link.dataset.luxMobileUx = '1';
+    document.head.appendChild(link);
+  }
+
+  const loadMobileUx = () => {
+    if (document.querySelector('script[data-lux-mobile-ux]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/mobile-ux.js?v=20260911-1';
+    script.dataset.luxMobileUx = '1';
+    document.body.appendChild(script);
+  };
+
+  // Espera os módulos principais (emulador/leitor) terminarem de carregar para poder
+  // envolvê-los sem alterar a implementação desktop.
+  if (document.readyState === 'complete') loadMobileUx();
+  else window.addEventListener('load', loadMobileUx, { once: true });
+})();
