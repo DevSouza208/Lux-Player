@@ -1,4 +1,4 @@
-/* Stage 3 — Lux Console mobile HUD rendering only. Desktop is untouched. */
+/* Stage 2c — mobile emulator edge-to-edge with native gamepad/chrome hidden. Desktop is untouched. */
 @media (max-width: 767px) {
   body.lux-console-open {
     overflow: hidden;
@@ -33,6 +33,7 @@
     background: #000 !important;
   }
 
+  /* Remove only the Lux/player frame. */
   #emulatorModal.lux-console-mobile-stage1 > div > .border-b,
   #emulatorModal.lux-console-mobile-stage1 > div > .border-t {
     display: none !important;
@@ -50,7 +51,9 @@
     background: #000 !important;
   }
 
-  /* Native EmulatorJS touch controls stay fully hidden. Renderer is untouched. */
+  /* Exact EmulatorJS touch-controller container. EmulatorJS creates
+     this.virtualGamepad with .ejs_virtualGamepad_parent, then may also add
+     .ejs-vgamepad-active. Hide both forms, plus the native menu/chrome. */
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_virtualGamepad_parent,
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs-vgamepad-active,
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_menu_bar,
@@ -61,7 +64,8 @@
     pointer-events: none !important;
   }
 
-  /* iOS/Safari resume action remains the only interactive EmulatorJS control. */
+  /* iOS/Safari may require one extra user gesture before audio/emulation can
+     resume. Keep that required action, but present it as a single Lux play action. */
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .lux-ejs-resume-popup h4 {
     display: none !important;
   }
@@ -86,248 +90,6 @@
     pointer-events: auto !important;
   }
 
-  /* Lux HUD: visual only for this stage. Every element ignores touch. */
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-hud {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    pointer-events: none !important;
-    user-select: none;
-    -webkit-user-select: none;
-    transition: opacity .18s ease;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-hud-hidden {
-    opacity: 0 !important;
-    visibility: hidden !important;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-hud button,
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-hud [disabled] {
-    appearance: none;
-    -webkit-appearance: none;
-    opacity: 1 !important;
-    pointer-events: none !important;
-    color: #f7efff !important;
-    font: inherit;
-  }
-
-  .lux-hud-control {
-    border: 1px solid rgba(216,180,254,.72);
-    background: linear-gradient(160deg, rgba(64,27,103,.94), rgba(23,11,42,.96));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 8px 24px rgba(46,16,101,.38), 0 0 20px rgba(168,85,247,.16);
-    text-shadow: 0 0 14px rgba(216,180,254,.52);
-    font-weight: 900 !important;
-    letter-spacing: .04em;
-  }
-
-  .lux-hud-shoulders {
-    position: fixed;
-    top: 43dvh;
-    left: 0;
-    right: 0;
-    height: 62px;
-  }
-
-  .lux-hud-shoulder {
-    position: absolute;
-    width: 112px;
-    height: 54px;
-    border-radius: 18px 18px 24px 24px;
-    font-size: 20px !important;
-  }
-
-  .lux-hud-shoulder-1 { left: 24px; }
-  .lux-hud-shoulder-2 { right: 24px; }
-  .lux-hud-shoulders-3 .lux-hud-shoulder-1 { left: 20px; }
-  .lux-hud-shoulders-3 .lux-hud-shoulder-2 { left: 50%; transform: translateX(-50%); width: 76px; }
-  .lux-hud-shoulders-3 .lux-hud-shoulder-3 { right: 20px; }
-
-  .lux-hud-dpad {
-    position: fixed;
-    left: 28px;
-    bottom: 15dvh;
-    width: 154px;
-    height: 154px;
-  }
-
-  .lux-hud-dpad-button {
-    position: absolute;
-    width: 54px;
-    height: 54px;
-    border-radius: 13px;
-    font-size: 20px !important;
-    padding: 0;
-  }
-
-  .lux-hud-dpad-up { top: 0; left: 50px; }
-  .lux-hud-dpad-left { top: 50px; left: 0; }
-  .lux-hud-dpad-right { top: 50px; right: 0; }
-  .lux-hud-dpad-down { bottom: 0; left: 50px; }
-  .lux-hud-dpad-center {
-    position: absolute;
-    top: 50px;
-    left: 50px;
-    width: 54px;
-    height: 54px;
-    border-radius: 12px;
-    background: linear-gradient(160deg, rgba(64,27,103,.94), rgba(23,11,42,.96));
-    box-shadow: inset 0 0 0 1px rgba(216,180,254,.3);
-  }
-
-  .lux-hud-face {
-    position: fixed;
-    right: 26px;
-    bottom: 16dvh;
-    width: 146px;
-    height: 132px;
-  }
-
-  .lux-hud-face-button {
-    position: absolute;
-    width: 66px;
-    height: 66px;
-    border-radius: 50%;
-    font-size: 23px !important;
-    padding: 0;
-  }
-
-  .lux-hud-face-2 .lux-hud-face-button-1 { left: 0; bottom: 0; }
-  .lux-hud-face-2 .lux-hud-face-button-2 { right: 0; top: 0; }
-
-  .lux-hud-face-4 .lux-hud-face-button-1 { left: 0; top: 33px; }
-  .lux-hud-face-4 .lux-hud-face-button-2 { left: 40px; top: 0; }
-  .lux-hud-face-4 .lux-hud-face-button-3 { left: 40px; bottom: 0; }
-  .lux-hud-face-4 .lux-hud-face-button-4 { right: 0; top: 33px; }
-
-  .lux-hud-face-six {
-    width: 170px;
-    height: 116px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, 1fr);
-    gap: 8px;
-  }
-
-  .lux-hud-face-six .lux-hud-face-button {
-    position: static;
-    width: 50px;
-    height: 50px;
-    font-size: 17px !important;
-  }
-
-  .lux-hud-system-row {
-    position: fixed;
-    left: 50%;
-    bottom: 8.2dvh;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 16px;
-  }
-
-  .lux-hud-system {
-    min-width: 76px;
-    height: 36px;
-    border-radius: 18px;
-    font-size: 10px !important;
-    letter-spacing: .14em;
-    padding: 0 15px;
-  }
-
-  .lux-hud-menu {
-    position: fixed;
-    left: 50%;
-    bottom: 3.1dvh;
-    transform: translateX(-50%);
-    width: 46px;
-    height: 46px;
-    border: 1px solid rgba(192,132,252,.75);
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #9333ea, #4c1d95 58%, #160827 100%);
-    box-shadow: 0 0 28px rgba(147,51,234,.42), inset 0 1px 0 rgba(255,255,255,.25);
-  }
-
-  .lux-hud-menu span {
-    display: grid;
-    place-items: center;
-    color: #f5e9ff;
-    font-size: 13px;
-    transform: rotate(45deg);
-  }
-
-  .lux-hud-c-buttons {
-    position: fixed;
-    right: 112px;
-    bottom: 11.5dvh;
-    width: 92px;
-    height: 92px;
-  }
-
-  .lux-hud-c {
-    position: absolute;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    font-size: 12px !important;
-    padding: 0;
-    background: linear-gradient(160deg, rgba(82,45,15,.94), rgba(38,21,8,.96));
-    border-color: rgba(253,230,138,.72);
-  }
-
-  .lux-hud-c-up { left: 29px; top: 0; }
-  .lux-hud-c-left { left: 0; top: 29px; }
-  .lux-hud-c-right { right: 0; top: 29px; }
-  .lux-hud-c-down { left: 29px; bottom: 0; }
-
-  .lux-hud-analog {
-    position: fixed;
-    left: 188px;
-    bottom: 17dvh;
-    width: 84px;
-    height: 84px;
-    border-radius: 50%;
-    border: 1px solid rgba(216,180,254,.45);
-    background: radial-gradient(circle at 35% 30%, #4c1d95, #1d0c31 70%);
-    box-shadow: inset 0 0 20px rgba(0,0,0,.55), 0 0 18px rgba(168,85,247,.18);
-  }
-
-  .lux-hud-analog span {
-    position: absolute;
-    inset: 19px;
-    border-radius: 50%;
-    background: linear-gradient(145deg,#7e22ce,#35105c);
-    border: 1px solid rgba(216,180,254,.55);
-  }
-
-  @media (orientation: landscape) {
-    .lux-hud-shoulders { top: calc(12px + env(safe-area-inset-top, 0px)); height: 56px; }
-    .lux-hud-shoulder { width: 98px; height: 48px; font-size: 18px !important; }
-    .lux-hud-shoulder-1 { left: calc(18px + env(safe-area-inset-left, 0px)); }
-    .lux-hud-shoulder-2 { right: calc(18px + env(safe-area-inset-right, 0px)); }
-    .lux-hud-shoulders-3 .lux-hud-shoulder-1 { left: calc(18px + env(safe-area-inset-left, 0px)); }
-    .lux-hud-shoulders-3 .lux-hud-shoulder-3 { right: calc(18px + env(safe-area-inset-right, 0px)); }
-
-    .lux-hud-dpad {
-      left: calc(22px + env(safe-area-inset-left, 0px));
-      bottom: calc(22px + env(safe-area-inset-bottom, 0px));
-      width: 140px;
-      height: 140px;
-    }
-    .lux-hud-dpad-button { width: 50px; height: 50px; }
-    .lux-hud-dpad-up { left: 45px; }
-    .lux-hud-dpad-left { top: 45px; }
-    .lux-hud-dpad-right { top: 45px; }
-    .lux-hud-dpad-down { left: 45px; }
-    .lux-hud-dpad-center { left: 45px; top: 45px; width: 50px; height: 50px; }
-
-    .lux-hud-face {
-      right: calc(22px + env(safe-area-inset-right, 0px));
-      bottom: calc(30px + env(safe-area-inset-bottom, 0px));
-    }
-
-    .lux-hud-system-row { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
-    .lux-hud-menu { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; }
-    .lux-hud-c-buttons { right: calc(118px + env(safe-area-inset-right, 0px)); bottom: calc(23px + env(safe-area-inset-bottom, 0px)); }
-    .lux-hud-analog { left: calc(174px + env(safe-area-inset-left, 0px)); bottom: calc(42px + env(safe-area-inset-bottom, 0px)); }
-  }
+  /* Do not size, move, fade or hide #emulatorContainer, canvas, video or any
+     EmulatorJS rendering wrapper in this stage. */
 }
