@@ -16,6 +16,32 @@
     pointer-events: auto !important;
   }
 
+  /* Restore the render geometry from the first working mobile pass.
+     EmulatorJS nests its canvas/video inside an internal wrapper; sizing only
+     the surface to 100% can collapse against a wrapper with no useful height. */
+  #emulatorModal.lux-mobile-emulator #emulatorContainer *:has(> .lux-mobile-game-surface) {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-mobile-game-surface {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    z-index: 1 !important;
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
   .lux-mobile-start-overlay {
     position: fixed;
     inset: 0;
