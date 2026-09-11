@@ -4,7 +4,7 @@
   #emulatorModal.lux-console-mobile-stage1.lux-console-system-gb .lux-console-face-2,
   #emulatorModal.lux-console-mobile-stage1.lux-console-system-gbc .lux-console-face-2 {
     width: var(--lux-face-key);
-    height: calc((var(--lux-face-key) * 2) + 12px);
+    height: calc(var(--lux-face-key) + var(--lux-face-key) + 12px);
   }
 
   #emulatorModal.lux-console-mobile-stage1.lux-console-system-gb .lux-console-face-2 .lux-face-button-1,
