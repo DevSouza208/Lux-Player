@@ -90,7 +90,8 @@ function animateDashboardEntry() {
   if (!window.matchMedia('(max-width: 767px)').matches) return;
 
   const styles = [
-    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-nativeemu1']
+    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-nativeemu1'],
+    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260911-v1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
@@ -104,7 +105,8 @@ function animateDashboardEntry() {
 
   const loadMobileScripts = () => {
     const scripts = [
-      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-nativeemu1']
+      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-nativeemu1'],
+      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-v1']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;
