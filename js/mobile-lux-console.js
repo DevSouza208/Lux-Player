@@ -7,6 +7,14 @@
   const DIRECTION_INDEX = { up: 4, down: 5, left: 6, right: 7 };
   const activePointers = new Map();
 
+  const layerDefinitions = [
+    ['luxConsoleBackgroundLayer', 'lux-console-layer lux-console-background-layer'],
+    ['luxConsoleBezelLayer', 'lux-console-layer lux-console-bezel-layer'],
+    ['luxConsoleControlsLayer', 'lux-console-layer lux-console-controls-layer'],
+    ['luxConsoleContextLayer', 'lux-console-layer lux-console-context-layer'],
+    ['luxConsoleAlertsLayer', 'lux-console-layer lux-console-alerts-layer']
+  ];
+
   const sendDirection = (direction, pressed) => {
     const index = DIRECTION_INDEX[direction];
     const manager = window.EJS_emulator?.gameManager;
@@ -47,8 +55,67 @@
     });
   };
 
-  const ensureDpad = modal => {
+  const findPlayerFrame = modal => {
     if (!modal) return null;
+    const tagged = [...modal.children].find(child => child.classList?.contains('lux-console-player-frame'));
+    if (tagged) return tagged;
+    return [...modal.children].find(child => child.querySelector?.('#emulatorContainer')) || null;
+  };
+
+  const ensureLayer = (modal, id, className) => {
+    let layer = document.getElementById(id);
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = id;
+      layer.className = className;
+      layer.setAttribute('aria-hidden', 'true');
+      modal.appendChild(layer);
+    }
+    return layer;
+  };
+
+  const ensureLayerSystem = modal => {
+    if (!modal) return null;
+
+    const frame = findPlayerFrame(modal);
+    if (!frame) return null;
+    frame.classList.add('lux-console-player-frame');
+
+    const screenSlot = [...frame.children].find(child => child.classList?.contains('flex-1'));
+    if (screenSlot) screenSlot.classList.add('lux-console-screen-layer');
+
+    let background = document.getElementById('luxConsoleBackgroundLayer');
+    if (!background) {
+      background = document.createElement('div');
+      background.id = 'luxConsoleBackgroundLayer';
+      background.className = 'lux-console-layer lux-console-background-layer';
+      background.setAttribute('aria-hidden', 'true');
+      modal.insertBefore(background, frame);
+    }
+
+    layerDefinitions.slice(1).forEach(([id, className]) => ensureLayer(modal, id, className));
+
+    const bezel = document.getElementById('luxConsoleBezelLayer');
+    if (bezel && !bezel.querySelector('.lux-console-bezel-window')) {
+      const windowEl = document.createElement('div');
+      windowEl.className = 'lux-console-bezel-window';
+      windowEl.setAttribute('aria-hidden', 'true');
+      bezel.appendChild(windowEl);
+    }
+
+    return {
+      frame,
+      screen: screenSlot,
+      background,
+      bezel,
+      controls: document.getElementById('luxConsoleControlsLayer'),
+      context: document.getElementById('luxConsoleContextLayer'),
+      alerts: document.getElementById('luxConsoleAlertsLayer')
+    };
+  };
+
+  const ensureDpad = controlsLayer => {
+    if (!controlsLayer) return null;
     let dpad = document.getElementById('luxConsoleDpad');
     if (!dpad) {
       dpad = document.createElement('div');
@@ -62,8 +129,10 @@
         <button type="button" class="lux-dpad-button lux-dpad-right" data-direction="right" aria-label="Direita"><span>▶</span></button>
         <button type="button" class="lux-dpad-button lux-dpad-down" data-direction="down" aria-label="Baixo"><span>▼</span></button>
       `;
-      modal.appendChild(dpad);
+      controlsLayer.appendChild(dpad);
       dpad.querySelectorAll('[data-direction]').forEach(bindDpadButton);
+    } else if (dpad.parentElement !== controlsLayer) {
+      controlsLayer.appendChild(dpad);
     }
     return dpad;
   };
@@ -115,9 +184,6 @@
     if (!intro || intro.classList.contains('hidden')) return;
     if (typeof window.startEmulatorSession !== 'function') return;
 
-    // On iOS/Safari the EmulatorJS resume button needs to receive the real user
-    // gesture. Starting the loader here removes Lux's extra confirmation, so the
-    // only tap the user makes is on the EmulatorJS action styled as Lux "JOGAR".
     modal.dataset.luxMobileSessionStarted = '1';
     window.startEmulatorSession();
     wrapGameStartForDpad();
@@ -126,9 +192,12 @@
   const applyStage1 = () => {
     const modal = document.getElementById('emulatorModal');
     if (!modal) return false;
+
     modal.classList.add('lux-console-mobile-stage1');
     document.body.classList.add('lux-console-open');
-    ensureDpad(modal);
+
+    const layers = ensureLayerSystem(modal);
+    ensureDpad(layers?.controls);
     startMobileSessionOnce(modal);
     polishSafariResumePopup();
     return true;
