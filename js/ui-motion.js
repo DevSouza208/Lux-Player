@@ -91,7 +91,7 @@ function animateDashboardEntry() {
 
   const styles = [
     ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-nativeemu1'],
-    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260911-v1']
+    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260911-stage1b']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
@@ -106,7 +106,7 @@ function animateDashboardEntry() {
   const loadMobileScripts = () => {
     const scripts = [
       ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-nativeemu1'],
-      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-v1']
+      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-stage1b']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;
