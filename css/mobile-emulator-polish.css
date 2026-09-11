@@ -26,13 +26,9 @@
     object-fit: contain !important;
   }
 
-  /* No EmulatorJS touch UI on phones: Lux owns the whole mobile overlay. */
-  #emulatorModal.lux-mobile-emulator #emulatorContainer.lux-hide-native-controls button,
-  #emulatorModal.lux-mobile-emulator #emulatorContainer.lux-hide-native-controls [role="button"],
-  #emulatorModal.lux-mobile-emulator #emulatorContainer.lux-hide-native-controls .ejs_menu_button,
-  #emulatorModal.lux-mobile-emulator #emulatorContainer.lux-hide-native-controls .ejs_menu_bar,
-  #emulatorModal.lux-mobile-emulator #emulatorContainer.lux-hide-native-controls [class*="menu_bar"],
-  #emulatorModal.lux-mobile-emulator #emulatorContainer.lux-hide-native-controls [class*="menu-bar"] {
+  /* Hide only native EmulatorJS chrome replaced by Lux. Do not blanket-hide
+     buttons: iOS needs EmulatorJS' own resume/unlock control to start the game. */
+  #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-native-hidden {
     opacity: 0 !important;
     visibility: hidden !important;
     pointer-events: none !important;
@@ -87,12 +83,5 @@
     .lux-pad-center { bottom: calc(18px + env(safe-area-inset-bottom,0px)); gap:18px; }
     .lux-pad-center .small { min-width:82px; height:42px; font-size:15px; }
     .lux-mobile-game-menu-button { top: calc(8px + env(safe-area-inset-top,0px)) !important; right: calc(10px + env(safe-area-inset-right,0px)) !important; }
-  }
-
-  body.lux-native-panel-open #emulatorModal.lux-mobile-emulator #emulatorContainer button,
-  body.lux-native-panel-open #emulatorModal.lux-mobile-emulator #emulatorContainer [role="button"] {
-    opacity: 1 !important;
-    visibility: visible !important;
-    pointer-events: auto !important;
   }
 }
