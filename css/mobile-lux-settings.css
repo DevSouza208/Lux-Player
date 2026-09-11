@@ -1,0 +1,260 @@
+/* Lux Console mobile settings and cheats. Desktop is untouched. */
+@media (max-width: 767px) {
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-settings-sheet,
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-cheats-sheet {
+    width: min(92vw, 380px);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-setting-group {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-setting-card {
+    border: 1px solid rgba(192,132,252,.22);
+    border-radius: 16px;
+    background: rgba(255,255,255,.035);
+    padding: 11px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-setting-label {
+    display: block;
+    margin-bottom: 8px;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .04em;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-segmented {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    padding: 4px;
+    border: 1px solid rgba(192,132,252,.20);
+    border-radius: 13px;
+    background: rgba(7,3,13,.52);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-segmented button {
+    appearance: none;
+    -webkit-appearance: none;
+    min-height: 38px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: rgba(233,213,255,.62);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 800;
+    pointer-events: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-segmented button.is-active {
+    background: linear-gradient(180deg, rgba(126,34,206,.86), rgba(76,29,149,.86));
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 12px rgba(168,85,247,.18);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 50px;
+    padding: 10px 11px;
+    border: 1px solid rgba(192,132,252,.22);
+    border-radius: 15px;
+    background: rgba(255,255,255,.035);
+    color: #fff;
+    text-align: left;
+    pointer-events: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-setting-row strong {
+    display: block;
+    font-size: 10px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-setting-row small {
+    display: block;
+    margin-top: 2px;
+    color: rgba(216,180,254,.62);
+    font-size: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-setting-row-side {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #d8b4fe;
+    font-size: 9px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-toggle {
+    position: relative;
+    width: 38px;
+    height: 22px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(216,180,254,.20);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e9d5ff;
+    transition: transform .15s ease, background .15s ease;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-toggle.is-on {
+    background: rgba(126,34,206,.72);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-toggle.is-on::after {
+    transform: translateX(16px);
+    background: #fff;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-input,
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-code {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(192,132,252,.24);
+    border-radius: 13px;
+    background: rgba(7,3,13,.66);
+    color: #fff;
+    outline: none;
+    font: inherit;
+    font-size: 10px;
+    padding: 10px 11px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-code {
+    min-height: 72px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-input:focus,
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-code:focus {
+    border-color: rgba(192,132,252,.62);
+    box-shadow: 0 0 0 2px rgba(126,34,206,.12);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-add {
+    min-height: 40px;
+    border: 0;
+    border-radius: 12px;
+    background: linear-gradient(135deg,#9333ea,#7c3aed);
+    color: #fff;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 900;
+    pointer-events: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid rgba(192,132,252,.20);
+    border-radius: 13px;
+    background: rgba(255,255,255,.03);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-item strong {
+    display: block;
+    font-size: 9px;
+    color: #fff;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-item code {
+    display: block;
+    margin-top: 3px;
+    max-width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(216,180,254,.62);
+    font-size: 7.5px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-switch,
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-delete,
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-back {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    background: transparent;
+    color: #d8b4fe;
+    pointer-events: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-switch {
+    padding: 0;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-delete {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: rgba(244,63,94,.08);
+    color: #f5a3ba;
+    font-size: 14px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-empty,
+  #emulatorModal.lux-console-mobile-stage1 .lux-cheat-note {
+    margin-top: 10px;
+    color: rgba(216,180,254,.58);
+    font-size: 8px;
+    line-height: 1.4;
+  }
+
+  @media (orientation: landscape) {
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-settings-sheet,
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-cheats-sheet {
+      width: min(52vw, 430px);
+      max-height: calc(100dvh - 20px);
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-setting-group {
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-setting-card,
+    #emulatorModal.lux-console-mobile-stage1 .lux-setting-row {
+      padding: 8px 10px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-setting-row {
+      min-height: 44px;
+    }
+  }
+}
