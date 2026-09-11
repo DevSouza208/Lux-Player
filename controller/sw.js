@@ -1,4 +1,4 @@
-const CACHE='lux-controller-v0.2.1';
+const CACHE='lux-controller-v0.3.0';
 const ASSETS=['./','./index.html','./gamepad-layout.css','./hub.css','./manifest.json','./touchpad.js','./hub.js','./orientation.js','../icon.png'];
 const RUNTIME_SCRIPTS=['./touchpad.js','./hub.js','./orientation.js'];
 
@@ -6,14 +6,14 @@ function injectRuntime(html){
   let output=html;
   for(const src of RUNTIME_SCRIPTS){
     if(output.includes(`src="${src}"`)||output.includes(`src='${src}'`)) continue;
-    output=output.replace('</body>',`<script src="${src}"></script></body>`);
+    output=output.replace('</body>',`<script src="${src}?v=150"></script></body>`);
   }
   return output;
 }
 
 async function buildNavigationResponse(request){
   try{
-    const response=await fetch(request);
+    const response=await fetch(request,{cache:'no-store'});
     const html=injectRuntime(await response.text());
     const headers=new Headers(response.headers);
     headers.delete('content-length');
@@ -22,9 +22,9 @@ async function buildNavigationResponse(request){
     const cache=await caches.open(CACHE);
     await cache.put('./index.html',modified.clone());
     return modified;
-  }catch(_){
+  }catch(error){
     const cached=await caches.match('./index.html');
-    if(!cached) throw _;
+    if(!cached) throw error;
     const html=injectRuntime(await cached.text());
     const headers=new Headers(cached.headers);
     headers.delete('content-length');
@@ -46,8 +46,8 @@ self.addEventListener('activate',event=>event.waitUntil((async()=>{
   await Promise.all(clients.map(client=>{
     try{
       const url=new URL(client.url);
-      const shouldRefresh=url.searchParams.has('remote')||(!url.searchParams.has('code')&&!url.searchParams.has('remote'));
-      return shouldRefresh&&client.navigate?client.navigate(client.url):Promise.resolve();
+      if(!url.pathname.includes('/controller/'))return Promise.resolve();
+      return client.navigate?client.navigate(client.url):Promise.resolve();
     }catch(_){return Promise.resolve()}
   }));
 })()));
