@@ -1,38 +1,7 @@
 /* Mobile-only emulator polish. Desktop/tablet >= 768px is untouched. */
 @media (max-width: 767px) {
-  #emulatorModal.lux-mobile-emulator,
-  #emulatorModal.lux-mobile-emulator > div,
-  #emulatorModal.lux-mobile-emulator #emulatorContainer {
-    width: 100vw !important;
-    height: 100dvh !important;
-    max-width: none !important;
-    max-height: none !important;
-    background: #000 !important;
-  }
-
-  #emulatorModal.lux-mobile-emulator #emulatorContainer {
-    position: absolute !important;
-    inset: 0 !important;
-    overflow: hidden !important;
-  }
-
-  #emulatorModal.lux-mobile-emulator #emulatorContainer canvas,
-  #emulatorModal.lux-mobile-emulator #emulatorContainer video,
-  #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-mobile-game-surface {
-    width: 100% !important;
-    height: 100% !important;
-    max-width: none !important;
-    max-height: none !important;
-    object-fit: contain !important;
-  }
-
-  /* Hide only native EmulatorJS chrome replaced by Lux. Do not blanket-hide
-     buttons: iOS needs EmulatorJS' own resume/unlock control to start the game. */
-  #emulatorModal.lux-mobile-emulator #emulatorContainer .lux-native-hidden {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-  }
+  /* Debug pass: keep EmulatorJS fully visible. We will hide native pieces
+     one by one after confirming which element was killing the game surface. */
 
   .lux-mobile-pad-overlay { position: fixed; inset: 0; z-index: 60; pointer-events: none; touch-action: none; }
   .lux-mobile-pad-overlay .lux-pad { pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; border: 1.5px solid rgba(255,255,255,.72); background: rgba(42,42,42,.68); color: rgba(255,255,255,.9); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
