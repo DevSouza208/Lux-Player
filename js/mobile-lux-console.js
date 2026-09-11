@@ -4,7 +4,55 @@
   if (!window.matchMedia('(max-width: 767px)').matches || window.__luxConsoleMobileStage1Installed) return;
   window.__luxConsoleMobileStage1Installed = true;
 
-  const DIRECTION_INDEX = { up: 4, down: 5, left: 6, right: 7 };
+  const RETROPAD = {
+    B: 0, Y: 1, SELECT: 2, START: 3,
+    UP: 4, DOWN: 5, LEFT: 6, RIGHT: 7,
+    A: 8, X: 9, L: 10, R: 11, L2: 12, R2: 13, L3: 14, R3: 15
+  };
+
+  const SYSTEM_LAYOUTS = {
+    gba: {
+      shoulders: [['L', RETROPAD.L], ['R', RETROPAD.R]],
+      face: [['B', RETROPAD.B], ['A', RETROPAD.A]],
+      system: [['SELECT', RETROPAD.SELECT], ['START', RETROPAD.START]]
+    },
+    gb: {
+      shoulders: [],
+      face: [['B', RETROPAD.B], ['A', RETROPAD.A]],
+      system: [['SELECT', RETROPAD.SELECT], ['START', RETROPAD.START]]
+    },
+    gbc: {
+      shoulders: [],
+      face: [['B', RETROPAD.B], ['A', RETROPAD.A]],
+      system: [['SELECT', RETROPAD.SELECT], ['START', RETROPAD.START]]
+    },
+    nes: {
+      shoulders: [],
+      face: [['B', RETROPAD.B], ['A', RETROPAD.A]],
+      system: [['SELECT', RETROPAD.SELECT], ['START', RETROPAD.START]]
+    },
+    snes: {
+      shoulders: [['L', RETROPAD.L], ['R', RETROPAD.R]],
+      face: [['Y', RETROPAD.Y], ['X', RETROPAD.X], ['B', RETROPAD.B], ['A', RETROPAD.A]],
+      system: [['SELECT', RETROPAD.SELECT], ['START', RETROPAD.START]]
+    },
+    megadrive: {
+      shoulders: [],
+      face: [['X', 10], ['Y', 9], ['Z', 11], ['A', 1], ['B', 0], ['C', 8]],
+      system: [['START', 3]]
+    },
+    genesis: {
+      shoulders: [],
+      face: [['X', 10], ['Y', 9], ['Z', 11], ['A', 1], ['B', 0], ['C', 8]],
+      system: [['START', 3]]
+    },
+    n64: {
+      shoulders: [['L', 10], ['Z', 12], ['R', 11]],
+      face: [['B', 1], ['A', 0]],
+      system: [['START', 3]]
+    }
+  };
+
   const activePointers = new Map();
 
   const layerDefinitions = [
@@ -15,43 +63,52 @@
     ['luxConsoleAlertsLayer', 'lux-console-layer lux-console-alerts-layer']
   ];
 
-  const sendDirection = (direction, pressed) => {
-    const index = DIRECTION_INDEX[direction];
+  const currentSystem = () => {
+    let type = '';
+    try {
+      if (typeof activeEmulatorGame !== 'undefined' && activeEmulatorGame?.console) type = activeEmulatorGame.console;
+      else if (typeof pendingEmulatorGame !== 'undefined' && pendingEmulatorGame?.console) type = pendingEmulatorGame.console;
+    } catch (_) {}
+    if (!type) type = document.getElementById('emulatorIntroConsole')?.textContent || 'gba';
+    return String(type).toLowerCase().replaceAll(' ', '');
+  };
+
+  const sendInput = (index, pressed) => {
     const manager = window.EJS_emulator?.gameManager;
     if (typeof index !== 'number' || !manager || typeof manager.simulateInput !== 'function') return false;
     try {
       manager.simulateInput(0, index, pressed ? 1 : 0);
       return true;
     } catch (error) {
-      console.warn('Lux D-pad: não foi possível enviar o input ao EmulatorJS.', error);
+      console.warn('Lux Console: não foi possível enviar o input ao EmulatorJS.', error);
       return false;
     }
   };
 
   const releasePointer = pointerId => {
-    const direction = activePointers.get(pointerId);
-    if (!direction) return;
+    const active = activePointers.get(pointerId);
+    if (!active) return;
     activePointers.delete(pointerId);
-    sendDirection(direction, false);
-    document.querySelector(`#luxConsoleDpad [data-direction="${direction}"]`)?.classList.remove('lux-dpad-pressed');
+    sendInput(active.index, false);
+    active.element?.classList.remove('lux-control-pressed');
   };
 
-  const releaseAllDirections = () => {
+  const releaseAllInputs = () => {
     [...activePointers.keys()].forEach(releasePointer);
-    Object.keys(DIRECTION_INDEX).forEach(direction => sendDirection(direction, false));
   };
 
-  const bindDpadButton = button => {
+  const bindInputButton = button => {
     if (!button || button.dataset.luxBound === '1') return;
     button.dataset.luxBound = '1';
-    const direction = button.dataset.direction;
+    const index = Number(button.dataset.inputIndex);
+    if (!Number.isFinite(index)) return;
 
     button.addEventListener('pointerdown', event => {
       event.preventDefault();
-      if (!direction || activePointers.has(event.pointerId)) return;
-      activePointers.set(event.pointerId, direction);
-      button.classList.add('lux-dpad-pressed');
-      sendDirection(direction, true);
+      if (activePointers.has(event.pointerId)) return;
+      activePointers.set(event.pointerId, { index, element: button });
+      button.classList.add('lux-control-pressed');
+      sendInput(index, true);
     });
   };
 
@@ -114,36 +171,77 @@
     };
   };
 
-  const ensureDpad = controlsLayer => {
-    if (!controlsLayer) return null;
-    let dpad = document.getElementById('luxConsoleDpad');
-    if (!dpad) {
-      dpad = document.createElement('div');
-      dpad.id = 'luxConsoleDpad';
-      dpad.className = 'lux-console-dpad lux-console-dpad-hidden';
-      dpad.setAttribute('aria-label', 'Direcional do jogo');
-      dpad.innerHTML = `
-        <button type="button" class="lux-dpad-button lux-dpad-up" data-direction="up" aria-label="Cima"><span>▲</span></button>
-        <button type="button" class="lux-dpad-button lux-dpad-left" data-direction="left" aria-label="Esquerda"><span>◀</span></button>
-        <span class="lux-dpad-center" aria-hidden="true"><span></span></span>
-        <button type="button" class="lux-dpad-button lux-dpad-right" data-direction="right" aria-label="Direita"><span>▶</span></button>
-        <button type="button" class="lux-dpad-button lux-dpad-down" data-direction="down" aria-label="Baixo"><span>▼</span></button>
-      `;
-      controlsLayer.appendChild(dpad);
-      dpad.querySelectorAll('[data-direction]').forEach(bindDpadButton);
-    } else if (dpad.parentElement !== controlsLayer) {
-      controlsLayer.appendChild(dpad);
-    }
-    return dpad;
+  const renderInputButton = (label, index, className) =>
+    `<button type="button" class="lux-game-control ${className}" data-input-index="${index}" aria-label="${label}"><span>${label}</span></button>`;
+
+  const renderDpad = () => `
+    <div id="luxConsoleDpad" class="lux-console-dpad" aria-label="Direcional do jogo">
+      ${renderInputButton('▲', RETROPAD.UP, 'lux-dpad-button lux-dpad-up')}
+      ${renderInputButton('◀', RETROPAD.LEFT, 'lux-dpad-button lux-dpad-left')}
+      <span class="lux-dpad-center" aria-hidden="true"><span></span></span>
+      ${renderInputButton('▶', RETROPAD.RIGHT, 'lux-dpad-button lux-dpad-right')}
+      ${renderInputButton('▼', RETROPAD.DOWN, 'lux-dpad-button lux-dpad-down')}
+    </div>`;
+
+  const renderShoulders = layout => {
+    if (!layout.shoulders.length) return '';
+    return `<div class="lux-console-shoulders lux-console-shoulders-${layout.shoulders.length}">${layout.shoulders
+      .map(([label, index], position) => renderInputButton(label, index, `lux-shoulder lux-shoulder-${position + 1}`))
+      .join('')}</div>`;
   };
 
-  const showDpad = () => {
-    document.getElementById('luxConsoleDpad')?.classList.remove('lux-console-dpad-hidden');
+  const renderFace = layout => {
+    const count = layout.face.length;
+    return `<div class="lux-console-face lux-console-face-${count}">${layout.face
+      .map(([label, index], position) => renderInputButton(label, index, `lux-face-button lux-face-button-${position + 1}`))
+      .join('')}</div>`;
   };
 
-  const hideDpad = () => {
-    releaseAllDirections();
-    document.getElementById('luxConsoleDpad')?.classList.add('lux-console-dpad-hidden');
+  const renderSystemButtons = layout => {
+    if (!layout.system.length) return '';
+    return `<div class="lux-console-system-buttons lux-console-system-buttons-${layout.system.length}">${layout.system
+      .map(([label, index], position) => renderInputButton(label, index, `lux-system-button lux-system-button-${position + 1}`))
+      .join('')}</div>`;
+  };
+
+  const renderBrandButton = () => `
+    <button type="button" class="lux-console-brand-button" tabindex="-1" aria-hidden="true" disabled>
+      <img src="lux-play-icon.svg" alt="">
+    </button>`;
+
+  const ensureGameplayControls = (modal, controlsLayer) => {
+    if (!modal || !controlsLayer) return null;
+    const system = currentSystem();
+    const layout = SYSTEM_LAYOUTS[system] || SYSTEM_LAYOUTS.gba;
+
+    [...modal.classList]
+      .filter(name => name.startsWith('lux-console-system-'))
+      .forEach(name => modal.classList.remove(name));
+    modal.classList.add(`lux-console-system-${system}`);
+
+    if (controlsLayer.dataset.system === system && controlsLayer.querySelector('#luxConsoleDpad')) return controlsLayer;
+
+    releaseAllInputs();
+    controlsLayer.dataset.system = system;
+    controlsLayer.classList.add('lux-console-controls-hidden');
+    controlsLayer.innerHTML = `
+      ${renderShoulders(layout)}
+      ${renderBrandButton()}
+      ${renderDpad()}
+      ${renderFace(layout)}
+      ${renderSystemButtons(layout)}
+    `;
+    controlsLayer.querySelectorAll('[data-input-index]').forEach(bindInputButton);
+    return controlsLayer;
+  };
+
+  const showControls = () => {
+    document.getElementById('luxConsoleControlsLayer')?.classList.remove('lux-console-controls-hidden');
+  };
+
+  const hideControls = () => {
+    releaseAllInputs();
+    document.getElementById('luxConsoleControlsLayer')?.classList.add('lux-console-controls-hidden');
   };
 
   const polishSafariResumePopup = () => {
@@ -167,14 +265,14 @@
     });
   };
 
-  const wrapGameStartForDpad = () => {
+  const wrapGameStartForControls = () => {
     const original = window.EJS_onGameStart;
-    if (original?.__luxDpadWrapped) return;
+    if (original?.__luxControlsWrapped) return;
     const wrapped = (...args) => {
       try { original?.(...args); }
-      finally { showDpad(); }
+      finally { showControls(); }
     };
-    wrapped.__luxDpadWrapped = true;
+    wrapped.__luxControlsWrapped = true;
     window.EJS_onGameStart = wrapped;
   };
 
@@ -186,7 +284,7 @@
 
     modal.dataset.luxMobileSessionStarted = '1';
     window.startEmulatorSession();
-    wrapGameStartForDpad();
+    wrapGameStartForControls();
   };
 
   const applyStage1 = () => {
@@ -197,7 +295,7 @@
     document.body.classList.add('lux-console-open');
 
     const layers = ensureLayerSystem(modal);
-    ensureDpad(layers?.controls);
+    ensureGameplayControls(modal, layers?.controls);
     startMobileSessionOnce(modal);
     polishSafariResumePopup();
     return true;
@@ -205,7 +303,7 @@
 
   const cleanup = () => {
     if (!document.getElementById('emulatorModal')) {
-      hideDpad();
+      hideControls();
       document.body.classList.remove('lux-console-open');
     }
   };
@@ -216,8 +314,8 @@
 
   window.addEventListener('pointerup', event => releasePointer(event.pointerId), { passive: true });
   window.addEventListener('pointercancel', event => releasePointer(event.pointerId), { passive: true });
-  window.addEventListener('blur', releaseAllDirections);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllDirections(); });
+  window.addEventListener('blur', releaseAllInputs);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllInputs(); });
 
   observer.observe(document.body, { childList: true, subtree: true });
   applyStage1();
