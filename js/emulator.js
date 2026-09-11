@@ -218,7 +218,7 @@ async function loadRequestedGameSlot() {
         // The user explicitly chose this version; synchronize it as a new save.
         local = { ...local, updatedAt: Date.now() };
         await writeLocalGameSave(game, slot, local.state, local.updatedAt, true, user, cloud.updatedAt);
-        const result = await uploadLocalGameSave(await readLocalGameSave(game, slot, user).catch(() => null), user).catch(() => null);
+        const result = await uploadLocalGameSave(await readLocalGameSave(game, slot, user), user).catch(() => null);
         if (!result?.saved) alert('Vamos usar o save deste dispositivo. A sincronização ficou pendente; nenhuma nova versão da nuvem foi substituída.');
       }
     } else if (cloud && local) {
