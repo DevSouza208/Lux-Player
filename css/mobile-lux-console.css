@@ -1,4 +1,4 @@
-/* Stage 2b — mobile emulator edge-to-edge with native gamepad/chrome hidden. Desktop is untouched. */
+/* Stage 2c — mobile emulator edge-to-edge with native gamepad/chrome hidden. Desktop is untouched. */
 @media (max-width: 767px) {
   body.lux-console-open {
     overflow: hidden;
@@ -51,13 +51,16 @@
     background: #000 !important;
   }
 
-  /* EmulatorJS puts its whole touch controller inside .ejs-vgamepad-active.
-     Hide that container and the native menu bar instead of hiding every button.
-     This deliberately leaves the Safari "resume emulator" button available. */
+  /* Exact EmulatorJS touch-controller container. EmulatorJS creates
+     this.virtualGamepad with .ejs_virtualGamepad_parent, then may also add
+     .ejs-vgamepad-active. Hide both forms, plus the native menu/chrome. */
+  #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_virtualGamepad_parent,
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs-vgamepad-active,
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_menu_bar,
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_virtualGamepad_open {
     display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
     pointer-events: none !important;
   }
 
