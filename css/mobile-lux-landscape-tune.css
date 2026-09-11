@@ -1,0 +1,99 @@
+/* Landscape tuning only. D-pad and face buttons intentionally remain untouched. */
+@media (max-width: 767px) and (orientation: landscape) {
+  /* Moldura mode: refine the controls around the game without changing the game area. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    --lux-shoulder-top: calc(10px + env(safe-area-inset-top, 0px));
+    --lux-shoulder-width: 82px;
+    --lux-shoulder-height: 42px;
+    --lux-landscape-action-width: 58px;
+    --lux-landscape-action-gap: 6px;
+  }
+
+  /* L/R: a little taller and less pill-shaped, same overall footprint. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-shoulder {
+    width: var(--lux-shoulder-width);
+    height: var(--lux-shoulder-height);
+    border-radius: 13px;
+  }
+
+  /* Select / Start rise to make room for the paired action buttons below. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-system-button {
+    bottom: calc(43px + env(safe-area-inset-bottom, 0px));
+    min-width: 72px;
+    width: 72px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 12px;
+    font-size: 8px;
+    letter-spacing: .08em;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-1 {
+    left: max(6px, calc((var(--lux-landscape-gutter) - 72px) / 2));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-2 {
+    right: max(6px, calc((var(--lux-landscape-gutter) - 72px) / 2));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-1 .lux-system-button-1 {
+    right: max(6px, calc((var(--lux-landscape-gutter) - 72px) / 2));
+  }
+
+  /* Split the four utility actions into two pairs: two under Select, two under Start. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-actionbar {
+    position: fixed;
+    inset: 0;
+    width: auto;
+    height: auto;
+    padding: 0;
+    transform: none;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    display: block;
+    pointer-events: none !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button {
+    position: absolute;
+    bottom: calc(5px + env(safe-area-inset-bottom, 0px));
+    width: var(--lux-landscape-action-width);
+    height: 30px;
+    min-width: var(--lux-landscape-action-width);
+    padding: 2px 3px;
+    border: 1px solid rgba(216,180,254,.20);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(52,20,88,.84), rgba(17,7,31,.90));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 5px 14px rgba(0,0,0,.18);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(1) {
+    left: max(4px, calc((var(--lux-landscape-gutter) - 122px) / 2));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(2) {
+    left: max(68px, calc((var(--lux-landscape-gutter) - 122px) / 2 + 64px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(3) {
+    right: max(68px, calc((var(--lux-landscape-gutter) - 122px) / 2 + 64px));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(4) {
+    right: max(4px, calc((var(--lux-landscape-gutter) - 122px) / 2));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-icon,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-icon svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-label {
+    font-size: 7.5px;
+  }
+}
