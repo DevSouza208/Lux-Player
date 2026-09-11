@@ -1,0 +1,188 @@
+/* Lux Console 1.5.8 mobile polish.
+   Portrait: only two-button face controls change shape.
+   Landscape Moldura: modules align to the D-pad width and the game gets a small top breathing lane.
+   Desktop and four-button face layouts stay untouched. */
+
+@media (max-width: 767px) and (orientation: portrait) {
+  /* Two-button consoles: same tall B/A language approved in landscape. */
+  #emulatorModal.lux-console-mobile-stage1 {
+    --lux-portrait-face-tall-width: clamp(56px, 15vw, 62px);
+    --lux-portrait-face-tall-height: clamp(82px, 22vw, 90px);
+    --lux-portrait-face-tall-gap: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 {
+    width: calc((var(--lux-portrait-face-tall-width) * 2) + var(--lux-portrait-face-tall-gap));
+    height: var(--lux-portrait-face-tall-height);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button {
+    width: var(--lux-portrait-face-tall-width);
+    height: var(--lux-portrait-face-tall-height);
+    border-radius: 18px;
+    font-size: 22px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-1 {
+    left: 0;
+    right: auto;
+    top: 0;
+    bottom: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-2 {
+    left: auto;
+    right: 0;
+    top: 0;
+    bottom: auto;
+  }
+}
+
+@media (max-width: 767px) and (orientation: landscape) {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    /* One visual module = the full D-pad width. */
+    --lux-module-width: var(--lux-dpad-size);
+    --lux-module-gap: 6px;
+    --lux-module-half: calc((var(--lux-module-width) - var(--lux-module-gap)) / 2);
+    --lux-module-left: var(--lux-dpad-left);
+    --lux-module-right: max(
+      calc(6px + env(safe-area-inset-right, 0px)),
+      calc((var(--lux-landscape-gutter) - var(--lux-module-width)) / 2)
+    );
+
+    /* Only a tiny screen reduction: enough to create a real top breathing lane. */
+    --lux-screen-top: max(12px, env(safe-area-inset-top, 0px));
+    --lux-screen-width: min(64vw, calc(133.333dvh - 112px));
+    --lux-screen-height: min(48vw, calc(100dvh - 84px));
+    --lux-screen-left: calc((100vw - var(--lux-screen-width)) / 2);
+    --lux-visible-screen-left: var(--lux-screen-left);
+    --lux-visible-screen-top: var(--lux-screen-top);
+    --lux-visible-screen-width: var(--lux-screen-width);
+    --lux-visible-screen-height: var(--lux-screen-height);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gba {
+    --lux-screen-width: min(68vw, calc(150dvh - 126px));
+    --lux-screen-height: min(45.333vw, calc(100dvh - 84px));
+    --lux-screen-left: calc((100vw - var(--lux-screen-width)) / 2);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gb,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gbc {
+    --lux-screen-width: min(54vw, calc(111.111dvh - 93.333px));
+    --lux-screen-height: min(48.6vw, calc(100dvh - 84px));
+    --lux-screen-left: calc((100vw - var(--lux-screen-width)) / 2);
+  }
+
+  /* Branding lives in the free lower-center lane, independent of the side action pairs. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand {
+    top: auto;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand img {
+    width: 28px;
+    height: 28px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-wordmark {
+    font-size: 16px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand small {
+    left: 36px;
+    top: 20px;
+    font-size: 5px;
+  }
+
+  /* L/R become the same width as the full D-pad and align to the same side columns. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    --lux-shoulder-width: var(--lux-module-width);
+    --lux-shoulder-height: 68px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-shoulder {
+    width: var(--lux-module-width);
+    height: var(--lux-shoulder-height);
+    border-radius: 12px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-2 .lux-shoulder-1,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-3 .lux-shoulder-1 {
+    left: var(--lux-module-left);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-2 .lux-shoulder-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-shoulders-3 .lux-shoulder-3 {
+    right: var(--lux-module-right);
+  }
+
+  /* Select/Start use the same module width too. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-system-button {
+    width: var(--lux-module-width);
+    min-width: var(--lux-module-width);
+    height: 62px;
+    padding: 0 8px;
+    border-radius: 12px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-1 {
+    left: var(--lux-module-left);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-2 .lux-system-button-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-system-buttons-1 .lux-system-button-1 {
+    right: var(--lux-module-right);
+  }
+
+  /* Two-button consoles: B+A together equal one D-pad module. Four-button diamonds stay untouched. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-2 {
+    right: var(--lux-module-right);
+    width: var(--lux-module-width);
+    height: 90px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-2 .lux-face-button {
+    width: var(--lux-module-half);
+    height: 88px;
+    border-radius: 17px;
+    font-size: 21px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-2 .lux-face-button-1 {
+    left: 0;
+    right: auto;
+    top: 1px;
+    bottom: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-2 .lux-face-button-2 {
+    left: auto;
+    right: 0;
+    top: 1px;
+    bottom: auto;
+  }
+
+  /* Each side action pair also equals one D-pad module. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button {
+    width: var(--lux-module-half);
+    min-width: var(--lux-module-half);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(1) {
+    left: var(--lux-module-left);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(2) {
+    left: calc(var(--lux-module-left) + var(--lux-module-half) + var(--lux-module-gap));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(3) {
+    right: calc(var(--lux-module-right) + var(--lux-module-half) + var(--lux-module-gap));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button:nth-child(4) {
+    right: var(--lux-module-right);
+  }
+}
