@@ -27,11 +27,23 @@ function animateDashboardEntry() {
   );
 }
 
+// Mantém o número exibido na tela de login alinhado ao package.json da versão 1.5.0.
+(() => {
+  const applyVersion = () => {
+    const auth = document.getElementById('authScreen');
+    if (!auth) return;
+    const badge = [...auth.querySelectorAll('div')].find(el => /^versão\s+[\d.]+$/i.test((el.textContent || '').trim()));
+    if (badge) badge.textContent = 'versão 1.5.0';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyVersion, { once: true });
+  else applyVersion();
+})();
+
 // Controles móveis ficam isolados do script principal.
 (() => {
   const modules = [
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260910-webrtc-pwa'],
-    ['lux-remote-host', 'js/lux-remote-host.js?v=20260910-1']
+    ['lux-remote-host', 'js/lux-remote-host.js?v=20260910-remote2']
   ];
   modules.forEach(([name, src]) => {
     if (document.querySelector(`script[data-${name}]`)) return;
