@@ -1,0 +1,111 @@
+/* Lux Play mobile UX — intentionally scoped to phones only. Desktop/tablet >= 768px is untouched. */
+@media (max-width: 767px) {
+  :root { --lux-mobile-bottom: calc(4.35rem + env(safe-area-inset-bottom, 0px)); }
+
+  body { overscroll-behavior-y: none; }
+
+  /* Compact header: content wins on small screens. */
+  body > header { height: 58px !important; padding-left: 12px !important; padding-right: 10px !important; gap: 8px; }
+  body > header > div:first-child { gap: 8px !important; min-width: 0; }
+  body > header > div:first-child > div:first-child { width: 34px !important; height: 34px !important; border-radius: 11px !important; }
+  body > header > div:first-child > span { font-size: 1rem !important; letter-spacing: .11em !important; white-space: nowrap; }
+  body > header > div:last-child { gap: 6px !important; }
+  #userNameBadge, #userExpiryBadge { display: none !important; }
+  #userNameBadge + *, #userExpiryBadge + * { min-width: 0; }
+  body > header > div:last-child > div:last-child { border-left: 0 !important; padding-left: 0 !important; gap: 0 !important; }
+  body > header button { min-width: 38px; min-height: 38px; }
+
+  /* Bottom nav / safe area. */
+  #mainDashboard { padding-bottom: var(--lux-mobile-bottom) !important; }
+  #mobileBottomNav, nav.fixed.bottom-0 { padding-bottom: env(safe-area-inset-bottom, 0px) !important; min-height: var(--lux-mobile-bottom); }
+
+  /* Search FAB must never float over immersive/temporary screens. */
+  body.lux-mobile-immersive #floatingSearchBtn,
+  body.lux-mobile-overlay-open #floatingSearchBtn,
+  #loadingSplash:not(.hidden) ~ #floatingSearchBtn { display: none !important; }
+
+  /* ---------------- Games catalog ---------------- */
+  #gamesSection > div { padding: 16px 12px calc(90px + env(safe-area-inset-bottom, 0px)) !important; }
+  #gamesSection .lux-mobile-games-head { margin-bottom: 14px !important; align-items: center !important; gap: 10px; }
+  #gamesSection .lux-mobile-games-head h2 { font-size: 1rem !important; line-height: 1.2; }
+  #gamesSection .lux-mobile-games-head p { font-size: .68rem !important; }
+  #gamesSection .lux-mobile-original-filters { display: none !important; }
+  #gamesSection .lux-mobile-filter-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 0 13px; border: 1px solid rgba(168,85,247,.45); border-radius: 13px; color: #f3e8ff; background: #211134; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  #gamesSection .grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 9px !important; }
+  #gamesSection .grid > * { min-width: 0; }
+  #gamesSection .grid article,
+  #gamesSection .grid > button,
+  #gamesSection .grid > div { border-radius: 14px !important; }
+  #gamesSection .game-feature-badges { display: none !important; }
+  #gamesSection .grid img { border-radius: 12px 12px 0 0; }
+  #gamesSection .grid h3,
+  #gamesSection .grid [class*="font-bold"] { font-size: 10.5px !important; line-height: 1.25 !important; }
+  #gamesSection .grid p { font-size: 9px !important; }
+  #gamesSection .grid [class*="p-3"], #gamesSection .grid [class*="p-4"] { padding: 8px !important; }
+
+  /* ---------------- Game details ---------------- */
+  #gameDetailsModal { padding: 0 !important; align-items: stretch !important; background: #09060e !important; }
+  #gameDetailsModal > div { width: 100% !important; max-width: none !important; height: 100dvh !important; max-height: none !important; border: 0 !important; border-radius: 0 !important; overflow-y: auto !important; padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+  #gameDetailsModal > div > div:first-child { position: sticky; top: 0; z-index: 5; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 6px !important; background: linear-gradient(#120c1f 70%, transparent); }
+  #gameDetailsModal .grid { display: grid !important; grid-template-columns: 105px minmax(0,1fr) !important; gap: 14px !important; padding: 6px 16px 22px !important; align-items: start; }
+  #gameDetailsCover { width: 105px !important; max-height: 158px !important; margin: 0 !important; border-radius: 14px !important; position: sticky; top: 58px; }
+  #gameDetailsTitle { font-size: 1.12rem !important; line-height: 1.2 !important; }
+  #gameDetailsFeatures { margin-top: 6px !important; }
+  #gameDetailsSynopsis { max-height: 7.3em !important; font-size: .8rem !important; line-height: 1.55 !important; overflow: hidden !important; position: relative; }
+  #gameDetailsModal.lux-synopsis-open #gameDetailsSynopsis { max-height: none !important; overflow: visible !important; }
+  #gameDetailsSynopsis + * { margin-top: 8px; }
+  #gameDetailsActions { margin-top: 14px !important; }
+  #gameDetailsActions button { min-height: 44px; }
+  .lux-mobile-synopsis-toggle { grid-column: 2; width: max-content; margin-top: -4px; border: 0; background: transparent; color: #c084fc; font-size: 11px; font-weight: 800; }
+
+  /* ---------------- Reading ---------------- */
+  #readingSection { overflow-y: auto !important; }
+  #readingSection .reading-library { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  #readingSection .reading-hero { padding-top: 24px !important; padding-bottom: 18px !important; }
+  #readingSection .reading-hero-symbol { display: none !important; }
+  #readingSection .reading-hero h1 { font-size: clamp(2rem, 10vw, 2.65rem) !important; line-height: 1.03 !important; }
+  #readingSection .reading-hero p { font-size: .95rem !important; }
+  #readingSection .reading-tools { display: grid !important; grid-template-columns: minmax(0,1fr) auto !important; gap: 9px !important; align-items: center; }
+  #readingSection .reading-search { grid-column: 1 !important; width: 100%; min-width: 0; }
+  #readingSection .reading-tools > select,
+  #readingSection .reading-import-actions { display: none !important; }
+  #readingSection .lux-mobile-reading-filter-button { grid-column: 2; min-height: 48px; padding: 0 14px; border-radius: 14px; border: 1px solid rgba(168,85,247,.45); background: #211134; color: #f3e8ff; font-size: 12px; font-weight: 800; }
+  #readingCloudStatus { margin-top: 12px !important; }
+
+  /* ---------------- Shared mobile filter sheet ---------------- */
+  .lux-mobile-sheet { position: fixed; inset: 0; z-index: 120; display: flex; align-items: flex-end; background: rgba(4,2,8,.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .lux-mobile-sheet[hidden] { display: none !important; }
+  .lux-mobile-sheet-card { width: 100%; max-height: min(82dvh, 680px); overflow-y: auto; border: 1px solid rgba(168,85,247,.35); border-bottom: 0; border-radius: 26px 26px 0 0; padding: 18px 18px calc(20px + env(safe-area-inset-bottom, 0px)); background: #140c22; box-shadow: 0 -18px 70px rgba(0,0,0,.5); }
+  .lux-mobile-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .lux-mobile-sheet-head h2 { color: #fff; font-size: 1.08rem; font-weight: 850; }
+  .lux-mobile-sheet-close { width: 42px; height: 42px; border-radius: 14px; background: #291442; color: #e9d5ff; font-size: 18px; }
+  .lux-mobile-filter-field { display: grid; gap: 7px; margin-top: 13px; color: #c4b5d9; font-size: 11px; font-weight: 750; }
+  .lux-mobile-filter-field select { width: 100%; min-height: 48px; padding: 0 12px; border: 1px solid #5b2b83; border-radius: 13px; background: #1b102b; color: #fff; font-size: 14px; }
+  .lux-mobile-filter-toggle { width: 100%; min-height: 48px; margin-top: 13px; border: 1px solid #5b2b83; border-radius: 13px; background: #1b102b; color: #f3e8ff; font-weight: 800; }
+  .lux-mobile-filter-toggle.active { border-color: #fb7185; background: rgba(244,63,94,.14); color: #fecdd3; }
+  .lux-mobile-sheet-primary { width: 100%; min-height: 50px; margin-top: 18px; border-radius: 14px; background: linear-gradient(135deg,#9333ea,#7c3aed); color: #fff; font-weight: 900; }
+  .lux-mobile-sheet-secondary { width: 100%; min-height: 46px; margin-top: 9px; border-radius: 14px; border: 1px solid #5b2b83; color: #e9d5ff; background: transparent; font-weight: 750; }
+
+  /* ---------------- Immersive emulator ---------------- */
+  #emulatorModal.lux-mobile-emulator { padding: 0 !important; background: #000 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  #emulatorModal.lux-mobile-emulator > div { width: 100vw !important; max-width: none !important; height: 100dvh !important; max-height: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: #000 !important; }
+  #emulatorModal.lux-mobile-emulator > div > .border-b,
+  #emulatorModal.lux-mobile-emulator > div > .border-t { display: none !important; }
+  #emulatorModal.lux-mobile-emulator #emulatorContainer { position: absolute; inset: 0; width: 100% !important; height: 100% !important; background: #000; }
+  #emulatorModal.lux-mobile-emulator #emulatorIntro { inset: 0 !important; min-height: 100dvh; padding: calc(24px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
+  .lux-mobile-game-menu-button { position: fixed; z-index: 75; top: calc(10px + env(safe-area-inset-top, 0px)); right: 12px; width: 46px; height: 46px; border-radius: 15px; border: 1px solid rgba(216,180,254,.28); background: rgba(18,12,31,.78); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: #fff; font-size: 22px; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+  .lux-mobile-game-menu { position: fixed; inset: 0; z-index: 130; display: flex; align-items: flex-end; background: rgba(0,0,0,.62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .lux-mobile-game-menu[hidden] { display: none !important; }
+  .lux-mobile-game-menu-card { width: 100%; padding: 18px 16px calc(20px + env(safe-area-inset-bottom, 0px)); border-radius: 26px 26px 0 0; border: 1px solid rgba(168,85,247,.35); border-bottom: 0; background: #140c22; }
+  .lux-mobile-game-menu-title { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .lux-mobile-game-menu-title strong { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
+  .lux-mobile-game-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+  .lux-mobile-game-actions button { min-height: 54px; padding: 10px; border-radius: 14px; border: 1px solid #5b2b83; background: #211134; color: #f3e8ff; font-size: 12px; font-weight: 800; }
+  .lux-mobile-game-actions button.primary { background: #7c3aed; border-color: #a855f7; color: #fff; }
+  .lux-mobile-game-actions button.danger { color: #fecdd3; border-color: rgba(244,63,94,.42); background: rgba(127,29,29,.22); }
+
+  /* Hide EmulatorJS chrome in mobile play mode. Lux menu is the gateway. */
+  #emulatorModal.lux-mobile-emulator.lux-mobile-playing #emulatorContainer .ejs_menu_bar,
+  #emulatorModal.lux-mobile-emulator.lux-mobile-playing #emulatorContainer [class*="menu_bar"],
+  #emulatorModal.lux-mobile-emulator.lux-mobile-playing #emulatorContainer [class*="menu-bar"] { opacity: 0 !important; pointer-events: none !important; }
+}
