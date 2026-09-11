@@ -92,7 +92,8 @@ function animateDashboardEntry() {
   const styles = [
     ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-nativeemu1'],
     ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260911-viewmodes1'],
-    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260911-viewmodes1']
+    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260911-viewmodes1'],
+    ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260911-landscape1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
