@@ -7,12 +7,13 @@
   const SUPABASE_URL='https://fvcvshppvxihhttwyyvr.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY='sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
   const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
+  const CONTROLLER_ORIGIN=location.protocol==='file:'?'https://lux-player.vercel.app':location.origin;
   const state={code:null,signalClient:null,signalChannel:null,signalTopic:null,peer:null,status:'waiting',deviceName:'',focused:null,liveIndex:-1};
   let qrLibraryPromise=null;
 
   function randomCode(){const bytes=new Uint32Array(1);crypto.getRandomValues?.(bytes);const n=bytes[0]||Math.floor(Math.random()*1e9);return String(100000+(n%900000))}
   function ensureCode(){if(!state.code)state.code=randomCode();return state.code}
-  function controllerUrl(){return `${location.origin}/controller/?remote=${ensureCode()}`}
+  function controllerUrl(){return `${CONTROLLER_ORIGIN}/controller/?remote=${ensureCode()}`}
   function getSignalClient(){if(state.signalClient)return state.signalClient;if(!window.supabase?.createClient)throw new Error('Supabase indisponível.');state.signalClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});return state.signalClient}
   function signalPayload(message){return message?.payload||message||{}}
   async function sendSignal(payload){if(!state.signalChannel)return;try{await state.signalChannel.send({type:'broadcast',event:'signal',payload:{...payload,session:ensureCode()}})}catch(error){console.warn('Lux Control sinal:',error)}}
