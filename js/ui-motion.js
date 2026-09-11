@@ -27,7 +27,6 @@ function animateDashboardEntry() {
   );
 }
 
-// Mantém o número exibido na tela de login alinhado ao package.json da versão 1.5.0.
 (() => {
   const applyVersion = () => {
     const auth = document.getElementById('authScreen');
@@ -39,7 +38,6 @@ function animateDashboardEntry() {
   else applyVersion();
 })();
 
-// Metadados do PWA principal. Mantidos fora do HTML gigante para facilitar cache-bust e manutenção.
 (() => {
   const ensureLink = (rel, href, extra = {}) => {
     let link = document.head.querySelector(`link[rel="${rel}"][data-lux-pwa-meta]`);
@@ -65,14 +63,12 @@ function animateDashboardEntry() {
 
   ensureLink('manifest', 'manifest.webmanifest?v=20260911-icons1');
   ensureLink('icon', 'lux-play-icon.svg?v=20260911-icons1', { type: 'image/svg+xml' });
-  // iOS ainda é mais confiável com PNG para o ícone da Tela de Início.
   ensureLink('apple-touch-icon', 'icon.png?v=20260911-icons1');
   ensureMeta('theme-color', '#09060e');
   ensureMeta('apple-mobile-web-app-capable', 'yes');
   ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
 })();
 
-// Módulos isolados do script principal.
 (() => {
   const modules = [
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260910-v151'],
@@ -90,34 +86,26 @@ function animateDashboardEntry() {
   });
 })();
 
-// UX dedicada a celular. Não carrega JS e não aplica CSS em desktop/tablet >= 768px.
 (() => {
   if (!window.matchMedia('(max-width: 767px)').matches) return;
 
-  const styles = [
-    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-2'],
-    ['lux-mobile-emulator-fix', 'css/mobile-emulator-fix.css?v=20260911-1']
-  ];
-  styles.forEach(([name, href]) => {
-    if (document.querySelector(`link[data-${name}]`)) return;
+  if (!document.querySelector('link[data-lux-mobile-ux]')) {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = href;
+    link.href = 'css/mobile-ux.css?v=20260911-3';
     link.media = '(max-width: 767px)';
-    link.setAttribute(`data-${name}`, '1');
+    link.dataset.luxMobileUx = '1';
     document.head.appendChild(link);
-  });
+  }
 
   const loadMobileUx = () => {
     if (document.querySelector('script[data-lux-mobile-ux]')) return;
     const script = document.createElement('script');
-    script.src = 'js/mobile-ux.js?v=20260911-2';
+    script.src = 'js/mobile-ux.js?v=20260911-3';
     script.dataset.luxMobileUx = '1';
     document.body.appendChild(script);
   };
 
-  // Espera os módulos principais (emulador/leitor) terminarem de carregar para poder
-  // envolvê-los sem alterar a implementação desktop.
   if (document.readyState === 'complete') loadMobileUx();
   else window.addEventListener('load', loadMobileUx, { once: true });
 })();
