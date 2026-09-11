@@ -2,6 +2,7 @@
   'use strict';
 
   const state = { code: null };
+  let qrLibraryPromise = null;
 
   function randomCode() {
     let code = '';
@@ -18,6 +19,64 @@
 
   function controllerUrl() {
     return `${location.origin}/controller/?code=${ensureCode()}`;
+  }
+
+  function ensureQrLibrary() {
+    if (window.QRCode) return Promise.resolve(window.QRCode);
+    if (qrLibraryPromise) return qrLibraryPromise;
+
+    qrLibraryPromise = new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-lux-qrcode]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.QRCode), { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+      script.async = true;
+      script.dataset.luxQrcode = '1';
+      script.onload = () => window.QRCode ? resolve(window.QRCode) : reject(new Error('Biblioteca de QR Code indisponível.'));
+      script.onerror = () => reject(new Error('Não foi possível carregar o gerador de QR Code.'));
+      document.head.appendChild(script);
+    }).catch(error => {
+      qrLibraryPromise = null;
+      throw error;
+    });
+
+    return qrLibraryPromise;
+  }
+
+  async function renderQrCode() {
+    const target = document.getElementById('luxGamepadQrCode');
+    const status = document.getElementById('luxGamepadQrStatus');
+    if (!target) return;
+
+    target.innerHTML = '';
+    if (status) status.textContent = 'Gerando QR Code...';
+
+    try {
+      const QRCode = await ensureQrLibrary();
+      if (!document.getElementById('luxGamepadQrCode')) return;
+
+      new QRCode(target, {
+        text: controllerUrl(),
+        width: 180,
+        height: 180,
+        colorDark: '#120c1f',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      const image = target.querySelector('img');
+      if (image) image.alt = `QR Code da sala ${ensureCode()}`;
+      if (status) status.textContent = 'Escaneie com a câmera do celular para abrir o controle.';
+    } catch (error) {
+      console.warn('Não foi possível gerar o QR Code do Lux Gamepad:', error);
+      target.innerHTML = '<div class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border border-purple-800/60 bg-purple-950/40 p-4 text-center text-[11px] text-purple-300">QR Code indisponível.<br>Use o código ou copie o link abaixo.</div>';
+      if (status) status.textContent = 'Você ainda pode usar o código de 6 dígitos ou o link.';
+    }
   }
 
   function closeLuxGamepadSetup() {
@@ -45,6 +104,7 @@
     const linkEl = document.getElementById('luxGamepadControllerLink');
     if (codeEl) codeEl.textContent = `${code.slice(0, 3)} ${code.slice(3)}`;
     if (linkEl) linkEl.value = controllerUrl();
+    renderQrCode();
   }
 
   function openLuxGamepadSetup() {
@@ -53,7 +113,7 @@
     modal.id = 'luxGamepadSetupModal';
     modal.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4';
     modal.innerHTML = `
-      <div class="w-full max-w-lg rounded-3xl border border-purple-800/60 bg-[#120c1f] p-6 shadow-2xl">
+      <div class="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-3xl border border-purple-800/60 bg-[#120c1f] p-6 shadow-2xl">
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-purple-400">Lux Controller</p>
@@ -67,6 +127,11 @@
           <p class="text-[10px] font-bold uppercase tracking-widest text-purple-400">Código da sessão</p>
           <div id="luxGamepadRoomCode" class="mt-2 text-4xl font-black tracking-[0.20em] text-white"></div>
           <p class="mt-2 text-[11px] text-purple-300/60">A sessão continuará válida enquanto o Lux Play estiver aberto.</p>
+
+          <div class="mt-5 flex flex-col items-center">
+            <div id="luxGamepadQrCode" class="flex min-h-[180px] min-w-[180px] items-center justify-center rounded-2xl bg-white p-3 shadow-lg shadow-purple-950/30"></div>
+            <p id="luxGamepadQrStatus" class="mt-2 text-[10px] text-purple-300/70">Gerando QR Code...</p>
+          </div>
         </div>
 
         <div class="mt-4 grid grid-cols-2 gap-3">
