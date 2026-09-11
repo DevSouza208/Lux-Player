@@ -61,19 +61,24 @@ function animateDashboardEntry() {
 (() => {
   if (!window.matchMedia('(max-width: 767px)').matches) return;
 
-  if (!document.querySelector('link[data-lux-mobile-ux]')) {
+  const styles = [
+    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-2'],
+    ['lux-mobile-emulator-fix', 'css/mobile-emulator-fix.css?v=20260911-1']
+  ];
+  styles.forEach(([name, href]) => {
+    if (document.querySelector(`link[data-${name}]`)) return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'css/mobile-ux.css?v=20260911-1';
+    link.href = href;
     link.media = '(max-width: 767px)';
-    link.dataset.luxMobileUx = '1';
+    link.setAttribute(`data-${name}`, '1');
     document.head.appendChild(link);
-  }
+  });
 
   const loadMobileUx = () => {
     if (document.querySelector('script[data-lux-mobile-ux]')) return;
     const script = document.createElement('script');
-    script.src = 'js/mobile-ux.js?v=20260911-1';
+    script.src = 'js/mobile-ux.js?v=20260911-2';
     script.dataset.luxMobileUx = '1';
     document.body.appendChild(script);
   };
