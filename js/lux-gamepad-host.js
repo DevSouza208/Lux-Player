@@ -62,8 +62,8 @@
 
       new QRCode(target, {
         text: controllerUrl(),
-        width: 180,
-        height: 180,
+        width: 184,
+        height: 184,
         colorDark: '#120c1f',
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
@@ -71,11 +71,11 @@
 
       const image = target.querySelector('img');
       if (image) image.alt = `QR Code da sala ${ensureCode()}`;
-      if (status) status.textContent = 'Escaneie com a câmera do celular para abrir o controle.';
+      if (status) status.textContent = 'Escaneie para abrir o controle com o código já preenchido.';
     } catch (error) {
       console.warn('Não foi possível gerar o QR Code do Lux Gamepad:', error);
-      target.innerHTML = '<div class="flex h-[180px] w-[180px] items-center justify-center rounded-xl border border-purple-800/60 bg-purple-950/40 p-4 text-center text-[11px] text-purple-300">QR Code indisponível.<br>Use o código ou copie o link abaixo.</div>';
-      if (status) status.textContent = 'Você ainda pode usar o código de 6 dígitos ou o link.';
+      target.innerHTML = '<div class="flex h-[184px] w-[184px] items-center justify-center rounded-xl border border-purple-800/60 bg-purple-950/40 p-4 text-center text-[11px] text-purple-300">QR Code indisponível.<br>Use o código ou copie o link.</div>';
+      if (status) status.textContent = 'Use o código de 6 dígitos ou o link do painel.';
     }
   }
 
@@ -113,43 +113,47 @@
     modal.id = 'luxGamepadSetupModal';
     modal.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4';
     modal.innerHTML = `
-      <div class="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-3xl border border-purple-800/60 bg-[#120c1f] p-6 shadow-2xl">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-purple-400">Lux Controller</p>
-            <h2 class="mt-1 text-xl font-black text-white">Configurar gamepads</h2>
-            <p class="mt-1 text-xs text-purple-300/70">Use o celular como controle. A conexão real com o emulador entra na próxima etapa.</p>
+      <div class="flex w-full max-w-4xl items-stretch justify-center gap-4">
+        <div class="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-3xl border border-purple-800/60 bg-[#120c1f] p-6 shadow-2xl">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-purple-400">Lux Controller</p>
+              <h2 class="mt-1 text-xl font-black text-white">Configurar gamepads</h2>
+              <p class="mt-1 text-xs text-purple-300/70">Use o celular como controle para os jogos retrô do Lux Play.</p>
+            </div>
+            <button onclick="closeLuxGamepadSetup()" class="rounded-xl bg-purple-950/60 p-2 text-purple-300 hover:bg-rose-600 hover:text-white" aria-label="Fechar">✕</button>
           </div>
-          <button onclick="closeLuxGamepadSetup()" class="rounded-xl bg-purple-950/60 p-2 text-purple-300 hover:bg-rose-600 hover:text-white" aria-label="Fechar">✕</button>
-        </div>
 
-        <div class="mt-5 rounded-2xl border border-purple-800/50 bg-[#0d0817] p-5 text-center">
-          <p class="text-[10px] font-bold uppercase tracking-widest text-purple-400">Código da sessão</p>
-          <div id="luxGamepadRoomCode" class="mt-2 text-4xl font-black tracking-[0.20em] text-white"></div>
-          <p class="mt-2 text-[11px] text-purple-300/60">A sessão continuará válida enquanto o Lux Play estiver aberto.</p>
+          <div class="mt-5 rounded-2xl border border-purple-800/50 bg-[#0d0817] p-5 text-center">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-purple-400">Código da sessão</p>
+            <div id="luxGamepadRoomCode" class="mt-2 text-4xl font-black tracking-[0.20em] text-white"></div>
+            <p class="mt-2 text-[11px] text-purple-300/60">A sessão continuará válida enquanto o Lux Play estiver aberto.</p>
+          </div>
 
-          <div class="mt-5 flex flex-col items-center">
-            <div id="luxGamepadQrCode" class="flex min-h-[180px] min-w-[180px] items-center justify-center rounded-2xl bg-white p-3 shadow-lg shadow-purple-950/30"></div>
-            <p id="luxGamepadQrStatus" class="mt-2 text-[10px] text-purple-300/70">Gerando QR Code...</p>
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <div class="rounded-2xl border border-purple-900/50 bg-purple-950/30 p-4"><span class="text-xs font-bold text-white">Jogador 1</span><p id="luxGamepadPlayer1Status" class="mt-1 text-[11px] text-purple-400">⚪ Aguardando controle</p></div>
+            <div class="rounded-2xl border border-purple-900/50 bg-purple-950/30 p-4"><span class="text-xs font-bold text-white">Jogador 2</span><p id="luxGamepadPlayer2Status" class="mt-1 text-[11px] text-purple-400">⚪ Aguardando controle</p></div>
+          </div>
+
+          <label class="mt-4 block text-[10px] font-bold uppercase tracking-wide text-purple-400">Link do controle</label>
+          <div class="mt-1 flex gap-2">
+            <input id="luxGamepadControllerLink" readonly class="min-w-0 flex-1 rounded-xl border border-purple-900/60 bg-[#0d0817] px-3 py-2 text-xs text-purple-200 outline-none">
+            <button onclick="copyControllerLink()" class="rounded-xl border border-purple-700/60 bg-purple-950/60 px-3 py-2 text-xs font-bold text-purple-200 hover:bg-purple-800">Copiar</button>
+          </div>
+          <p id="luxGamepadCopyStatus" class="mt-1 h-4 text-[10px] text-emerald-300"></p>
+
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button onclick="window.open(controllerUrl(), '_blank', 'noopener')" class="flex-1 rounded-xl bg-purple-600 px-4 py-3 text-xs font-bold text-white hover:bg-purple-500">Abrir Lux Controller</button>
+            <button onclick="regenerateLuxGamepadSession()" class="rounded-xl border border-purple-800/60 bg-purple-950/50 px-4 py-3 text-xs font-bold text-purple-200 hover:bg-purple-900">Novo código</button>
           </div>
         </div>
 
-        <div class="mt-4 grid grid-cols-2 gap-3">
-          <div class="rounded-2xl border border-purple-900/50 bg-purple-950/30 p-4"><span class="text-xs font-bold text-white">Jogador 1</span><p class="mt-1 text-[11px] text-purple-400">⚪ Aguardando controle</p></div>
-          <div class="rounded-2xl border border-purple-900/50 bg-purple-950/30 p-4"><span class="text-xs font-bold text-white">Jogador 2</span><p class="mt-1 text-[11px] text-purple-400">⚪ Aguardando controle</p></div>
-        </div>
-
-        <label class="mt-4 block text-[10px] font-bold uppercase tracking-wide text-purple-400">Link do controle</label>
-        <div class="mt-1 flex gap-2">
-          <input id="luxGamepadControllerLink" readonly class="min-w-0 flex-1 rounded-xl border border-purple-900/60 bg-[#0d0817] px-3 py-2 text-xs text-purple-200 outline-none">
-          <button onclick="copyControllerLink()" class="rounded-xl border border-purple-700/60 bg-purple-950/60 px-3 py-2 text-xs font-bold text-purple-200 hover:bg-purple-800">Copiar</button>
-        </div>
-        <p id="luxGamepadCopyStatus" class="mt-1 h-4 text-[10px] text-emerald-300"></p>
-
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button onclick="window.open(controllerUrl(), '_blank', 'noopener')" class="flex-1 rounded-xl bg-purple-600 px-4 py-3 text-xs font-bold text-white hover:bg-purple-500">Abrir Lux Controller</button>
-          <button onclick="regenerateLuxGamepadSession()" class="rounded-xl border border-purple-800/60 bg-purple-950/50 px-4 py-3 text-xs font-bold text-purple-200 hover:bg-purple-900">Novo código</button>
-        </div>
+        <aside class="hidden w-[250px] shrink-0 flex-col items-center justify-center rounded-3xl border border-purple-800/60 bg-[#120c1f] p-5 text-center shadow-2xl md:flex">
+          <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-purple-400">Conectar celular</p>
+          <div id="luxGamepadQrCode" class="mt-4 flex min-h-[184px] min-w-[184px] items-center justify-center rounded-2xl bg-white p-3 shadow-lg shadow-purple-950/30"></div>
+          <p id="luxGamepadQrStatus" class="mt-3 text-[10px] leading-relaxed text-purple-300/70">Gerando QR Code...</p>
+          <p class="mt-4 text-[10px] leading-relaxed text-purple-300/50">No celular, instale o Lux Controller na tela inicial para jogar sem a barra do navegador.</p>
+        </aside>
       </div>`;
     modal.addEventListener('click', event => { if (event.target === modal) closeLuxGamepadSetup(); });
     document.body.appendChild(modal);
