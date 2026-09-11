@@ -10,6 +10,8 @@
   const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
   let gameMenu = null;
   let touchStart = null;
+  let emulatorControlsObserver = null;
+  let viewportTimer = null;
 
   function refreshIcons() { try { window.lucide?.createIcons?.(); } catch (_) {} }
   function overlay(open) { document.body.classList.toggle('lux-mobile-overlay-open', !!open); }
@@ -169,12 +171,67 @@
     }
   }
 
+  function nativeButtons() {
+    return [...document.querySelectorAll('#emulatorContainer button, #emulatorContainer .ejs_menu_button')];
+  }
+
+  function findNativeButton(pattern) {
+    return nativeButtons().find(button => pattern.test(`${button.title || ''} ${button.getAttribute('aria-label') || ''} ${button.innerText || ''}`));
+  }
+
+  function clickNative(pattern) {
+    const button = findNativeButton(pattern);
+    if (!button) return false;
+    button.click();
+    return true;
+  }
+
+  function normalizeEmulatorControls() {
+    const container = $('emulatorContainer');
+    if (!container) return;
+    for (const button of nativeButtons()) {
+      const text = (button.textContent || '').trim();
+      const meta = `${button.title || ''} ${button.getAttribute('aria-label') || ''} ${text}`.trim();
+      if (/^ESQ$/i.test(text)) button.textContent = 'L';
+      else if (/^DIR$/i.test(text)) button.textContent = 'R';
+      if (/^(Rápido|Rapido|Lento)$/i.test(text) || /fast\s*forward|slow\s*motion/i.test(meta) && /button/i.test(button.tagName)) {
+        button.classList.add('lux-mobile-native-speed');
+      }
+    }
+  }
+
+  function watchEmulatorControls() {
+    emulatorControlsObserver?.disconnect();
+    const container = $('emulatorContainer');
+    if (!container) return;
+    normalizeEmulatorControls();
+    emulatorControlsObserver = new MutationObserver(() => normalizeEmulatorControls());
+    emulatorControlsObserver.observe(container, { childList: true, subtree: true, characterData: true });
+  }
+
+  function refreshEmulatorViewport() {
+    const modal = $('emulatorModal');
+    if (!modal?.classList.contains('lux-mobile-emulator')) return;
+    const height = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
+    const width = Math.round(window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth);
+    modal.style.setProperty('--lux-emulator-vh', `${height}px`);
+    modal.style.setProperty('--lux-emulator-vw', `${width}px`);
+    clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(() => {
+      try { window.dispatchEvent(new Event('resize')); } catch (_) {}
+      const manager = window.EJS_emulator?.gameManager;
+      for (const name of ['resize', 'resizeScreen', 'updateScreenSize', 'setCanvasSize']) {
+        try { if (typeof manager?.[name] === 'function') manager[name](); } catch (_) {}
+      }
+      normalizeEmulatorControls();
+    }, 120);
+  }
+
   function openNativeSettingsFromMobile() {
     setGameMenuOpen(false, false);
-    const buttons = [...document.querySelectorAll('#emulatorContainer button, #emulatorContainer .ejs_menu_button')];
-    const settings = buttons.find(button => /settings|ajustes|configura/i.test(`${button.title || ''} ${button.getAttribute('aria-label') || ''} ${button.innerText || ''}`));
-    if (settings) settings.click();
-    else if (typeof openEmulatorControls === 'function') openEmulatorControls();
+    if (!clickNative(/settings|ajustes|configura|controls|controles/i)) {
+      if (typeof openEmulatorControls === 'function') openEmulatorControls();
+    }
   }
 
   function installGameMenu() {
@@ -198,10 +255,12 @@
       <div class="lux-mobile-game-menu-title"><strong id="luxMobileGameMenuTitle">Jogo</strong><button type="button" class="lux-mobile-sheet-close" data-game-action="resume">✕</button></div>
       <div class="lux-mobile-game-actions">
         <button type="button" class="primary" data-game-action="resume">${icon('play')} Continuar</button>
-        <button type="button" data-game-action="fast">${icon('fast-forward')} <span>Fast-forward</span></button>
-        <button type="button" data-game-action="controls">${icon('gamepad-2')} Controles</button>
+        <button type="button" data-game-action="save">${icon('save')} Salvar jogo</button>
+        <button type="button" data-game-action="load">${icon('folder-open')} Carregar jogo</button>
+        <button type="button" data-game-action="fast">${icon('fast-forward')} <span>Fast-forward 2x</span></button>
+        <button type="button" data-game-action="cheats">${icon('sparkles')} Trapaças</button>
         <button type="button" data-game-action="settings">${icon('settings')} Configurações</button>
-        <button type="button" data-game-action="save-exit">${icon('save')} Salvar / Sair</button>
+        <button type="button" data-game-action="reset">${icon('rotate-ccw')} Reiniciar</button>
         <button type="button" class="danger" data-game-action="exit">${icon('log-out')} Sair do jogo</button>
       </div>
     </div>`;
@@ -215,14 +274,35 @@
       if (!action) return;
       if (action === 'resume') return setGameMenuOpen(false);
       if (action === 'fast') {
-        try { toggleEmulatorFastForward(); } catch (_) {}
+        try {
+          toggleEmulatorFastForward();
+          if (emulatorFastForward) window.EJS_emulator?.gameManager?.setFastForwardRatio?.(2);
+        } catch (_) {}
         const label = gameMenu.querySelector('[data-game-action="fast"] span');
-        if (label) label.textContent = (typeof emulatorFastForward !== 'undefined' && emulatorFastForward) ? 'Fast-forward ligado' : 'Fast-forward';
+        if (label) label.textContent = (typeof emulatorFastForward !== 'undefined' && emulatorFastForward) ? 'Fast-forward ligado · 2x' : 'Fast-forward 2x';
         return;
       }
-      if (action === 'controls') { setGameMenuOpen(false, false); return openEmulatorControls?.(); }
       if (action === 'settings') return openNativeSettingsFromMobile();
-      if (action === 'save-exit') { setGameMenuOpen(false, false); return requestCloseGameEmulator?.(); }
+      if (action === 'save') {
+        setGameMenuOpen(false, false);
+        if (!clickNative(/store.*save|save.*state|salvar.*state|armazenar.*save/i)) requestCloseGameEmulator?.();
+        return;
+      }
+      if (action === 'load') {
+        setGameMenuOpen(false, false);
+        if (!clickNative(/load.*state|carregar.*state|carregar.*save/i)) openNativeSettingsFromMobile();
+        return;
+      }
+      if (action === 'cheats') {
+        setGameMenuOpen(false, false);
+        if (!clickNative(/cheat|trapaça/i)) openNativeSettingsFromMobile();
+        return;
+      }
+      if (action === 'reset') {
+        setGameMenuOpen(false, false);
+        clickNative(/^reset$|reiniciar/i);
+        return;
+      }
       if (action === 'exit') { setGameMenuOpen(false, false); return requestCloseGameEmulator?.(); }
     });
 
@@ -239,6 +319,8 @@
       if (dx < -65 && dy < 70 && elapsed < 800) setGameMenuOpen(true);
       touchStart = null;
     }, { passive: true });
+    watchEmulatorControls();
+    refreshEmulatorViewport();
     refreshIcons();
   }
 
@@ -246,12 +328,24 @@
     const modal = $('emulatorModal');
     if (!modal) return;
     modal.classList.add('lux-mobile-playing');
-    const target = modal;
+    refreshEmulatorViewport();
     try {
-      const promise = target.requestFullscreen?.({ navigationUI: 'hide' });
-      promise?.catch?.(() => {});
-    } catch (_) {}
+      const promise = modal.requestFullscreen?.({ navigationUI: 'hide' });
+      promise?.then?.(() => refreshEmulatorViewport()).catch?.(() => refreshEmulatorViewport());
+    } catch (_) { refreshEmulatorViewport(); }
   }
+
+  // iOS/PWA can change dimensions in stages while rotating. Re-run the emulator layout
+  // a few times instead of trusting a single resize event.
+  const syncViewport = () => {
+    refreshEmulatorViewport();
+    setTimeout(refreshEmulatorViewport, 180);
+    setTimeout(refreshEmulatorViewport, 520);
+  };
+  window.addEventListener('orientationchange', syncViewport);
+  window.addEventListener('resize', () => { if ($('emulatorModal')) refreshEmulatorViewport(); });
+  window.visualViewport?.addEventListener('resize', () => { if ($('emulatorModal')) refreshEmulatorViewport(); });
+  document.addEventListener('fullscreenchange', syncViewport);
 
   // Patch only after all original modules loaded. On desktop this file never runs.
   if (typeof openGameEmulator === 'function') {
@@ -266,13 +360,18 @@
     const original = startEmulatorSession;
     startEmulatorSession = function (...args) {
       enterMobileFullscreen();
-      return original.apply(this, args);
+      const result = original.apply(this, args);
+      setTimeout(() => { watchEmulatorControls(); syncViewport(); }, 250);
+      setTimeout(() => { normalizeEmulatorControls(); syncViewport(); }, 900);
+      return result;
     };
   }
   if (typeof closeGameEmulator === 'function') {
     const original = closeGameEmulator;
     closeGameEmulator = function (...args) {
       document.body.classList.remove('lux-mobile-immersive', 'lux-mobile-overlay-open');
+      emulatorControlsObserver?.disconnect();
+      emulatorControlsObserver = null;
       gameMenu = null;
       try { if (document.fullscreenElement) document.exitFullscreen?.(); } catch (_) {}
       return original.apply(this, args);
