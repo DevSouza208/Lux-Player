@@ -1,4 +1,4 @@
-const CACHE='lux-controller-v0.2.0';
+const CACHE='lux-controller-v0.2.1';
 const ASSETS=['./','./index.html','./gamepad-layout.css','./hub.css','./manifest.json','./touchpad.js','./hub.js','./orientation.js','../icon.png'];
 const RUNTIME_SCRIPTS=['./touchpad.js','./hub.js','./orientation.js'];
 
@@ -38,10 +38,19 @@ self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));
 });
 
-self.addEventListener('activate',event=>event.waitUntil(Promise.all([
-  caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))),
-  self.clients.claim()
-])));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+  const keys=await caches.keys();
+  await Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)));
+  await self.clients.claim();
+  const clients=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  await Promise.all(clients.map(client=>{
+    try{
+      const url=new URL(client.url);
+      const shouldRefresh=url.searchParams.has('remote')||(!url.searchParams.has('code')&&!url.searchParams.has('remote'));
+      return shouldRefresh&&client.navigate?client.navigate(client.url):Promise.resolve();
+    }catch(_){return Promise.resolve()}
+  }));
+})()));
 
 self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET') return;
