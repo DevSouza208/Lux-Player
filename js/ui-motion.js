@@ -39,6 +39,39 @@ function animateDashboardEntry() {
   else applyVersion();
 })();
 
+// Metadados do PWA principal. Mantidos fora do HTML gigante para facilitar cache-bust e manutenção.
+(() => {
+  const ensureLink = (rel, href, extra = {}) => {
+    let link = document.head.querySelector(`link[rel="${rel}"][data-lux-pwa-meta]`);
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = rel;
+      link.dataset.luxPwaMeta = '1';
+      document.head.appendChild(link);
+    }
+    link.href = href;
+    Object.entries(extra).forEach(([key, value]) => link.setAttribute(key, value));
+  };
+  const ensureMeta = (name, content) => {
+    let meta = document.head.querySelector(`meta[name="${name}"][data-lux-pwa-meta]`);
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = name;
+      meta.dataset.luxPwaMeta = '1';
+      document.head.appendChild(meta);
+    }
+    meta.content = content;
+  };
+
+  ensureLink('manifest', 'manifest.webmanifest?v=20260911-icons1');
+  ensureLink('icon', 'lux-play-icon.svg?v=20260911-icons1', { type: 'image/svg+xml' });
+  // iOS ainda é mais confiável com PNG para o ícone da Tela de Início.
+  ensureLink('apple-touch-icon', 'icon.png?v=20260911-icons1');
+  ensureMeta('theme-color', '#09060e');
+  ensureMeta('apple-mobile-web-app-capable', 'yes');
+  ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
+})();
+
 // Módulos isolados do script principal.
 (() => {
   const modules = [
