@@ -269,6 +269,90 @@
     top: calc(var(--lux-visible-screen-height, 66.666vw) + 16px);
   }
 
+  /* Compact bottom action bar — visual only for now. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
+    position: absolute;
+    left: 50%;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    width: min(88vw, 330px);
+    height: 50px;
+    padding: 5px 8px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    align-items: stretch;
+    border: 1px solid rgba(192,132,252,.5);
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(51,16,87,.92), rgba(18,7,34,.96));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.1),
+      0 0 24px rgba(126,34,206,.22),
+      0 10px 30px rgba(0,0,0,.26);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: none !important;
+    box-sizing: border-box;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-button {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 4px;
+    border: 0;
+    border-right: 1px solid rgba(216,180,254,.17);
+    background: transparent;
+    color: #eadbff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    opacity: 1 !important;
+    font: inherit;
+    pointer-events: none !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-button:last-child {
+    border-right: 0;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon {
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    color: #d8b4fe;
+    filter: drop-shadow(0 0 6px rgba(168,85,247,.42));
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-label {
+    font-size: 9px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-exit {
+    color: #f4c7d7;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-exit .lux-console-action-icon {
+    color: #f0a8c0;
+  }
+
   @media (orientation: landscape) {
     #emulatorModal.lux-console-mobile-stage1 {
       --lux-dpad-left: calc(24px + env(safe-area-inset-left, 0px));
@@ -287,7 +371,7 @@
       --lux-shoulder-width: 96px;
       --lux-shoulder-height: 46px;
 
-      --lux-system-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      --lux-system-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
     }
 
     #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
@@ -299,6 +383,24 @@
     #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button img {
       width: 24px;
       height: 24px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
+      bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+      width: min(46vw, 292px);
+      height: 40px;
+      padding: 3px 6px;
+      border-radius: 15px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon,
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-action-icon svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-action-label {
+      font-size: 8px;
     }
   }
 }
