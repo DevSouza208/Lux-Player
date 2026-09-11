@@ -1,4 +1,4 @@
-/* Stage 2d — mobile emulator edge-to-edge with native gamepad/chrome hidden and Lux d-pad only. Desktop is untouched. */
+/* Stage 3 — isolated Lux Console layers. Desktop is untouched. */
 @media (max-width: 767px) {
   body.lux-console-open {
     overflow: hidden;
@@ -6,6 +6,11 @@
   }
 
   #emulatorModal.lux-console-mobile-stage1 {
+    --lux-screen-left: 0px;
+    --lux-screen-top: 0px;
+    --lux-screen-width: 100vw;
+    --lux-screen-height: 100dvh;
+
     position: fixed !important;
     inset: 0 !important;
     width: 100vw !important;
@@ -14,14 +19,29 @@
     max-height: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    align-items: stretch !important;
-    justify-content: stretch !important;
-    background: #000 !important;
+    display: block !important;
+    overflow: hidden !important;
+    background: transparent !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+    isolation: isolate;
   }
 
-  #emulatorModal.lux-console-mobile-stage1 > div {
+  /* Layer 0: background. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-background-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background: #000;
+    pointer-events: none;
+  }
+
+  /* Layer 1 host: only the original emulator frame receives these rules.
+     Extra overlay divs are never treated as the player frame. */
+  #emulatorModal.lux-console-mobile-stage1 > .lux-console-player-frame {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 10 !important;
     width: 100vw !important;
     max-width: none !important;
     height: 100dvh !important;
@@ -30,30 +50,84 @@
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    background: #000 !important;
+    background: transparent !important;
+    overflow: visible !important;
   }
 
-  /* Remove only the Lux/player frame. */
-  #emulatorModal.lux-console-mobile-stage1 > div > .border-b,
-  #emulatorModal.lux-console-mobile-stage1 > div > .border-t {
+  #emulatorModal.lux-console-mobile-stage1 > .lux-console-player-frame > .border-b,
+  #emulatorModal.lux-console-mobile-stage1 > .lux-console-player-frame > .border-t {
     display: none !important;
   }
 
-  #emulatorModal.lux-console-mobile-stage1 > div > .flex-1 {
-    flex: 1 1 auto !important;
+  /* The game screen is anchored independently from every other layer.
+     Future layout tuning only needs to change the four --lux-screen-* variables. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-screen-layer {
+    position: fixed !important;
+    left: var(--lux-screen-left) !important;
+    top: var(--lux-screen-top) !important;
+    width: var(--lux-screen-width) !important;
+    height: var(--lux-screen-height) !important;
     min-width: 0 !important;
     min-height: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
     background: #000 !important;
+    overflow: hidden !important;
+    z-index: 10 !important;
   }
 
-  /* Exact EmulatorJS touch-controller container. EmulatorJS creates
-     this.virtualGamepad with .ejs_virtualGamepad_parent, then may also add
-     .ejs-vgamepad-active. Hide both forms, plus the native menu/chrome. */
+  /* Layer 2: bezel/decorations. It follows the screen coordinates but never
+     participates in layout and never intercepts touch. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-bezel-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-bezel-window {
+    position: fixed;
+    left: var(--lux-screen-left);
+    top: var(--lux-screen-top);
+    width: var(--lux-screen-width);
+    height: var(--lux-screen-height);
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+
+  /* Layer 3: game controls. The layer itself is transparent/non-interactive;
+     individual controls opt back into pointer events in mobile-lux-controls.css. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-controls-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  /* Layer 4: save/load/settings/exit context UI. Empty for now. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-context-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  /* Layer 5: alerts/toasts. Empty for now. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-alerts-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  /* Native EmulatorJS touch controller/chrome stays hidden. */
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_virtualGamepad_parent,
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs-vgamepad-active,
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .ejs_menu_bar,
@@ -64,8 +138,7 @@
     pointer-events: none !important;
   }
 
-  /* iOS/Safari may require one extra user gesture before audio/emulation can
-     resume. Keep that required action, but present it as a single Lux play action. */
+  /* iOS/Safari may require one real user gesture to resume the emulator. */
   #emulatorModal.lux-console-mobile-stage1 #emulatorContainer .lux-ejs-resume-popup h4 {
     display: none !important;
   }
@@ -90,141 +163,5 @@
     pointer-events: auto !important;
   }
 
-  /* Lux D-pad: independent input source. It does not reuse or reposition
-     EmulatorJS's hidden virtual gamepad. */
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-dpad {
-    position: fixed;
-    left: 28px;
-    bottom: 14dvh;
-    z-index: 45;
-    width: 154px;
-    height: 154px;
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    transition: opacity .18s ease, transform .18s ease, visibility .18s ease;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-dpad-hidden {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(10px) scale(.96);
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button,
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center {
-    position: absolute;
-    width: 54px;
-    height: 54px;
-    border: 1px solid rgba(216,180,254,.62);
-    background: linear-gradient(155deg, rgba(71,31,112,.98), rgba(24,11,43,.98));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.15),
-      inset 0 -8px 18px rgba(0,0,0,.24),
-      0 8px 22px rgba(44,14,91,.34),
-      0 0 18px rgba(168,85,247,.12);
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button {
-    appearance: none;
-    -webkit-appearance: none;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    margin: 0;
-    color: #f3e8ff;
-    border-radius: 13px;
-    font: inherit;
-    cursor: pointer;
-    touch-action: none;
-    transition: transform .06s ease, filter .06s ease, box-shadow .06s ease;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button span {
-    font-size: 18px;
-    line-height: 1;
-    opacity: .92;
-    text-shadow: 0 0 12px rgba(216,180,254,.65);
-    pointer-events: none;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-up {
-    top: 0;
-    left: 50px;
-    border-radius: 16px 16px 9px 9px;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-left {
-    top: 50px;
-    left: 0;
-    border-radius: 16px 9px 9px 16px;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-right {
-    top: 50px;
-    right: 0;
-    border-radius: 9px 16px 16px 9px;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-down {
-    bottom: 0;
-    left: 50px;
-    border-radius: 9px 9px 16px 16px;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center {
-    top: 50px;
-    left: 50px;
-    border-radius: 9px;
-    pointer-events: none;
-    display: grid;
-    place-items: center;
-    border-color: rgba(192,132,252,.34);
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center span {
-    width: 19px;
-    height: 19px;
-    border-radius: 50%;
-    border: 1px solid rgba(216,180,254,.38);
-    background: radial-gradient(circle at 35% 30%, rgba(168,85,247,.55), rgba(46,16,101,.34));
-    box-shadow: inset 0 0 8px rgba(0,0,0,.45), 0 0 10px rgba(168,85,247,.12);
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button.lux-dpad-pressed {
-    transform: scale(.92);
-    filter: brightness(1.28);
-    box-shadow:
-      inset 0 2px 10px rgba(0,0,0,.42),
-      0 0 24px rgba(168,85,247,.34);
-  }
-
-  @media (orientation: landscape) {
-    #emulatorModal.lux-console-mobile-stage1 .lux-console-dpad {
-      left: calc(22px + env(safe-area-inset-left, 0px));
-      bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-      width: 140px;
-      height: 140px;
-    }
-
-    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button,
-    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center {
-      width: 50px;
-      height: 50px;
-    }
-
-    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-up { left: 45px; }
-    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-left { top: 45px; }
-    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-right { top: 45px; }
-    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-down { left: 45px; }
-    #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center { top: 45px; left: 45px; }
-  }
-
-  /* Do not size, move, fade or hide #emulatorContainer, canvas, video or any
-     EmulatorJS rendering wrapper in this stage. */
+  /* Renderer internals remain untouched. */
 }
