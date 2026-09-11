@@ -6,29 +6,73 @@
     --lux-dpad-size: 154px;
     --lux-dpad-key: 54px;
     --lux-dpad-offset: 50px;
+
+    --lux-face-right: 28px;
+    --lux-face-bottom: 15.5dvh;
+    --lux-face-size: 148px;
+    --lux-face-key: 66px;
+
+    --lux-shoulder-top: calc(var(--lux-visible-screen-height, 66.666vw) + 18px);
+    --lux-shoulder-side: 20px;
+    --lux-shoulder-width: 112px;
+    --lux-shoulder-height: 52px;
+
+    --lux-system-bottom: 7.5dvh;
   }
 
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-controls-layer {
+    transition: opacity .18s ease, visibility .18s ease;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-controls-hidden {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-game-control {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgba(216,180,254,.62);
+    background: linear-gradient(155deg, rgba(71,31,112,.98), rgba(24,11,43,.98));
+    color: #f6edff;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.16),
+      inset 0 -9px 20px rgba(0,0,0,.26),
+      0 9px 24px rgba(44,14,91,.34),
+      0 0 20px rgba(168,85,247,.14);
+    font: inherit;
+    font-weight: 900;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform .06s ease, filter .06s ease, box-shadow .06s ease;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-game-control span {
+    pointer-events: none;
+    text-shadow: 0 0 12px rgba(216,180,254,.7);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-control-pressed {
+    transform: scale(.92) !important;
+    filter: brightness(1.32);
+    box-shadow:
+      inset 0 2px 12px rgba(0,0,0,.48),
+      0 0 26px rgba(168,85,247,.38);
+  }
+
+  /* D-pad */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-dpad {
     position: absolute;
     left: var(--lux-dpad-left);
     bottom: var(--lux-dpad-bottom);
     width: var(--lux-dpad-size);
     height: var(--lux-dpad-size);
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    transition: opacity .18s ease, transform .18s ease, visibility .18s ease;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-dpad-hidden {
-    opacity: 0;
-    visibility: hidden;
     pointer-events: none;
-    transform: translateY(10px) scale(.96);
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button,
@@ -36,70 +80,51 @@
     position: absolute;
     width: var(--lux-dpad-key);
     height: var(--lux-dpad-key);
-    border: 1px solid rgba(216,180,254,.62);
-    background: linear-gradient(155deg, rgba(71,31,112,.98), rgba(24,11,43,.98));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.15),
-      inset 0 -8px 18px rgba(0,0,0,.24),
-      0 8px 22px rgba(44,14,91,.34),
-      0 0 18px rgba(168,85,247,.12);
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button {
-    appearance: none;
-    -webkit-appearance: none;
     display: grid;
     place-items: center;
-    padding: 0;
-    margin: 0;
-    color: #f3e8ff;
     border-radius: 13px;
-    font: inherit;
-    cursor: pointer;
-    touch-action: none;
-    transition: transform .06s ease, filter .06s ease, box-shadow .06s ease;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button span {
     font-size: 18px;
-    line-height: 1;
-    opacity: .92;
-    text-shadow: 0 0 12px rgba(216,180,254,.65);
-    pointer-events: none;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-up {
     top: 0;
     left: var(--lux-dpad-offset);
-    border-radius: 16px 16px 9px 9px;
+    border-radius: 17px 17px 9px 9px;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-left {
     top: var(--lux-dpad-offset);
     left: 0;
-    border-radius: 16px 9px 9px 16px;
+    border-radius: 17px 9px 9px 17px;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-right {
     top: var(--lux-dpad-offset);
     right: 0;
-    border-radius: 9px 16px 16px 9px;
+    border-radius: 9px 17px 17px 9px;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-down {
     bottom: 0;
     left: var(--lux-dpad-offset);
-    border-radius: 9px 9px 16px 16px;
+    border-radius: 9px 9px 17px 17px;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center {
     top: var(--lux-dpad-offset);
     left: var(--lux-dpad-offset);
+    border: 1px solid rgba(192,132,252,.34);
     border-radius: 9px;
-    pointer-events: none;
+    background: linear-gradient(155deg, rgba(71,31,112,.98), rgba(24,11,43,.98));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.12),
+      inset 0 -8px 18px rgba(0,0,0,.24);
     display: grid;
     place-items: center;
-    border-color: rgba(192,132,252,.34);
+    pointer-events: none;
   }
 
   #emulatorModal.lux-console-mobile-stage1 .lux-dpad-center span {
@@ -108,24 +133,172 @@
     border-radius: 50%;
     border: 1px solid rgba(216,180,254,.38);
     background: radial-gradient(circle at 35% 30%, rgba(168,85,247,.55), rgba(46,16,101,.34));
-    box-shadow: inset 0 0 8px rgba(0,0,0,.45), 0 0 10px rgba(168,85,247,.12);
+    box-shadow: inset 0 0 8px rgba(0,0,0,.45), 0 0 10px rgba(168,85,247,.14);
   }
 
-  #emulatorModal.lux-console-mobile-stage1 .lux-dpad-button.lux-dpad-pressed {
-    transform: scale(.92);
-    filter: brightness(1.28);
-    box-shadow:
-      inset 0 2px 10px rgba(0,0,0,.42),
-      0 0 24px rgba(168,85,247,.34);
+  /* Face buttons */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face {
+    position: absolute;
+    right: var(--lux-face-right);
+    bottom: var(--lux-face-bottom);
+    width: var(--lux-face-size);
+    height: var(--lux-face-size);
+    pointer-events: none;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-face-button {
+    position: absolute;
+    width: var(--lux-face-key);
+    height: var(--lux-face-key);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 24px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-1 {
+    left: 2px;
+    bottom: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-2 {
+    right: 0;
+    top: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-1 { left: 0; top: 41px; }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-2 { left: 41px; top: 0; }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-3 { left: 41px; bottom: 0; }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-4 .lux-face-button-4 { right: 0; top: 41px; }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-6 {
+    width: 176px;
+    height: 116px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-6 .lux-face-button {
+    position: static;
+    width: 52px;
+    height: 52px;
+    font-size: 17px;
+  }
+
+  /* Shoulders */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-shoulders {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: var(--lux-shoulder-top);
+    height: var(--lux-shoulder-height);
+    pointer-events: none;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-shoulder {
+    position: absolute;
+    top: 0;
+    width: var(--lux-shoulder-width);
+    height: var(--lux-shoulder-height);
+    border-radius: 18px 18px 24px 24px;
+    font-size: 19px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-shoulder-1 { left: var(--lux-shoulder-side); }
+  #emulatorModal.lux-console-mobile-stage1 .lux-shoulder-2 { right: var(--lux-shoulder-side); }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-shoulders-3 .lux-shoulder-1 { left: var(--lux-shoulder-side); }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-shoulders-3 .lux-shoulder-2 {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: 76px;
+  }
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-shoulders-3 .lux-shoulder-3 { right: var(--lux-shoulder-side); }
+
+  /* Select / Start */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-system-buttons {
+    position: absolute;
+    left: 50%;
+    bottom: var(--lux-system-bottom);
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    pointer-events: none;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-system-button {
+    min-width: 78px;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 18px;
+    font-size: 10px;
+    letter-spacing: .11em;
+  }
+
+  /* Center Lux button: visual anchor for the future action menu. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
+    position: absolute;
+    left: 50%;
+    top: calc(var(--lux-visible-screen-height, 66.666vw) + 18px);
+    transform: translateX(-50%);
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 1px solid rgba(216,180,254,.55);
+    background: radial-gradient(circle at 35% 30%, #7e22ce, #35105c 62%, #180727 100%);
+    box-shadow: 0 0 24px rgba(147,51,234,.38), inset 0 1px 0 rgba(255,255,255,.22);
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    opacity: 1;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 8px rgba(216,180,254,.45));
+  }
+
+  /* Keep the shell visually balanced when a console has no shoulder buttons. */
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-system-gba):not(.lux-console-system-snes):not(.lux-console-system-n64) .lux-console-brand-button {
+    top: calc(var(--lux-visible-screen-height, 66.666vw) + 16px);
   }
 
   @media (orientation: landscape) {
     #emulatorModal.lux-console-mobile-stage1 {
-      --lux-dpad-left: calc(22px + env(safe-area-inset-left, 0px));
+      --lux-dpad-left: calc(24px + env(safe-area-inset-left, 0px));
       --lux-dpad-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
       --lux-dpad-size: 140px;
       --lux-dpad-key: 50px;
       --lux-dpad-offset: 45px;
+
+      --lux-face-right: calc(24px + env(safe-area-inset-right, 0px));
+      --lux-face-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+      --lux-face-size: 138px;
+      --lux-face-key: 60px;
+
+      --lux-shoulder-top: calc(12px + env(safe-area-inset-top, 0px));
+      --lux-shoulder-side: calc(18px + env(safe-area-inset-left, 0px));
+      --lux-shoulder-width: 96px;
+      --lux-shoulder-height: 46px;
+
+      --lux-system-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button {
+      top: calc(12px + env(safe-area-inset-top, 0px));
+      width: 46px;
+      height: 46px;
+    }
+
+    #emulatorModal.lux-console-mobile-stage1 .lux-console-brand-button img {
+      width: 24px;
+      height: 24px;
     }
   }
 }
