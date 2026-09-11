@@ -4,6 +4,8 @@
   if (!window.matchMedia('(max-width: 767px)').matches || window.__luxConsoleMobileStage1Installed) return;
   window.__luxConsoleMobileStage1Installed = true;
 
+  const VIEW_MODE_KEY = 'lux-play:console-view-mode';
+
   const RETROPAD = {
     B: 0, Y: 1, SELECT: 2, START: 3,
     UP: 4, DOWN: 5, LEFT: 6, RIGHT: 7,
@@ -71,6 +73,23 @@
     } catch (_) {}
     if (!type) type = document.getElementById('emulatorIntroConsole')?.textContent || 'gba';
     return String(type).toLowerCase().replaceAll(' ', '');
+  };
+
+  const storedViewMode = () => {
+    try {
+      return localStorage.getItem(VIEW_MODE_KEY) === 'fullscreen' ? 'fullscreen' : 'frame';
+    } catch (_) {
+      return 'frame';
+    }
+  };
+
+  const ensureViewMode = modal => {
+    if (!modal) return;
+    const alreadySet = modal.classList.contains('lux-console-view-frame') || modal.classList.contains('lux-console-view-fullscreen');
+    if (alreadySet) return;
+    const mode = storedViewMode();
+    modal.classList.add(mode === 'fullscreen' ? 'lux-console-view-fullscreen' : 'lux-console-view-frame');
+    modal.dataset.luxViewMode = mode;
   };
 
   const sendInput = (index, pressed) => {
@@ -158,6 +177,18 @@
       windowEl.className = 'lux-console-bezel-window';
       windowEl.setAttribute('aria-hidden', 'true');
       bezel.appendChild(windowEl);
+    }
+
+    if (bezel && !bezel.querySelector('.lux-console-header-brand')) {
+      const header = document.createElement('div');
+      header.className = 'lux-console-header-brand';
+      header.setAttribute('aria-hidden', 'true');
+      header.innerHTML = `
+        <img src="lux-play-icon.svg" alt="">
+        <span class="lux-console-header-wordmark"><strong>LUX</strong><em>PLAY</em></span>
+        <small>LUX CONSOLE</small>
+      `;
+      bezel.appendChild(header);
     }
 
     return {
@@ -292,6 +323,7 @@
     if (!modal) return false;
 
     modal.classList.add('lux-console-mobile-stage1');
+    ensureViewMode(modal);
     document.body.classList.add('lux-console-open');
 
     const layers = ensureLayerSystem(modal);
