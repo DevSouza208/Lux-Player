@@ -1,0 +1,57 @@
+/* Lux Console landscape finale. Portrait stays untouched. Desktop stays untouched. */
+@media (max-width: 767px) and (orientation: landscape) {
+  /* Moldura: move the game up and use the freed lower center lane for branding. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    --lux-screen-top: max(4px, env(safe-area-inset-top, 0px));
+    --lux-visible-screen-top: var(--lux-screen-top);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand {
+    top: calc(var(--lux-visible-screen-top) + var(--lux-visible-screen-height) + 8px);
+    bottom: auto;
+    gap: 8px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand img {
+    width: 26px;
+    height: 26px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-wordmark {
+    font-size: 15px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand small {
+    left: 34px;
+    top: 19px;
+    font-size: 5px;
+  }
+
+  /* Any two-face-button console uses a horizontal B/A pair in landscape.
+     The buttons are tall rounded rectangles, while 4-button layouts stay untouched. */
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 {
+    width: 132px;
+    height: 92px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button {
+    width: 60px;
+    height: 90px;
+    border-radius: 18px;
+    font-size: 22px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-1 {
+    left: 0;
+    right: auto;
+    top: 1px;
+    bottom: auto;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1 .lux-console-face-2 .lux-face-button-2 {
+    left: auto;
+    right: 0;
+    top: 1px;
+    bottom: auto;
+  }
+}
