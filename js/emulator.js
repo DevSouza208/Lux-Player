@@ -72,7 +72,7 @@ function startEmulatorSession() {
   window.EJS_gameName = getGameSaveKey(gameItem);
   window.EJS_defaultOptions = { 'save-state-location': 'browser' };
   window.EJS_startOnLoaded = true;
-  window.EJS_onGameStart = async () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); await loadNativeGameSave(gameItem); await loadRequestedGameSlot(); };
+  window.EJS_onGameStart = async () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); if (gameItem.loadSource !== 'state' && gameItem.loadSource !== 'new') await loadNativeGameSave(gameItem); await loadRequestedGameSlot(); };
   const script = document.createElement('script');
   script.id = 'ejs-script';
   script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
@@ -184,23 +184,21 @@ function updateGameDetailsActions(game) {
   const favorite = typeof isGameFavorite === 'function' && isGameFavorite(game);
   const favoriteButton = `<button onclick="toggleCurrentGameFavorite(event)" class="w-full mb-2 border ${favorite ? 'border-rose-500/60 bg-rose-500/15 text-rose-200' : 'border-purple-800/60 bg-purple-950/60 text-purple-200'} hover:bg-rose-500/20 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"><i data-lucide="heart" class="w-4 h-4 ${favorite ? 'fill-current' : ''}"></i> ${favorite ? 'Nos favoritos' : 'Adicionar aos favoritos'}</button>`;
   const downloadButton = game.external ? '<button id="gameDownloadButton" disabled class="w-full mb-2 border border-emerald-800/70 bg-emerald-950/40 text-emerald-200 py-2.5 rounded-xl text-xs font-bold flex justify-center items-center gap-2"><i data-lucide="hard-drive" class="w-4 h-4"></i><span>ROM local deste dispositivo</span></button>' : '<button id="gameDownloadButton" onclick="downloadCurrentGame()" class="w-full mb-2 border border-indigo-800/70 bg-indigo-950/50 text-indigo-200 hover:bg-indigo-900/70 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-center items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i><span>Baixar para jogar localmente</span></button>';
-  actions.innerHTML = favoriteButton + downloadButton + (hasGameSave(game)
-    ? '<button onclick="chooseGameSaveSlot()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Continuar</button><button onclick="startGameFromDetails()" class="w-full mt-2 bg-purple-950/60 hover:bg-purple-900 text-purple-100 font-bold py-3 rounded-xl text-sm border border-purple-800/60 transition-all">Novo jogo</button>'
-    : '<button onclick="startGameFromDetails()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Novo jogo</button>');
+  actions.innerHTML = favoriteButton + downloadButton + '<button onclick="chooseGameResume()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Continuar</button><button onclick="startNewGameFromDetails()" class="w-full mt-2 bg-purple-950/60 hover:bg-purple-900 text-purple-100 font-bold py-3 rounded-xl text-sm border border-purple-800/60 transition-all">Novo jogo</button>';
   refreshGameDownloadButton(game);
   loadGameRating(game);
   const playTime=document.createElement('p');playTime.id='gameDetailsPlayTime';playTime.className='mt-3 text-xs text-purple-300';playTime.textContent=`Tempo jogado: ${formatGamePlayTime(getGamePlayTime(game))}`;actions.appendChild(playTime);
   const hltb=document.createElement('a');hltb.href='https://howlongtobeat.com/?q='+encodeURIComponent(game.name||'');hltb.target='_blank';hltb.rel='noopener noreferrer';hltb.className='block mt-2 text-xs text-indigo-300 hover:text-white';hltb.textContent='Ver duração no HowLongToBeat ↗';actions.appendChild(hltb);
   lucide.createIcons();
 }
-async function startGameFromDetails(loadSlot = null) {
+async function startGameFromDetails(loadSlot = null, loadSource = 'native') {
   if (!currentGameDetails) return;
   const game = currentGameDetails;
   let localUrl = game.localUrl || null;
   if (!localUrl && !game.external) {
     try { localUrl = (await window.LuxRomCache?.get(game))?.url || null; } catch (error) { console.warn('ROM local indisponível:', error); }
   }
-  const playableGame = { ...game, loadSlot, localUrl };
+  const playableGame = { ...game, loadSlot, loadSource, localUrl };
   closeGameDetails();
   openGameEmulator(playableGame);
 }
@@ -329,12 +327,42 @@ async function downloadCurrentGame() {
   }
 }
 
-function chooseGameSaveSlot() {
+async function chooseGameResume() {
   if (!currentGameDetails) return;
   createContinueSlotModalDOM();
-  const slots = getGameSaveSlots(currentGameDetails);
-  document.getElementById('continueSlotButtons').innerHTML = [1, 2, 3].map(slot => gameSlotDate(slots[slot]) ? `<button onclick="continueFromSlot(${slot})" class="rounded-xl border border-purple-700/70 bg-purple-950/50 p-4 text-left hover:bg-purple-800/60 transition-all"><span class="block text-sm font-bold text-white">Slot ${slot}</span><span class="mt-1 block text-[10px] text-purple-300">${new Date(gameSlotDate(slots[slot])).toLocaleString('pt-BR')}</span></button>` : '').join('');
+  const game = currentGameDetails;
+  const user = currentUser;
+  const slots = getGameSaveSlots(game);
+  const nativeGame = nativeGameRecord(game);
+  let nativeDate = 0;
+  if (user) {
+    try {
+      const local = await readLocalGameSave(nativeGame, 0, user);
+      nativeDate = Number(local?.updatedAt) || 0;
+      try {
+        const cloud = await loadCloudGameSave(nativeGame, 0, user);
+        nativeDate = Math.max(nativeDate, Number(cloud?.updatedAt) || 0);
+      } catch (_) {}
+    } catch (_) {}
+  }
+  const nativeButton = nativeDate
+    ? `<button onclick="continueFromNative()" class="rounded-xl border border-emerald-700/70 bg-emerald-950/50 p-4 text-left hover:bg-emerald-900/70 transition-all"><span class="block text-sm font-bold text-emerald-200">Save natural (principal)</span><span class="mt-1 block text-[10px] text-emerald-300">Salvo em ${new Date(nativeDate).toLocaleString('pt-BR')}</span></button>`
+    : '<div class="rounded-xl border border-purple-900/50 bg-purple-950/30 p-4 text-left"><span class="block text-sm font-bold text-purple-300">Save natural (principal)</span><span class="mt-1 block text-[10px] text-purple-400">Ainda não existe. Salve dentro do jogo primeiro.</span></div>';
+  const stateButtons = [1, 2, 3].map(slot => gameSlotDate(slots[slot])
+    ? `<button onclick="continueFromSlot(${slot})" class="rounded-xl border border-purple-700/70 bg-purple-950/50 p-4 text-left hover:bg-purple-800/60 transition-all"><span class="block text-sm font-bold text-white">Save State · Slot ${slot}</span><span class="mt-1 block text-[10px] text-purple-300">${new Date(gameSlotDate(slots[slot])).toLocaleString('pt-BR')}</span></button>`
+    : `<div class="rounded-xl border border-purple-900/40 bg-purple-950/20 p-4 text-left opacity-60"><span class="block text-sm font-bold text-purple-300">Save State · Slot ${slot}</span><span class="mt-1 block text-[10px] text-purple-400">Vazio</span></div>`).join('');
+  document.getElementById('continueSlotButtons').innerHTML = nativeButton + stateButtons;
   document.getElementById('continueSlotModal').classList.remove('hidden');
+}
+
+function continueFromNative() {
+  document.getElementById('continueSlotModal')?.classList.add('hidden');
+  startGameFromDetails(null, 'native');
+}
+
+function startNewGameFromDetails() {
+  document.getElementById('continueSlotModal')?.classList.add('hidden');
+  startGameFromDetails(null, 'new');
 }
 
 async function refreshCloudGameSaveSlots(game) {
@@ -365,7 +393,7 @@ async function refreshCloudGameSaveSlots(game) {
   } catch (_) { /* Local storage unavailable; do not interrupt the game catalog. */ }
 }
 
-function continueFromSlot(slot) { document.getElementById('continueSlotModal')?.classList.add('hidden'); startGameFromDetails(slot); }
+function continueFromSlot(slot) { document.getElementById('continueSlotModal')?.classList.add('hidden'); startGameFromDetails(slot, 'state'); }
 
 async function loadRequestedGameSlot() {
   const game = activeEmulatorGame;
@@ -567,7 +595,7 @@ function createSaveExitModalDOM() {
 
 function createContinueSlotModalDOM() {
   if (document.getElementById('continueSlotModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="continueSlotModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Continuar de qual slot?</h2><p class="mt-1 text-xs text-purple-300">Selecione o progresso que deseja carregar.</p><div id="continueSlotButtons" class="mt-4 grid grid-cols-1 gap-3"></div><button onclick="document.getElementById('continueSlotModal').classList.add('hidden')" class="mt-4 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="continueSlotModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Como deseja continuar?</h2><p class="mt-1 text-xs text-purple-300">O save natural é o principal. Se preferir, escolha um dos três save states.</p><div id="continueSlotButtons" class="mt-4 grid grid-cols-1 gap-3"></div><button onclick="document.getElementById('continueSlotModal').classList.add('hidden')" class="mt-4 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>`);
 }
 
 function createControlsHelpModalDOM() {
