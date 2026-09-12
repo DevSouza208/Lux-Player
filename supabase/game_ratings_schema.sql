@@ -1,5 +1,5 @@
 create table if not exists public.game_ratings (
-  game_id uuid not null references public.games(id) on delete cascade,
+  game_id bigint not null references public.games(id) on delete cascade,
   user_name text not null,
   profile_slot smallint not null check (profile_slot between 1 and 4),
   profile_key text not null default '',
