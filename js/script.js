@@ -1084,6 +1084,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function smartFetch(url) {
+      if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) {
+        throw new Error('Este endereço não é um link HTTP/HTTPS. Listas anexadas devem ser carregadas pelo armazenamento.');
+      }
       const encoded = encodeURIComponent(url);
       const endpoints = [
         url,
@@ -2358,6 +2361,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     async function loadPlaylist(url) {
       try {
+        url = String(url || '').trim();
         const text = url.startsWith('m3u-storage:')
           ? await downloadUserPlaylist()
           : await (await smartFetch(url)).text();
@@ -2371,7 +2375,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         allMediaItems = parsed.filter(profileAllowsMedia);
         mergeSharedVodsIntoPlayer();
       } catch (err) {
-        alert('Erro ao carregar lista M3U.');
+        alert('Erro ao carregar lista M3U: ' + (err.message || 'Falha desconhecida.'));
       }
     }
 
