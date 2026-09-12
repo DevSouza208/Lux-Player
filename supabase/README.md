@@ -27,7 +27,7 @@ salva primeiro no IndexedDB, separado por usuário, e aguarda o envio à nuvem.
 Em caso de falha, mantém o save e informa que o envio está pendente. A fila
 persiste ao fechar o app e tenta novamente no login, ao reconectar ou abrir um jogo.
 O limite por save é 6 MB; saves maiores continuam somente neste dispositivo.
-Os saves da barra nativa do emulador não passam por este fluxo: use os slots do Lux Play.
+Os saves naturais do jogo agora usam uma chave separada e podem ser sincronizados junto com os save states. Ao continuar, o usuário escolhe qual fonte abrir.
 
 No outro dispositivo, entre na mesma conta, abra o jogo e escolha Continuar.
 A data da listagem da nuvem é separada da data do arquivo local para permitir
