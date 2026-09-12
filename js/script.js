@@ -4574,6 +4574,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       return getSearchScore(getCachedSearchData(searchItem), normalizedQuery.split(' '), normalizedQuery) >= 0;
     }
 
+    function togglePublicCoreStatusPanel() {
+      const content = document.getElementById('gameCoreStatusContent');
+      const label = document.getElementById('gameCoreStatusToggleLabel');
+      if (!content) return;
+      const isHidden = content.classList.toggle('hidden');
+      if (label) label.textContent = isHidden ? 'Mostrar cores' : 'Ocultar cores';
+    }
     function openGameCard(id) {
       const gameId = String(id);
       if (gameId.startsWith('external_')) { window.openExternalGame?.(gameId); return; }
@@ -4622,7 +4629,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
               <p class="text-xs text-purple-400/70 mt-0.5">Jogue clássicos direto no navegador</p>
             </div>
             <div class="flex flex-wrap justify-end gap-2">
-              <select onchange="setGamesFilter('console', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">🎮 Todos</option><option value="gba">🟣 GBA</option><option value="gb">🟡 GB</option><option value="gbc">🎨 GBC</option><option value="snes">🕹️ SNES</option><option value="megadrive">🔵 Mega Drive</option><option value="nes">🔴 NES</option><option value="mastersystem">🟠 Master System</option><option value="n64">🟢 N64</option><option value="psp">🔴 PSP</option></select><select onchange="setGamesFilter('origin', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">📚 Todos os jogos</option><option value="lux">⭐ Catálogo Lux</option><option value="external">📁 ROMs do dispositivo</option></select><button onclick="document.getElementById('externalRomInput').click()" class="bg-purple-600 hover:bg-purple-500 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-white transition-colors">Abrir ROM</button><input id="externalRomInput" type="file" accept=".gb,.gbc,.gba,.nes,.sfc,.smc,.sms,.md,.gen,.n64,.z64,.v64,.iso,.cso,.pbp" class="hidden" onchange="importExternalRom(this.files[0]); this.value=''">
+              <select onchange="setGamesFilter('console', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">🎮 Todos</option><option value="gba">🟣 GBA</option><option value="gb">🟡 GB</option><option value="gbc">🎨 GBC</option><option value="snes">🕹️ SNES</option><option value="megadrive">🔵 Mega Drive</option><option value="nes">🔴 NES</option><option value="mastersystem">🟠 Master System</option><option value="n64">🟢 N64</option><option value="psp">🔴 PSP</option></select><select onchange="setGamesFilter('origin', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">📚 Todos os jogos</option><option value="lux">⭐ Catálogo Lux</option><option value="external">📁 ROMs do dispositivo</option></select><button onclick="document.getElementById('externalRomInput').click()" class="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 rounded-lg px-3 py-2 text-[11px] font-bold text-white transition-colors">Abrir ROM</button><input id="externalRomInput" type="file" accept=".gb,.gbc,.gba,.nes,.sfc,.smc,.sms,.md,.gen,.n64,.z64,.v64,.iso,.cso,.pbp" class="hidden" onchange="importExternalRom(this.files[0]); this.value=''">
               <button onclick="setGamesFilter('favorites')" aria-pressed="${gamesFavoritesOnly}" class="${gamesFavoritesOnly ? 'bg-rose-500/20 border-rose-400/60 text-rose-200' : 'bg-[#120c1f] border-purple-900/60 text-purple-200 hover:border-rose-400/60'} border rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors flex items-center gap-1"><i data-lucide="heart" class="w-3.5 h-3.5 ${gamesFavoritesOnly ? 'fill-current' : ''}"></i> Favoritos</button>
               ${currentUser?.role === 'admin' ? `<button onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-rose-200 transition-colors">Revisar não aprovados</button><select onchange="setGamesFilter('status', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">Status: todos</option><option value="approved">✓ Aprovados</option><option value="pending">◷ Pendentes</option></select>` : ''}
             </div>
@@ -4630,9 +4637,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           <div class="mb-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div><p class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Cores do emulador</p><p class="mt-1 text-[10px] text-purple-300/70">As bolinhas indicam o teste do core, não o status do jogo.</p></div>
-              <div id="gameCoreStatusList" class="flex flex-wrap gap-2 text-[10px] font-bold text-purple-200"></div>
+              <button type="button" onclick="togglePublicCoreStatusPanel()" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-1.5 text-[10px] font-bold text-purple-200 hover:bg-purple-900/70"><span id="gameCoreStatusToggleLabel">Ocultar cores</span></button>
             </div>
-            <p id="externalRomStatus" class="mt-2 text-[10px] text-purple-400/80"></p>
+            <div id="gameCoreStatusContent" class="mt-3">
+              <div id="gameCoreStatusList" class="flex flex-wrap gap-2 text-[10px] font-bold text-purple-200"></div>
+              <p id="externalRomStatus" class="mt-2 text-[10px] text-purple-400/80"></p>
+            </div>
           </div>
           ${activeSearchQuery ? `<div class="mb-6 border-t border-purple-900/50 pt-5 flex flex-wrap items-center gap-3"><h3 class="text-xl font-extrabold text-white">Resultados para: <span class="text-purple-400">&quot;${escapeGameHtml(activeSearchQuery)}&quot;</span></h3><button onclick="clearSearchFilter()" class="bg-purple-950 hover:bg-rose-600 text-purple-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"><i data-lucide="x" class="w-3.5 h-3.5"></i> Limpar busca</button></div>` : ''}
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-4">
