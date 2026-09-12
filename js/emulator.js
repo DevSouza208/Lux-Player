@@ -5,11 +5,11 @@ let requestedSaveSlot = null;
 let gameSaveBusy = false;
 let resolveGameSaveChoice = null;
 let emulatorFastForward = false;
+let emulatorLandscape = false;
 let emulatorContextMenuGuard = null;
 let gamePlayTimer = null;
 let activeRomObjectUrl = null;
 let romDownloadBusy = false;
-let emulatorViewportCleanup = null;
 
 function getGameSaveKey(game, user = currentUser) { return `lux-play:user-save:${encodeURIComponent(user?.user || '')}${typeof profileLocalSuffix === 'function' ? profileLocalSuffix(user) : ''}:${getCloudGameSaveKey(game)}`; }
 function getGameSaveSlots(game) { try { return JSON.parse(localStorage.getItem(getGameSaveKey(game)) || '{}'); } catch (_) { return {}; } }
@@ -39,7 +39,6 @@ function openGameEmulator(gameItem) {
   titleEl.innerText = gameItem.name;
   modal.classList.remove('hidden');
   enableEmulatorTouchGuard();
-  bindEmulatorViewportEvents();
   document.getElementById('emulatorIntroName').textContent = gameItem.name || 'Jogo';
   document.getElementById('emulatorIntroConsole').textContent = gameItem.consoleLabel || String(gameItem.console || 'Console').toUpperCase();
   const header=document.querySelector('#emulatorModal .border-b');
@@ -61,44 +60,6 @@ function toggleEmulatorFastForward(){
   const button=document.getElementById('emulatorFastForward');if(button){button.classList.toggle('bg-purple-600',emulatorFastForward);button.textContent=emulatorFastForward?'Fast-forward ligado':'Fast-forward';}
 }
 
-function fitEmulatorViewport(notify = true) {
-  const container = document.getElementById('emulatorContainer');
-  if (!container) return;
-  const stage = container.parentElement;
-  if (stage) {
-    stage.style.minHeight = '0';
-    stage.style.minWidth = '0';
-  }
-  container.style.width = '100%';
-  container.style.height = '100%';
-  container.style.minWidth = '0';
-  container.style.minHeight = '0';
-  if (notify) {
-    window.dispatchEvent(new Event('resize'));
-    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-    setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
-  }
-}
-function bindEmulatorViewportEvents() {
-  if (emulatorViewportCleanup) emulatorViewportCleanup();
-  const refresh = () => {
-    requestAnimationFrame(() => fitEmulatorViewport(false));
-    setTimeout(() => fitEmulatorViewport(false), 160);
-  };
-  window.addEventListener('resize', refresh, { passive: true });
-  window.addEventListener('orientationchange', refresh, { passive: true });
-  window.visualViewport?.addEventListener('resize', refresh, { passive: true });
-  window.screen?.orientation?.addEventListener?.('change', refresh);
-  emulatorViewportCleanup = () => {
-    window.removeEventListener('resize', refresh);
-    window.removeEventListener('orientationchange', refresh);
-    window.visualViewport?.removeEventListener('resize', refresh);
-    window.screen?.orientation?.removeEventListener?.('change', refresh);
-    emulatorViewportCleanup = null;
-  };
-  refresh();
-}
-
 function startEmulatorSession() {
   if (!pendingEmulatorGame) return;
   const gameItem = pendingEmulatorGame;
@@ -112,7 +73,7 @@ function startEmulatorSession() {
   window.EJS_gameName = getGameSaveKey(gameItem);
   window.EJS_defaultOptions = { 'save-state-location': 'browser' };
   window.EJS_startOnLoaded = true;
-  window.EJS_onGameStart = async () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); fitEmulatorViewport(); startGamePlayTimer(gameItem); if (gameItem.loadSource !== 'state' && gameItem.loadSource !== 'new') await loadNativeGameSave(gameItem); await loadRequestedGameSlot(); };
+  window.EJS_onGameStart = async () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); if (gameItem.loadSource !== 'state' && gameItem.loadSource !== 'new') await loadNativeGameSave(gameItem); await loadRequestedGameSlot(); };
   const script = document.createElement('script');
   script.id = 'ejs-script';
   script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
@@ -152,7 +113,6 @@ function disableEmulatorTouchGuard() {
   emulatorContextMenuGuard = null;
 }
 function closeGameEmulator() {
-  emulatorViewportCleanup?.();
   disableEmulatorTouchGuard();
   if (activeRomObjectUrl) {
     try { URL.revokeObjectURL(activeRomObjectUrl); } catch (_) {}
@@ -654,9 +614,24 @@ function createContinueSlotModalDOM() {
   document.body.insertAdjacentHTML('beforeend', `<div id="continueSlotModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Como deseja continuar?</h2><p class="mt-1 text-xs text-purple-300">O save natural é o principal. Se preferir, escolha um dos três save states.</p><div id="continueSlotButtons" class="mt-4 grid grid-cols-1 gap-3"></div><button onclick="document.getElementById('continueSlotModal').classList.add('hidden')" class="mt-4 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>`);
 }
 
+function toggleEmulatorOrientation() {
+  const target = emulatorLandscape ? 'portrait-primary' : 'landscape';
+  const status = document.getElementById('emulatorOrientationStatus');
+  if (!window.screen?.orientation?.lock) {
+    if (status) status.textContent = 'Seu navegador não permite controlar a rotação por este botão.';
+    return;
+  }
+  window.screen.orientation.lock(target).then(() => {
+    emulatorLandscape = !emulatorLandscape;
+    if (status) status.textContent = emulatorLandscape ? 'Tela definida como paisagem.' : 'Tela definida como retrato.';
+  }).catch(() => {
+    if (status) status.textContent = 'O Android bloqueou a rotação. Ative a rotação automática ou abra o app em tela cheia.';
+  });
+}
+
 function createControlsHelpModalDOM() {
   if (document.getElementById('controlsHelpModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="controlsHelpModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Configurar controles</h2><p class="mt-2 text-sm leading-relaxed text-slate-300">O painel nativo do EmulatorJS permite configurar teclado, controle USB ou Bluetooth para <strong>Player 1</strong> e <strong>Player 2</strong>. As preferências ficam salvas neste navegador.</p><p class="mt-3 text-xs text-purple-300">No painel, abra Controls/Controles e escolha o jogador antes de atribuir cada tecla ou botão.</p><button onclick="openNativeControlsPanel()" class="mt-5 w-full rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500">Abrir configurações</button><button onclick="document.getElementById('controlsHelpModal').classList.add('hidden')" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', \`<div id="controlsHelpModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Configurar controles</h2><p class="mt-2 text-sm leading-relaxed text-slate-300">O painel nativo do EmulatorJS permite configurar teclado, controle USB ou Bluetooth para <strong>Player 1</strong> e <strong>Player 2</strong>. As preferências ficam salvas neste navegador.</p><p class="mt-3 text-xs text-purple-300">No painel, abra Controls/Controles e escolha o jogador antes de atribuir cada tecla ou botão.</p><button onclick="toggleEmulatorOrientation()" class="mt-5 w-full rounded-xl border border-indigo-700/70 bg-indigo-950/60 py-3 text-sm font-bold text-indigo-100 hover:bg-indigo-900/70">Girar tela</button><p id="emulatorOrientationStatus" class="mt-2 text-center text-[11px] text-purple-300"></p><button onclick="openNativeControlsPanel()" class="mt-3 w-full rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500">Abrir configurações</button><button onclick="document.getElementById('controlsHelpModal').classList.add('hidden')" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>\`);
 }
 
 function finishGameSaveChoice(choice) {
