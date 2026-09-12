@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260912-mobile-emulator-restore-1';
+  const RESET_VERSION = '20260912-media-source-fix-1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -221,11 +221,62 @@ function animateDashboardEntry() {
   else window.addEventListener('load', loadMobileScripts, { once: true });
 })();
 
-// Séries M3U são agrupadas depois do parse. O mapa público de categorias precisa
-// ser reaplicado após esse agrupamento, quando o item finalmente possui o nome
-// base da série usado pelo admin (ex.: "Breaking Bad" em vez de "Breaking Bad S01E01").
+// Mantém a M3U como fonte principal. O Xtream automático continua disponível
+// apenas como fallback quando a lista M3U não puder ser carregada.
+// Também reaplica a categoria pública somente depois de os episódios virarem
+// uma série única e ignora mapas públicos genéricos antigos (FILMES/SERIES).
 (() => {
   let attempts = 0;
+
+  const normalizeGenericGroup = value => String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+  const installSourcePriorityFix = () => {
+    const original = window.getMediaSourceCandidates;
+    if (typeof original !== 'function') return false;
+    if (original.__luxM3uPrimaryFix) return true;
+
+    const patched = function (user) {
+      const candidates = original.call(this, user);
+      if (!Array.isArray(candidates) || candidates.length < 2) return candidates;
+
+      const m3u = [];
+      const fallback = [];
+      candidates.forEach(candidate => {
+        if (candidate?.kind === 'm3u-url' || candidate?.kind === 'm3u-storage') m3u.push(candidate);
+        else fallback.push(candidate);
+      });
+      return [...m3u, ...fallback];
+    };
+
+    patched.__luxM3uPrimaryFix = true;
+    window.getMediaSourceCandidates = patched;
+    return true;
+  };
+
+  const installGenericCategoryGuard = () => {
+    const original = window.getSharedCategoryForItem;
+    if (typeof original !== 'function') return false;
+    if (original.__luxGenericCategoryGuard) return true;
+
+    const patched = function (item) {
+      const group = original.call(this, item);
+      const normalized = normalizeGenericGroup(group);
+      const type = String(item?.type || '').toLowerCase();
+
+      if (type === 'movies' && ['filme', 'filmes', 'movie', 'movies'].includes(normalized)) return '';
+      if (type === 'series' && ['serie', 'series'].includes(normalized)) return '';
+      return group;
+    };
+
+    patched.__luxGenericCategoryGuard = true;
+    window.getSharedCategoryForItem = patched;
+    return true;
+  };
+
   const installSeriesCategoryFix = () => {
     const original = window.groupM3uSeriesEpisodes;
     if (typeof original !== 'function') return false;
@@ -239,14 +290,22 @@ function animateDashboardEntry() {
       });
       return grouped;
     };
+
     patched.__luxSharedSeriesCategoryFix = true;
     window.groupM3uSeriesEpisodes = patched;
     return true;
   };
 
-  if (installSeriesCategoryFix()) return;
+  const installFixes = () => {
+    const sourceOk = installSourcePriorityFix();
+    const categoryOk = installGenericCategoryGuard();
+    const seriesOk = installSeriesCategoryFix();
+    return sourceOk && categoryOk && seriesOk;
+  };
+
+  if (installFixes()) return;
   const timer = setInterval(() => {
     attempts += 1;
-    if (installSeriesCategoryFix() || attempts >= 100) clearInterval(timer);
+    if (installFixes() || attempts >= 120) clearInterval(timer);
   }, 50);
 })();
