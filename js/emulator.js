@@ -156,7 +156,7 @@ function updateGameDetailsActions(game) {
   if (!actions) return;
   const favorite = typeof isGameFavorite === 'function' && isGameFavorite(game);
   const favoriteButton = `<button onclick="toggleCurrentGameFavorite(event)" class="w-full mb-2 border ${favorite ? 'border-rose-500/60 bg-rose-500/15 text-rose-200' : 'border-purple-800/60 bg-purple-950/60 text-purple-200'} hover:bg-rose-500/20 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"><i data-lucide="heart" class="w-4 h-4 ${favorite ? 'fill-current' : ''}"></i> ${favorite ? 'Nos favoritos' : 'Adicionar aos favoritos'}</button>`;
-  const downloadButton = '<button id="gameDownloadButton" onclick="downloadCurrentGame()" class="w-full mb-2 border border-indigo-800/70 bg-indigo-950/50 text-indigo-200 hover:bg-indigo-900/70 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-center items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i><span>Baixar para jogar localmente</span></button>';
+  const downloadButton = game.external ? '<button id="gameDownloadButton" disabled class="w-full mb-2 border border-emerald-800/70 bg-emerald-950/40 text-emerald-200 py-2.5 rounded-xl text-xs font-bold flex justify-center items-center gap-2"><i data-lucide="hard-drive" class="w-4 h-4"></i><span>ROM local deste dispositivo</span></button>' : '<button id="gameDownloadButton" onclick="downloadCurrentGame()" class="w-full mb-2 border border-indigo-800/70 bg-indigo-950/50 text-indigo-200 hover:bg-indigo-900/70 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-center items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i><span>Baixar para jogar localmente</span></button>';
   actions.innerHTML = favoriteButton + downloadButton + (hasGameSave(game)
     ? '<button onclick="chooseGameSaveSlot()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Continuar</button><button onclick="startGameFromDetails()" class="w-full mt-2 bg-purple-950/60 hover:bg-purple-900 text-purple-100 font-bold py-3 rounded-xl text-sm border border-purple-800/60 transition-all">Novo jogo</button>'
     : '<button onclick="startGameFromDetails()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Novo jogo</button>');
@@ -169,8 +169,10 @@ function updateGameDetailsActions(game) {
 async function startGameFromDetails(loadSlot = null) {
   if (!currentGameDetails) return;
   const game = currentGameDetails;
-  let localUrl = null;
-  try { localUrl = (await window.LuxRomCache?.get(game))?.url || null; } catch (error) { console.warn('ROM local indisponível:', error); }
+  let localUrl = game.localUrl || null;
+  if (!localUrl && !game.external) {
+    try { localUrl = (await window.LuxRomCache?.get(game))?.url || null; } catch (error) { console.warn('ROM local indisponível:', error); }
+  }
   const playableGame = { ...game, loadSlot, localUrl };
   closeGameDetails();
   openGameEmulator(playableGame);
@@ -262,6 +264,7 @@ async function saveGameRating(rating) {
 async function refreshGameDownloadButton(game = currentGameDetails) {
   const button = document.getElementById('gameDownloadButton');
   if (!button || !game) return;
+  if (game.external) return;
   const label = button.querySelector('span');
   try {
     const cached = await window.LuxRomCache?.status(game);
