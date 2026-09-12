@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260912-media-source-fix-1';
+  const RESET_VERSION = '20260912-xtream-sync-1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -30,6 +30,7 @@
     './css/reader.css',
     './js/ui-motion.js',
     './js/script.js',
+    './js/synced-catalog.js',
     './js/profiles.js',
     './js/game-save-store.js',
     './js/game-rom-cache.js',
@@ -160,7 +161,8 @@ function animateDashboardEntry() {
   const modules = [
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
-    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2']
+    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
+    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260912-xtream-sync-1']
   ];
   modules.forEach(([name, src]) => {
     if (document.querySelector(`script[data-${name}]`)) return;
