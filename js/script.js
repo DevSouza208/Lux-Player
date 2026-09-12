@@ -51,9 +51,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function updateMediaSourceVisibility() {
+      // As abas de conteúdo principal permanecem sempre disponíveis.
+      // A fonte pode estar indisponível sem esconder a navegação.
       ['navLive', 'navMovies', 'navSeries', 'bNavLive', 'bNavMovies', 'bNavSeries'].forEach(id => {
         const element = document.getElementById(id);
-        if (element) element.classList.toggle('hidden', !mediaSourceState.available);
+        if (element) element.classList.remove('hidden');
       });
     }
 
