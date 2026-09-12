@@ -2606,8 +2606,15 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       });
 
       groups.forEach(series => {
+        const allEpisodes = Object.values(series.m3uEpisodes).flat();
+        const firstValidLogo = allEpisodes.find(episode => String(episode.logo || '').trim())?.logo || '';
+        if (!series.logo && firstValidLogo) series.logo = firstValidLogo;
+
         Object.values(series.m3uEpisodes).forEach(episodes => {
           episodes.sort((a, b) => Number(a.episodeNum || 0) - Number(b.episodeNum || 0));
+          episodes.forEach(episode => {
+            if (!episode.logo && series.logo) episode.logo = series.logo;
+          });
         });
       });
 
