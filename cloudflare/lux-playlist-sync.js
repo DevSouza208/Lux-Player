@@ -353,7 +353,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.1" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.2" });
     }
 
     if (
@@ -363,13 +363,18 @@ export default {
       return serveR2Object(request, env);
     }
 
-    // Botão do painel Admin: valida a conta do Lux e sincroniza SOMENTE ela.
+    // Painel Admin: valida o administrador e sincroniza a conta escolhida.
     if (request.method === "POST" && url.pathname === "/sync-account") {
       const body = await readJsonBody(request);
       try {
-        const account = await authenticateAdmin(env, body.username, body.password);
-        const result = await syncUser(env, account);
-        return json({ ok: result.status === "success", result }, result.status === "error" ? 502 : 200);
+        const admin = await authenticateAdmin(env, body.username, body.password);
+        const targetUsername = String(body.targetUsername || admin.usuario || "").trim();
+        const target = await getUserByUsername(env, targetUsername);
+        if (!target) throw new Error("Usuário a sincronizar não encontrado.");
+
+        const result = await syncUser(env, target);
+        const ok = result.status !== "error";
+        return json({ ok, result }, result.status === "error" ? 502 : 200);
       } catch (error) {
         const message = error?.message || "Falha ao sincronizar conta.";
         const status = /Credenciais|administradores/i.test(message) ? 401 : 500;
@@ -397,7 +402,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.6.1"
+      version: "1.6.2"
     });
   },
 
