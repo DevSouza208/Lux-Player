@@ -4339,7 +4339,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
           if (data && data.info) {
             const info = data.info;
-            document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || info.plot || info.description || 'Sinopse não disponível.';
+            document.getElementById('seriesModalPlot').innerText = info.plot || info.description || tmdbMetadata?.overview || 'Sinopse não disponível.';
           } else {
             document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
           }
