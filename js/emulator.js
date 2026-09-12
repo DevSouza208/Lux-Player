@@ -76,7 +76,7 @@ function startEmulatorSession() {
 function getEmulatorCore(consoleType) {
   switch (consoleType) {
     case 'gba': return 'gba'; case 'gb': case 'gbc': return 'gb'; case 'snes': return 'snes';
-    case 'megadrive': case 'genesis': return 'segaMD'; case 'nes': return 'nes'; case 'n64': return 'n64';
+    case 'megadrive': case 'genesis': return 'segaMD'; case 'mastersystem': case 'sms': return 'segaMS'; case 'nes': return 'nes'; case 'n64': return 'n64';
     default: return 'snes';
   }
 }
