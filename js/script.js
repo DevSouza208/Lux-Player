@@ -1335,6 +1335,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         const urlXc = row.urlxc || '';
         const senhaAdulto = row['senha18+'] || senha;
         const cargo = row.cargo || 'user';
+        const categoryMap = row.categorias_compartilhadas && typeof row.categorias_compartilhadas === 'object'
+          ? row.categorias_compartilhadas
+          : {};
 
         const isAdmin = cargo.trim().toLowerCase() === 'admin';
 
@@ -1348,6 +1351,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           senhaXc: senhaXc,
           urlXc: urlXc,
           adultPin: senhaAdulto,
+          categoryMap,
           role: isAdmin ? 'admin' : 'user'
         };
       });
@@ -2366,7 +2370,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         });
 
         if (!parsedItems.length) throw new Error('O Xtream não retornou canais, filmes ou séries.');
-        allMediaItems = parsedItems.filter(profileAllowsMedia);
+        allMediaItems = parsedItems.map(applySharedCategoryToItem).filter(profileAllowsMedia);
         mergeSharedVodsIntoPlayer();
         return { count: parsedItems.length };
       } catch (err) {
@@ -2422,6 +2426,87 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       return { count: parsed.length };
     }
 
+    function normalizeSharedCategoryTitle(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\.(mkv|mp4|avi|ts|m3u8?)$/i, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+    }
+
+    function sharedCategoryKey(item) {
+      return String(item?.type || 'live') + '|' + normalizeSharedCategoryTitle(item?.name);
+    }
+
+    function getSharedCategoryForItem(item) {
+      const map = currentUser?.categoryMap;
+      if (!map || !item?.name) return '';
+      return String(map[sharedCategoryKey(item)] || '').trim();
+    }
+
+    function applySharedCategoryToItem(item) {
+      const sharedGroup = getSharedCategoryForItem(item);
+      if (sharedGroup) {
+        item.group = sharedGroup;
+        item.isAdult = isAdultContent(item.group, item.name);
+      }
+      return item;
+    }
+
+    async function adminSendCategoriesToUsers() {
+      if (currentUser?.role !== 'admin') return;
+      const status = document.getElementById('adminCategorySyncStatus');
+      if (!allMediaItems.length) {
+        if (status) status.textContent = 'Carregue sua lista M3U/Xtream antes de enviar as categorias.';
+        return;
+      }
+
+      const categoryMap = {};
+      allMediaItems.forEach(item => {
+        const key = sharedCategoryKey(item);
+        const group = String(item?.group || '').trim();
+        if (item?.name && group && key.endsWith('|' + normalizeSharedCategoryTitle(item.name))) {
+          categoryMap[key] = group;
+        }
+      });
+
+      const entries = Object.entries(categoryMap);
+      if (!entries.length) {
+        if (status) status.textContent = 'Nenhum título com categoria foi encontrado na lista atual.';
+        return;
+      }
+
+      const button = document.getElementById('adminCategorySyncButton');
+      if (button) button.disabled = true;
+      if (status) status.textContent = 'Enviando categorias e agrupamentos para os usuários...';
+
+      try {
+        const { data: users, error: usersError } = await supabaseClient
+          .from('usuarios')
+          .select('usuario');
+
+        if (usersError) throw usersError;
+
+        for (const user of users || []) {
+          const { error } = await supabaseClient
+            .from('usuarios')
+            .update({ categorias_compartilhadas: categoryMap })
+            .eq('usuario', user.usuario);
+          if (error) throw error;
+        }
+
+        currentUser.categoryMap = categoryMap;
+        if (status) status.textContent = `${entries.length} títulos agrupados e enviados para ${(users || []).length} usuários.`;
+      } catch (error) {
+        if (status) status.textContent = 'Não foi possível enviar categorias: ' + (error.message || 'erro desconhecido');
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+
     function parseM3U(data) {
       if (!data) return [];
       const lines = data.split(/\r?\n/);
@@ -2445,7 +2530,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           temp.url = line;
           temp.id = items.length;
           temp.type = detectMediaType(temp.group, temp.name, temp.url);
-          temp.isAdult = isAdultContent(temp.group, temp.name);
+          applySharedCategoryToItem(temp);
           items.push(temp);
           temp = null;
         }
@@ -2485,9 +2570,6 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     });
 
     function setSection(section) {
-      if (['live', 'movies', 'series'].includes(section) && !mediaSourceState.available) {
-        section = 'home';
-      }
       if (currentSection !== section) animateDashboardEntry();
       currentSection = section;
       
