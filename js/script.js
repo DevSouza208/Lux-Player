@@ -89,6 +89,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       list.innerHTML = cores.map(core => `<label class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-900/50 bg-[#180f29] px-4 py-3"><span class="flex items-center gap-2 text-sm font-bold text-purple-100"><span class="h-3 w-3 rounded-full ${core.tested ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${escapeGameHtml(core.label)}</span><select data-core-status-id="${escapeGameHtml(core.id)}" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-2 text-xs text-purple-200"><option value="tested" ${core.tested ? 'selected' : ''}>Verde · testado e aprovado</option><option value="untested" ${!core.tested ? 'selected' : ''}>Vermelho · não testado</option></select></label>`).join('');
     }
 
+    function toggleAdminCoreStatusPanel() {
+      const content = document.getElementById('adminCoreStatusContent');
+      const label = document.getElementById('adminCoreStatusToggleLabel');
+      if (!content) return;
+      const isHidden = content.classList.toggle('hidden');
+      if (label) label.textContent = isHidden ? 'Mostrar cores' : 'Ocultar cores';
+    }
     function saveAdminCoreStatuses() {
       const selects = [...document.querySelectorAll('#adminCoreStatusList [data-core-status-id]')];
       if (!selects.length || !window.LuxExternalRoms?.saveCoreStatuses) return;
