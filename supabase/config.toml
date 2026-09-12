@@ -1,5 +1,8 @@
 project_id = "fvcvshppvxihhttwyyvr"
 
+[functions.user-playlists]
+verify_jwt = false
+
 [functions.core-statuses]
 # Leitura pública; a função exige administrador para gravar.
 verify_jwt = false

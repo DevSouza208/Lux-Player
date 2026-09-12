@@ -1308,6 +1308,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function resolveUserCredentials(user) {
+      if (user.m3uUrl?.startsWith('m3u-storage:')) return { isXc: false, url: user.m3uUrl };
       if (user.urlXc && user.userXc && user.senhaXc) {
         return { isXc: true, server: user.urlXc, user: user.userXc, pass: user.senhaXc };
       }
@@ -1541,6 +1542,55 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
+    async function userPlaylistRequest(body) {
+      const { data, error } = await supabaseClient.functions.invoke('user-playlists', {
+        body: { ...body, username: currentUser.user, password: currentUser.pass }
+      });
+      if (error) {
+        let message = 'Não foi possível acessar o armazenamento da lista.';
+        try { message = (await error.context.json()).error || message; } catch (_) {}
+        throw new Error(message);
+      }
+      if (data?.error) throw new Error(data.error);
+      return data;
+    }
+    async function uploadUserPlaylist(file) {
+      if (!/\.m3u8?$/i.test(file.name) || !file.size) throw new Error('Selecione um arquivo .m3u ou .m3u8 não vazio.');
+      if (file.size > 200 * 1024 * 1024) throw new Error('O limite é de 200 MB.');
+      const header = await file.slice(0, 65536).text();
+      if (!header.replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) throw new Error('O arquivo não contém uma lista M3U válida (#EXTM3U).');
+      const status = document.getElementById('adminM3uUploadStatus');
+      status.textContent = 'Preparando envio...';
+      try {
+        const plan = await userPlaylistRequest({ action: 'prepare', size: file.size });
+        for (let i = 0; i < plan.parts.length; i++) {
+          const part = plan.parts[i];
+          const { error } = await supabaseClient.storage.from('user-playlists').uploadToSignedUrl(
+            part.path, part.token, file.slice(i * plan.chunkSize, (i + 1) * plan.chunkSize),
+            { contentType: 'application/octet-stream' }
+          );
+          if (error) throw new Error('Falha no envio da lista. Selecione o arquivo e tente salvar novamente.');
+          status.textContent = `Enviando lista: ${Math.round((i + 1) / plan.parts.length * 100)}%`;
+        }
+        await userPlaylistRequest({ action: 'verify', reference: plan.reference, size: file.size });
+        status.textContent = 'Arquivo enviado. Salvando vínculo com o cliente...';
+        return plan.reference;
+      } catch (error) { status.textContent = error.message; throw error; }
+    }
+    async function downloadUserPlaylist() {
+      const account = currentUser;
+      const result = await userPlaylistRequest({ action: 'read' });
+      const parts = [];
+      for (const url of result.urls) {
+        if (currentUser !== account) throw new Error('A conta mudou durante o carregamento.');
+        const response = await fetch(url, { credentials: 'omit' });
+        if (!response.ok) throw new Error('Não foi possível baixar a lista do cliente.');
+        parts.push(await response.blob());
+      }
+      if (currentUser !== account) throw new Error('A conta mudou durante o carregamento.');
+      return new Blob(parts).text();
+    }
+
     let editingAdminUsername = null;
     let adminUserSaving = false;
     const adminUserFields = {
@@ -1551,6 +1601,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     function adminEditUser(user) {
       if (currentUser?.role !== 'admin' || adminUserSaving) return;
       editingAdminUsername = user.usuario;
+      document.getElementById('adminNewM3uFile').value = '';
+      document.getElementById('adminM3uUploadStatus').textContent = '';
       for (const [id, key] of Object.entries(adminUserFields)) document.getElementById(id).value = user[key] || (key === 'cargo' ? 'user' : '');
       document.getElementById('adminNewUser').readOnly = true;
       const title = document.getElementById('adminUserFormTitle');
@@ -1564,6 +1616,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     function resetAdminUserForm() {
       if (adminUserSaving) return;
       editingAdminUsername = null;
+      document.getElementById('adminNewM3uFile').value = '';
+      document.getElementById('adminM3uUploadStatus').textContent = '';
       for (const [id, key] of Object.entries(adminUserFields)) document.getElementById(id).value = key === 'cargo' ? 'user' : '';
       document.getElementById('adminNewUser').readOnly = false;
       document.getElementById('adminUserFormTitle').textContent = 'Cadastrar Novo Cliente';
@@ -1650,6 +1704,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       submit.disabled = true;
       document.getElementById('adminUserCancelEdit').disabled = true;
       try {
+      const playlistFile = document.getElementById('adminNewM3uFile').files?.[0];
+      if (playlistFile) {
+        record.lista_m3u = await uploadUserPlaylist(playlistFile);
+        document.getElementById('adminNewM3u').value = record.lista_m3u;
+        document.getElementById('adminNewM3uFile').value = '';
+      }
       const { data, error } = editing
         ? await supabaseClient.from('usuarios').update(record).eq('usuario', editing).select('*').single()
         : await supabaseClient.from('usuarios').insert([record]);
@@ -1676,7 +1736,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         adminUserSaving = false;
         resetAdminUserForm();
       }
-      } catch (error) { alert('Não foi possível salvar o cliente. Tente novamente.'); }
+      } catch (error) { alert(error.message || 'Não foi possível salvar o cliente. Tente novamente.'); }
       finally { adminUserSaving = false; submit.disabled = false; document.getElementById('adminUserCancelEdit').disabled = false; }
     }
 
@@ -2254,7 +2314,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       status.textContent = 'Lendo arquivo...';
       try {
         if (!/\.m3u8?$/i.test(file.name)) throw new Error('Escolha um arquivo .m3u ou .m3u8.');
-        if (file.size > 25 * 1024 * 1024) throw new Error('O limite para este teste é de 25 MB.');
+        if (file.size > 200 * 1024 * 1024) throw new Error('O limite é de 200 MB.');
         const text = await file.text();
         if (currentUser !== user) throw new Error('O perfil mudou. Selecione o arquivo novamente.');
         const parsed = parseM3U(text).filter(item => /^https?:\/\//i.test(item.url));
@@ -2276,8 +2336,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     async function loadPlaylist(url) {
       try {
-        const res = await smartFetch(url);
-        const text = await res.text();
+        const text = url.startsWith('m3u-storage:')
+          ? await downloadUserPlaylist()
+          : await (await smartFetch(url)).text();
         const parsed = parseM3U(text);
 
         parsed.sort((a, b) => {
