@@ -64,6 +64,7 @@ function startEmulatorSession() {
   window.EJS_player = '#emulatorContainer';
   window.EJS_gameUrl = gameItem.localUrl || gameItem.url;
   window.EJS_core = getEmulatorCore(gameItem.console);
+  window.EJS_threads = String(gameItem.console || '').toLowerCase() === 'psp';
   window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
   window.EJS_color = '#7c3aed';
   window.EJS_gameName = getGameSaveKey(gameItem);
@@ -79,7 +80,7 @@ function startEmulatorSession() {
 function getEmulatorCore(consoleType) {
   switch (consoleType) {
     case 'gba': return 'gba'; case 'gb': case 'gbc': return 'gb'; case 'snes': return 'snes';
-    case 'megadrive': case 'genesis': return 'segaMD'; case 'mastersystem': case 'sms': return 'segaMS'; case 'nes': return 'nes'; case 'n64': return 'n64';
+    case 'megadrive': case 'genesis': return 'segaMD'; case 'mastersystem': case 'sms': return 'segaMS'; case 'psp': return 'psp'; case 'nes': return 'nes'; case 'n64': return 'n64';
     default: return 'snes';
   }
 }
@@ -100,7 +101,7 @@ function closeGameEmulator() {
   activeEmulatorGame = null;
   requestedSaveSlot = null;
   emulatorFastForward = false;
-  ['EJS_player', 'EJS_gameUrl', 'EJS_core', 'EJS_pathtodata', 'EJS_color', 'EJS_gameName', 'EJS_defaultOptions', 'EJS_startOnLoaded', 'EJS_onGameStart', 'EJS_load', 'EJS_emulator'].forEach(key => { try { delete window[key]; } catch (_) { window[key] = undefined; } });
+  ['EJS_player', 'EJS_gameUrl', 'EJS_core', 'EJS_pathtodata', 'EJS_color', 'EJS_gameName', 'EJS_defaultOptions', 'EJS_startOnLoaded', 'EJS_onGameStart', 'EJS_threads', 'EJS_load', 'EJS_emulator'].forEach(key => { try { delete window[key]; } catch (_) { window[key] = undefined; } });
 }
 
 function openGameDetails(gameItem) {
@@ -117,6 +118,8 @@ function openGameDetails(gameItem) {
   let features = document.getElementById('gameDetailsFeatures');
   if (!features) { features = document.createElement('div'); features.id = 'gameDetailsFeatures'; document.getElementById('gameDetailsTitle').after(features); }
   features.innerHTML = gameFeatureBadges(gameItem);
+  const rating = document.getElementById('gameDetailsRating');
+  if (rating) rating.innerHTML = '<p class="text-xs text-purple-300">Carregando avaliações...</p>';
   const cover = document.getElementById('gameDetailsCover');
   cover.innerHTML = '';
   if (gameItem.logo) {
@@ -158,6 +161,7 @@ function updateGameDetailsActions(game) {
     ? '<button onclick="chooseGameSaveSlot()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Continuar</button><button onclick="startGameFromDetails()" class="w-full mt-2 bg-purple-950/60 hover:bg-purple-900 text-purple-100 font-bold py-3 rounded-xl text-sm border border-purple-800/60 transition-all">Novo jogo</button>'
     : '<button onclick="startGameFromDetails()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Novo jogo</button>');
   refreshGameDownloadButton(game);
+  loadGameRating(game);
   const playTime=document.createElement('p');playTime.id='gameDetailsPlayTime';playTime.className='mt-3 text-xs text-purple-300';playTime.textContent=`Tempo jogado: ${formatGamePlayTime(getGamePlayTime(game))}`;actions.appendChild(playTime);
   const hltb=document.createElement('a');hltb.href='https://howlongtobeat.com/?q='+encodeURIComponent(game.name||'');hltb.target='_blank';hltb.rel='noopener noreferrer';hltb.className='block mt-2 text-xs text-indigo-300 hover:text-white';hltb.textContent='Ver duração no HowLongToBeat ↗';actions.appendChild(hltb);
   lucide.createIcons();
@@ -170,6 +174,89 @@ async function startGameFromDetails(loadSlot = null) {
   const playableGame = { ...game, loadSlot, localUrl };
   closeGameDetails();
   openGameEmulator(playableGame);
+}
+
+function isRatedGameId(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
+function renderGameRating(data = {}) {
+  const container = document.getElementById('gameDetailsRating');
+  if (!container) return;
+  const average = Number(data.average) || 0;
+  const total = Number(data.total) || 0;
+  const userRating = Number(data.userRating) || 0;
+  const stars = Array.from({ length: 5 }, (_, index) => {
+    const value = index + 1;
+    const active = value <= userRating;
+    return `<button type="button" onclick="saveGameRating(${value})" aria-label="Dar ${value} estrela${value > 1 ? 's' : ''}" class="text-2xl leading-none transition-transform hover:scale-110 ${active ? 'text-amber-300' : 'text-purple-800'}">${active ? '★' : '☆'}</button>`;
+  }).join('');
+  const averageStars = Array.from({ length: 5 }, (_, index) => index + 1 <= Math.round(average) ? '★' : '☆').join('');
+  container.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Avaliação da comunidade</p>
+        <p class="mt-1 text-xs text-purple-300">${total ? `${average.toFixed(1).replace('.', ',')} ${averageStars} · ${total} avaliação${total === 1 ? '' : 's'}` : 'Ainda não há avaliações'}</p>
+      </div>
+      <div class="flex items-center gap-0.5" aria-label="Sua nota">${stars}</div>
+    </div>
+    <p class="mt-1 text-[10px] text-purple-400/70">${userRating ? `Sua nota: ${userRating}/5 · clique para alterar` : 'Escolha de 1 a 5 estrelas'}</p>`;
+}
+
+async function loadGameRating(game = currentGameDetails) {
+  const container = document.getElementById('gameDetailsRating');
+  if (!container || !game) return;
+  if (!isRatedGameId(game.id) || !currentUser) {
+    container.innerHTML = '<p class="text-[10px] text-purple-400/70">Avaliações públicas disponíveis para jogos Lux.</p>';
+    return;
+  }
+  container.innerHTML = '<p class="text-xs text-purple-300">Carregando avaliações...</p>';
+  const user = currentUser;
+  try {
+    const { data, error } = await supabaseClient.functions.invoke('game-ratings', {
+      body: {
+        action: 'get',
+        gameId: game.id,
+        username: user.user,
+        password: user.pass,
+        profileSlot: user.profile?.slot || 1,
+        profileKey: user.profile?.data_key || ''
+      }
+    });
+    if (currentGameDetails !== game || currentUser !== user) return;
+    if (error || data?.error) throw new Error(data?.error || 'Não foi possível carregar as avaliações.');
+    renderGameRating(data);
+  } catch (error) {
+    container.innerHTML = '<p class="text-[10px] text-rose-300">Avaliações indisponíveis no momento.</p>';
+    console.warn('Avaliação do jogo:', error);
+  }
+}
+
+async function saveGameRating(rating) {
+  const game = currentGameDetails;
+  const user = currentUser;
+  if (!game || !user || !isRatedGameId(game.id)) return;
+  const container = document.getElementById('gameDetailsRating');
+  if (container) container.innerHTML = '<p class="text-xs text-purple-300">Salvando sua nota...</p>';
+  try {
+    const { data, error } = await supabaseClient.functions.invoke('game-ratings', {
+      body: {
+        action: 'save',
+        gameId: game.id,
+        rating,
+        username: user.user,
+        password: user.pass,
+        profileSlot: user.profile?.slot || 1,
+        profileKey: user.profile?.data_key || ''
+      }
+    });
+    if (currentGameDetails !== game || currentUser !== user) return;
+    if (error || data?.error) throw new Error(data?.error || 'Não foi possível salvar sua nota.');
+    renderGameRating(data);
+  } catch (error) {
+    if (container) container.innerHTML = '<p class="text-[10px] text-rose-300">Não foi possível salvar sua nota.</p>';
+    console.warn('Salvar avaliação do jogo:', error);
+  }
 }
 
 async function refreshGameDownloadButton(game = currentGameDetails) {
@@ -379,7 +466,7 @@ function createEmulatorModalDOM() {
 
 function createGameDetailsModalDOM() {
   if (document.getElementById('gameDetailsModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="gameDetailsModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4"><div class="w-full max-w-3xl bg-[#120c1f] border border-purple-900/60 rounded-3xl overflow-hidden shadow-2xl"><div class="flex justify-end px-4 pt-4"><button onclick="closeGameDetails()" title="Fechar" class="text-purple-400 hover:text-white p-2 rounded-xl bg-purple-950/60 hover:bg-rose-600 transition-all"><i data-lucide="x" class="w-5 h-5"></i></button></div><div class="grid md:grid-cols-[220px_1fr] gap-6 px-6 pb-6 md:px-8 md:pb-8"><div id="gameDetailsCover" class="aspect-[2/3] max-h-[330px] mx-auto md:mx-0 rounded-2xl overflow-hidden bg-purple-950/50 border border-purple-900/50 flex items-center justify-center shadow-xl"></div><div class="min-w-0 flex flex-col"><p class="text-[11px] font-bold uppercase tracking-widest text-purple-400 mb-2">Detalhes do jogo</p><h2 id="gameDetailsTitle" class="text-xl md:text-2xl font-bold text-white leading-tight"></h2><div class="flex flex-wrap gap-2 mt-4 text-xs"><span id="gameDetailsConsole" class="bg-purple-600/20 text-purple-200 border border-purple-500/30 rounded-lg px-2.5 py-1"></span><span id="gameDetailsYear" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span><span id="gameDetailsGenres" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span></div><div class="mt-5"><div class="flex items-center justify-between gap-3"><h3 class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Sinopse</h3><button id="gameDetailsTranslate" onclick="translateGameSynopsis()" class="text-[10px] font-bold text-indigo-300 hover:text-white">Traduzir para português</button></div><p id="gameDetailsSynopsis" class="mt-2 max-h-44 overflow-y-auto pr-2 text-sm leading-relaxed text-slate-300"></p></div><div id="gameDetailsActions" class="mt-6"></div></div></div></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="gameDetailsModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4"><div class="w-full max-w-3xl bg-[#120c1f] border border-purple-900/60 rounded-3xl overflow-hidden shadow-2xl"><div class="flex justify-end px-4 pt-4"><button onclick="closeGameDetails()" title="Fechar" class="text-purple-400 hover:text-white p-2 rounded-xl bg-purple-950/60 hover:bg-rose-600 transition-all"><i data-lucide="x" class="w-5 h-5"></i></button></div><div class="grid md:grid-cols-[220px_1fr] gap-6 px-6 pb-6 md:px-8 md:pb-8"><div id="gameDetailsCover" class="aspect-[2/3] max-h-[330px] mx-auto md:mx-0 rounded-2xl overflow-hidden bg-purple-950/50 border border-purple-900/50 flex items-center justify-center shadow-xl"></div><div class="min-w-0 flex flex-col"><p class="text-[11px] font-bold uppercase tracking-widest text-purple-400 mb-2">Detalhes do jogo</p><h2 id="gameDetailsTitle" class="text-xl md:text-2xl font-bold text-white leading-tight"></h2><div class="flex flex-wrap gap-2 mt-4 text-xs"><span id="gameDetailsConsole" class="bg-purple-600/20 text-purple-200 border border-purple-500/30 rounded-lg px-2.5 py-1"></span><span id="gameDetailsYear" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span><span id="gameDetailsGenres" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span></div><div id="gameDetailsRating" class="mt-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-3"></div><div class="mt-5"><div class="flex items-center justify-between gap-3"><h3 class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Sinopse</h3><button id="gameDetailsTranslate" onclick="translateGameSynopsis()" class="text-[10px] font-bold text-indigo-300 hover:text-white">Traduzir para português</button></div><p id="gameDetailsSynopsis" class="mt-2 max-h-44 overflow-y-auto pr-2 text-sm leading-relaxed text-slate-300"></p></div><div id="gameDetailsActions" class="mt-6"></div></div></div></div></div>`);
 }
 
 function createSaveExitModalDOM() {
