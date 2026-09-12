@@ -27,6 +27,19 @@ Deno.serve(async (request: Request) => {
     }
     if (!['get', 'save'].includes(action)) return json({ error: 'Ação inválida.' }, 400);
 
+    if (action === 'get' && (!username || !password)) {
+      const publicDb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+      const { data: publicGame, error: publicGameError } = await publicDb.from('games').select('id').eq('id', gameId).maybeSingle();
+      if (publicGameError) throw publicGameError;
+      if (!publicGame) return json({ error: 'Jogo não encontrado.' }, 404);
+      const { data: publicRatings, error: publicRatingsError } = await publicDb.from('game_ratings').select('rating').eq('game_id', gameId);
+      if (publicRatingsError) throw publicRatingsError;
+      const rows = publicRatings || [];
+      const total = rows.length;
+      const average = total ? rows.reduce((sum, row) => sum + Number(row.rating), 0) / total : 0;
+      return json({ average: Math.round(average * 10) / 10, total, userRating: 0 });
+    }
+
     const db = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
