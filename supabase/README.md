@@ -57,6 +57,16 @@ supabase functions deploy game-metadata
 
 A busca de metadados é opcional: o formulário continua aceitando preenchimento manual quando a função não estiver configurada.
 
+### Status compartilhado dos cores
+
+Execute `core_statuses_schema.sql` no SQL Editor e publique a função:
+
+```bash
+supabase functions deploy core-statuses --no-verify-jwt
+```
+
+O painel Admin → Jogos salva os status dos cores para todos os dispositivos. A listagem pública carrega essa configuração no PC e no celular.
+
 ### Avaliações públicas dos jogos
 
 Execute `game_ratings_schema.sql` no SQL Editor e publique a função:
