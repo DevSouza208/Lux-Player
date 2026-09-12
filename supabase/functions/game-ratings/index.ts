@@ -22,17 +22,18 @@ Deno.serve(async (request: Request) => {
     if (typeof username !== 'string' || !username || typeof password !== 'string' || !password) {
       return json({ error: 'Login necessário.' }, 401);
     }
-    if (typeof gameId !== 'string' || !gameIdPattern.test(gameId)) {
+    const normalizedGameId = String(gameId ?? '');
+    if (!gameIdPattern.test(normalizedGameId)) {
       return json({ error: 'Jogo inválido.' }, 400);
     }
     if (!['get', 'save'].includes(action)) return json({ error: 'Ação inválida.' }, 400);
 
     if (action === 'get' && (!username || !password)) {
       const publicDb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-      const { data: publicGame, error: publicGameError } = await publicDb.from('games').select('id').eq('id', gameId).maybeSingle();
+      const { data: publicGame, error: publicGameError } = await publicDb.from('games').select('id').eq('id', normalizedGameId).maybeSingle();
       if (publicGameError) throw publicGameError;
       if (!publicGame) return json({ error: 'Jogo não encontrado.' }, 404);
-      const { data: publicRatings, error: publicRatingsError } = await publicDb.from('game_ratings').select('rating').eq('game_id', gameId);
+      const { data: publicRatings, error: publicRatingsError } = await publicDb.from('game_ratings').select('rating').eq('game_id', normalizedGameId);
       if (publicRatingsError) throw publicRatingsError;
       const rows = publicRatings || [];
       const total = rows.length;
@@ -78,7 +79,7 @@ Deno.serve(async (request: Request) => {
     const { data: game, error: gameError } = await db
       .from('games')
       .select('id')
-      .eq('id', gameId)
+      .eq('id', normalizedGameId)
       .maybeSingle();
     if (gameError) throw gameError;
     if (!game) return json({ error: 'Jogo não encontrado.' }, 404);
@@ -90,7 +91,7 @@ Deno.serve(async (request: Request) => {
       }
 
       const { error } = await db.from('game_ratings').upsert({
-        game_id: gameId,
+        game_id: normalizedGameId,
         user_name: account.usuario,
         profile_slot: profileSlot,
         profile_key: profileKey,
@@ -102,7 +103,7 @@ Deno.serve(async (request: Request) => {
     const { data: ratings, error: ratingsError } = await db
       .from('game_ratings')
       .select('rating, user_name, profile_key')
-      .eq('game_id', gameId);
+      .eq('game_id', normalizedGameId);
     if (ratingsError) throw ratingsError;
 
     const rows = ratings || [];
