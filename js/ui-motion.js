@@ -148,7 +148,7 @@ function animateDashboardEntry() {
     meta.content = content;
   };
 
-  ensureLink('manifest', 'manifest.webmanifest?v=20260912-restore1');
+  ensureLink('manifest', 'manifest.webmanifest?v=20260912-landscape2');
   ensureLink('icon', 'lux-play-icon.svg?v=20260911-icons1', { type: 'image/svg+xml' });
   ensureLink('apple-touch-icon', 'icon.png?v=20260911-icons1');
   ensureMeta('theme-color', '#09060e');
@@ -158,9 +158,9 @@ function animateDashboardEntry() {
 
 (() => {
   const modules = [
-    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-restore1'],
-    ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-restore1'],
-    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-restore1']
+    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
+    ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
+    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2']
   ];
   modules.forEach(([name, src]) => {
     if (document.querySelector(`script[data-${name}]`)) return;
@@ -174,36 +174,39 @@ function animateDashboardEntry() {
 })();
 
 (() => {
-  if (!window.matchMedia('(max-width: 767px)').matches) return;
+  const consoleMobileMedia = "(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)";
+  if (!window.matchMedia(consoleMobileMedia).matches) return;
 
   const styles = [
-    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260912-restore1'],
-    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260912-restore1'],
-    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260912-restore1'],
-    ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260912-restore1'],
-    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260912-restore1'],
-    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260912-restore1'],
-    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260912-restore1'],
-    ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260912-restore1'],
-    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260912-restore1'],
-    ['lux-mobile-158-polish', 'css/mobile-lux-158-polish.css?v=20260912-restore1']
+    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260912-landscape2'],
+    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260912-landscape2'],
+    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260912-landscape2'],
+    ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260912-landscape2'],
+    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260912-landscape2'],
+    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260912-landscape2'],
+    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260912-landscape2'],
+    ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260912-landscape2'],
+    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260912-landscape2'],
+    ['lux-mobile-158-polish', 'css/mobile-lux-158-polish.css?v=20260912-landscape2'],
+    ['lux-mobile-landscape-layout', 'css/mobile-lux-landscape-layout.css?v=20260912-landscape2'],
+    ['lux-mobile-portrait-layout', 'css/mobile-lux-portrait-layout.css?v=20260912-portrait1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = href;
-    link.media = '(max-width: 767px)';
+    link.media = name === 'lux-mobile-ux' ? '(max-width: 767px)' : consoleMobileMedia;
     link.setAttribute(`data-${name}`, '1');
     document.head.appendChild(link);
   });
 
   const loadMobileScripts = () => {
     const scripts = [
-      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260912-restore1'],
-      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260912-restore1'],
-      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260912-restore1'],
-      ['lux-mobile-settings', 'js/mobile-lux-settings.js?v=20260912-restore1']
+      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260912-landscape2'],
+      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260912-landscape2'],
+      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260912-landscape2'],
+      ['lux-mobile-settings', 'js/mobile-lux-settings.js?v=20260912-landscape2']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;

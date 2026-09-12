@@ -1,5 +1,5 @@
 /* Lux Console mobile settings and cheats. Desktop is untouched. */
-@media (max-width: 767px) {
+@media (max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
   #emulatorModal.lux-console-mobile-stage1 .lux-console-settings-sheet,
   #emulatorModal.lux-console-mobile-stage1 .lux-console-cheats-sheet {
     width: min(92vw, 380px);

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  if (!window.matchMedia('(max-width: 767px)').matches || window.__luxConsoleActionBarInstalled) return;
+  if (!window.matchMedia("(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)").matches || window.__luxConsoleActionBarInstalled) return;
   window.__luxConsoleActionBarInstalled = true;
 
   const VIEW_MODE_KEY = 'lux-play:console-view-mode';

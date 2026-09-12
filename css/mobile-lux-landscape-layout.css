@@ -1,0 +1,88 @@
+/* Landscape frame: two equal control columns and a separate game/brand column. */
+@media (max-width: 767px) and (orientation: landscape), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
+    --lux-module-width: clamp(96px, 16vw, 124px);
+    --lux-module-gap: 6px;
+    --lux-module-half: calc((var(--lux-module-width) - var(--lux-module-gap)) / 2);
+    --lux-side-left: max(8px, env(safe-area-inset-left, 0px));
+    --lux-side-right: max(8px, env(safe-area-inset-right, 0px));
+    --lux-side-top: max(6px, env(safe-area-inset-top, 0px));
+    --lux-side-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+    --lux-action-height: 38px;
+    --lux-system-height: clamp(36px, 12dvh, 54px);
+    --lux-shoulder-height: clamp(40px, 14dvh, 62px);
+    --lux-dpad-size: var(--lux-module-width);
+    --lux-dpad-key: calc(var(--lux-module-width) * .355);
+    --lux-dpad-offset: calc((var(--lux-module-width) - var(--lux-dpad-key)) / 2);
+    --lux-dpad-left: var(--lux-side-left);
+    --lux-module-left: var(--lux-side-left);
+    --lux-module-right: var(--lux-side-right);
+    --lux-shoulder-top: var(--lux-side-top);
+    --lux-dpad-top: calc((var(--lux-side-top) + var(--lux-shoulder-height) + 100dvh - var(--lux-side-bottom) - var(--lux-action-height) - 6px - var(--lux-system-height)) / 2);
+    --lux-face-top: var(--lux-dpad-top);
+    --lux-screen-top: var(--lux-side-top);
+    --lux-screen-space: calc(100vw - var(--lux-side-left) - var(--lux-side-right) - var(--lux-module-width) * 2 - 20px);
+    --lux-screen-ratio: 1.333333;
+    --lux-screen-height: min(calc(var(--lux-screen-space) / var(--lux-screen-ratio)), calc(100dvh - var(--lux-side-top) - var(--lux-side-bottom) - 38px));
+    --lux-screen-width: calc(var(--lux-screen-height) * var(--lux-screen-ratio));
+    --lux-screen-left: calc(var(--lux-side-left) + var(--lux-module-width) + 10px + (var(--lux-screen-space) - var(--lux-screen-width)) / 2);
+    --lux-visible-screen-top: var(--lux-screen-top);
+    --lux-visible-screen-left: var(--lux-screen-left);
+    --lux-visible-screen-width: var(--lux-screen-width);
+    --lux-visible-screen-height: var(--lux-screen-height);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gba {
+    --lux-screen-ratio: 1.5;
+    --lux-screen-height: min(calc(var(--lux-screen-space) / var(--lux-screen-ratio)), calc(100dvh - var(--lux-side-top) - var(--lux-side-bottom) - 38px));
+    --lux-screen-width: calc(var(--lux-screen-height) * var(--lux-screen-ratio));
+    --lux-screen-left: calc(var(--lux-side-left) + var(--lux-module-width) + 10px + (var(--lux-screen-space) - var(--lux-screen-width)) / 2);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gb,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame.lux-console-system-gbc {
+    --lux-screen-ratio: 1.111111;
+    --lux-screen-height: min(calc(var(--lux-screen-space) / var(--lux-screen-ratio)), calc(100dvh - var(--lux-side-top) - var(--lux-side-bottom) - 38px));
+    --lux-screen-width: calc(var(--lux-screen-height) * var(--lux-screen-ratio));
+    --lux-screen-left: calc(var(--lux-side-left) + var(--lux-module-width) + 10px + (var(--lux-screen-space) - var(--lux-screen-width)) / 2);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-system-button {
+    bottom: calc(var(--lux-side-bottom) + var(--lux-action-height) + 6px);
+    height: var(--lux-system-height);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-2 {
+    right: var(--lux-side-right);
+    width: var(--lux-module-width);
+    height: var(--lux-dpad-size);
+    display: flex;
+    gap: var(--lux-module-gap);
+    align-items: center;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-face-2 .lux-face-button {
+    position: static;
+    width: var(--lux-module-half);
+    height: calc(var(--lux-module-half) + 12px);
+    flex: 0 0 var(--lux-module-half);
+    border-radius: 14px;
+    transform: none;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-button {
+    height: var(--lux-action-height);
+    bottom: var(--lux-side-bottom);
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-action-label { font-size: 8px; }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand {
+    top: calc(var(--lux-screen-top) + var(--lux-screen-height) + 8px);
+    left: calc(var(--lux-screen-left) + var(--lux-screen-width) / 2);
+    bottom: auto;
+  }
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand img { width: 24px; height: 24px; }
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-wordmark { font-size: 14px; }
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand small { left: 32px; top: 18px; }
+}

@@ -1,5 +1,5 @@
 /* Landscape tuning only. D-pad and face buttons intentionally remain untouched. */
-@media (max-width: 767px) and (orientation: landscape) {
+@media (max-width: 767px) and (orientation: landscape), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
   /* Moldura mode: refine the controls around the game without changing the game area. */
   #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame {
     --lux-shoulder-top: calc(10px + env(safe-area-inset-top, 0px));
