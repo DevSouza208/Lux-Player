@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260912-admin-client-sync-1';
+  const RESET_VERSION = '20260912-v163-friendly-ui-1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -29,6 +29,7 @@
     './css/style.css',
     './css/reader.css',
     './js/ui-motion.js',
+    './js/friendly-ui.js',
     './js/script.js',
     './js/synced-catalog.js',
     './js/admin-client-sync.js',
@@ -121,7 +122,7 @@ function animateDashboardEntry() {
     const auth = document.getElementById('authScreen');
     if (!auth) return;
     const badge = [...auth.querySelectorAll('div')].find(el => /^versão\s+[\d.]+$/i.test((el.textContent || '').trim()));
-    if (badge) badge.textContent = 'versão 1.5.0';
+    if (badge) badge.textContent = 'versão 1.6.3';
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyVersion, { once: true });
   else applyVersion();
@@ -160,6 +161,7 @@ function animateDashboardEntry() {
 
 (() => {
   const modules = [
+    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260912-v163-friendly-ui-1'],
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
