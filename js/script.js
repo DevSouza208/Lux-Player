@@ -76,12 +76,28 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         panel.classList.toggle('hidden', panel.id !== targetId);
       });
 
-      if (tab === 'games') renderAdminCoreStatusPanel();
+      if (tab === 'games') { renderAdminCoreStatusPanel(); syncCoreStatusesFromCloud(); }
       if (tab === 'books') { renderAdminBooksList(); window.LuxReadingAdmin?.refresh(); }
       if (tab === 'vods') renderAdminVodList();
       if (tab === 'avatars') loadAvatarGallery(true);
     }
 
+    function renderPublicCoreStatusList() {
+      const coreStatusList = document.getElementById('gameCoreStatusList');
+      if (!coreStatusList) return;
+      coreStatusList.innerHTML = (window.LuxExternalRoms?.coreStatuses?.() || []).map(core => `<span title="${escapeGameHtml(core.description || core.label)}" class="inline-flex items-center gap-1 rounded-full border border-purple-900/60 bg-[#120c1f] px-2 py-1"><span class="h-2 w-2 rounded-full ${core.tested ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${escapeGameHtml(core.label)}</span>`).join('');
+    }
+
+    async function syncCoreStatusesFromCloud() {
+      if (!window.LuxExternalRoms?.setCoreStatuses) return;
+      try {
+        const { data, error } = await supabaseClient.functions.invoke('core-statuses', { body: { action: 'get' } });
+        if (error || data?.error || !data?.statuses) throw new Error(data?.error || 'Status indisponível.');
+        window.LuxExternalRoms.setCoreStatuses(data.statuses);
+        renderPublicCoreStatusList();
+        if (document.getElementById('adminCoreStatusList')) renderAdminCoreStatusPanel();
+      } catch (error) { console.warn('Status dos cores:', error); }
+    }
     function renderAdminCoreStatusPanel() {
       const list = document.getElementById('adminCoreStatusList');
       if (!list || !window.LuxExternalRoms?.coreStatuses) return;
@@ -101,11 +117,18 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const selects = [...document.querySelectorAll('#adminCoreStatusList [data-core-status-id]')];
       if (!selects.length || !window.LuxExternalRoms?.saveCoreStatuses) return;
       const statuses = Object.fromEntries(selects.map(select => [select.dataset.coreStatusId, select.value]));
+      const user = currentUser;
+      if (!user) return;
       window.LuxExternalRoms.saveCoreStatuses(statuses);
       const message = document.getElementById('adminCoreStatusMessage');
-      if (message) message.textContent = 'Status dos cores salvo neste navegador.';
-      renderAdminCoreStatusPanel();
-      renderGamesCatalog();
+      if (message) message.textContent = 'Salvando status para todos os dispositivos...';
+      supabaseClient.functions.invoke('core-statuses', { body: { action: 'save', statuses, username: user.user, password: user.pass } }).then(({ data, error }) => {
+        if (error || data?.error) throw new Error(data?.error || 'Não foi possível salvar os status.');
+        window.LuxExternalRoms.setCoreStatuses(data.statuses || statuses);
+        if (message) message.textContent = 'Status dos cores salvo para todos os dispositivos.';
+        renderAdminCoreStatusPanel();
+        renderPublicCoreStatusList();
+      }).catch(error => { if (message) message.textContent = error.message || 'Não foi possível salvar os status.'; });
     }
     let adminR2UnlockedUser = null;
 
@@ -4675,8 +4698,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       html += `</div></div>`;
       container.innerHTML = html;
-      const coreStatusList = document.getElementById('gameCoreStatusList');
-      if (coreStatusList) coreStatusList.innerHTML = (window.LuxExternalRoms?.coreStatuses?.() || []).map(core => `<span title="${escapeGameHtml(core.description)}" class="inline-flex items-center gap-1 rounded-full border border-purple-900/60 bg-[#120c1f] px-2 py-1"><span class="h-2 w-2 rounded-full ${core.tested ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${escapeGameHtml(core.label)}</span>`).join('');
+      renderPublicCoreStatusList();
+      syncCoreStatusesFromCloud();
       lucide.createIcons();
     }
 
