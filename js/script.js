@@ -4637,9 +4637,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           <div class="mb-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div><p class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Cores do emulador</p><p class="mt-1 text-[10px] text-purple-300/70">As bolinhas indicam o teste do core, não o status do jogo.</p></div>
-              <button type="button" onclick="togglePublicCoreStatusPanel()" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-1.5 text-[10px] font-bold text-purple-200 hover:bg-purple-900/70"><span id="gameCoreStatusToggleLabel">Ocultar cores</span></button>
+              <button type="button" onclick="togglePublicCoreStatusPanel()" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-1.5 text-[10px] font-bold text-purple-200 hover:bg-purple-900/70"><span id="gameCoreStatusToggleLabel">Mostrar cores</span></button>
             </div>
-            <div id="gameCoreStatusContent" class="mt-3">
+            <div id="gameCoreStatusContent" class="mt-3 hidden">
               <div id="gameCoreStatusList" class="flex flex-wrap gap-2 text-[10px] font-bold text-purple-200"></div>
               <p id="externalRomStatus" class="mt-2 text-[10px] text-purple-400/80"></p>
             </div>
