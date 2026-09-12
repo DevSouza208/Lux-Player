@@ -276,6 +276,7 @@
 
     const originalLoadMediaSourcesInPriority = window.loadMediaSourcesInPriority;
     const originalResolveUserCredentials = window.resolveUserCredentials;
+    const originalOpenSeriesModal = window.openSeriesModal;
 
     window.loadMediaSourcesInPriority = async function () {
       if (!window.luxElectron) {
@@ -293,10 +294,24 @@
 
     if (typeof originalResolveUserCredentials === 'function') {
       window.resolveUserCredentials = function (user) {
-        if (!window.luxElectron && window.__luxSyncedXtreamActive) {
+        if (!window.luxElectron && window.__luxPreferSyncedSeriesEpisodes) {
           return { isXc: false, url: String(user?.m3uHttpsUrl || user?.m3uUrl || '') };
         }
         return originalResolveUserCredentials.apply(this, arguments);
+      };
+    }
+
+    if (typeof originalOpenSeriesModal === 'function') {
+      window.openSeriesModal = async function (series) {
+        const useSyncedSeries = !window.luxElectron && window.__luxSyncedXtreamActive && series?.source === 'synced-xtream';
+        if (!useSyncedSeries) return originalOpenSeriesModal.apply(this, arguments);
+
+        window.__luxPreferSyncedSeriesEpisodes = true;
+        try {
+          return await originalOpenSeriesModal.apply(this, arguments);
+        } finally {
+          window.__luxPreferSyncedSeriesEpisodes = false;
+        }
       };
     }
 
