@@ -125,10 +125,24 @@
   }
 
   function coreStatuses() {
-    return systems.map(system => ({ ...system }));
+    const overrides = (() => {
+      try { return JSON.parse(localStorage.getItem('lux_core_statuses') || '{}'); } catch (_) { return {}; }
+    })();
+    return systems.map(system => ({
+      ...system,
+      status: overrides[system.id] || system.status,
+      tested: (overrides[system.id] || system.status) === 'tested'
+    }));
   }
 
-  window.LuxExternalRoms = { systems, systemForFile, coreStatuses, list, importFile, open, remove };
+  function saveCoreStatuses(statuses = {}) {
+    const allowed = new Set(systems.map(system => system.id));
+    const clean = Object.fromEntries(Object.entries(statuses).filter(([id, status]) => allowed.has(id) && ['tested', 'untested'].includes(status)));
+    localStorage.setItem('lux_core_statuses', JSON.stringify(clean));
+    return coreStatuses();
+  }
+
+  window.LuxExternalRoms = { systems, systemForFile, coreStatuses, saveCoreStatuses, list, importFile, open, remove };
   window.openExternalGame = id => window.LuxExternalRoms.open(id).catch(error => alert(error.message));
   window.importExternalRom = async input => {
     const file = input?.files?.[0] || input;
