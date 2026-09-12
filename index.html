@@ -486,6 +486,17 @@
             <button type="button" onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 text-rose-200 font-bold px-4 py-2.5 rounded-xl text-xs">Revisar não aprovados</button>
           </div>
         </div>
+        <div class="mt-4 bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-base font-bold text-white">Status dos cores</h3>
+              <p class="mt-1 text-xs text-purple-300">Escolha quais emuladores já foram testados e aprovados. Verde aparecerá para os usuários; vermelho significa não testado.</p>
+            </div>
+            <button type="button" onclick="saveAdminCoreStatuses()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs">Salvar status</button>
+          </div>
+          <div id="adminCoreStatusList" class="mt-5 space-y-2"></div>
+          <p id="adminCoreStatusMessage" class="mt-3 min-h-[18px] text-xs text-purple-300"></p>
+        </div>
       </div>
       <div id="adminTabBooks" class="admin-tab-panel hidden overflow-y-auto pr-1">
         <div id="readingAdminRoot"></div>
