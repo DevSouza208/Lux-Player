@@ -1,7 +1,7 @@
 {
   "name": "lux-play",
   "productName": "Lux Play",
-  "version": "1.5.0",
+  "version": "1.6.3",
   "description": "Lux Play - filmes, séries, TV, jogos retrô e leitura.",
   "main": "electron/main.js",
   "author": "DevSouza208",
