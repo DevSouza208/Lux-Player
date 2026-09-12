@@ -41,6 +41,8 @@ Deno.serve(async (request: Request) => {
       return json({ average: Math.round(average * 10) / 10, total, userRating: 0 });
     }
 
+
+
     const db = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
