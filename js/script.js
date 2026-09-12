@@ -4548,6 +4548,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       return getSearchScore(getCachedSearchData(searchItem), normalizedQuery.split(' '), normalizedQuery) >= 0;
     }
 
+    function openGameCard(id) {
+      const gameId = String(id);
+      if (gameId.startsWith('external_')) { window.openExternalGame?.(gameId); return; }
+      openGameEmulatorById(gameId);
+    }
     async function renderGamesCatalog() {
       const container = document.getElementById('gamesSection');
       if (!container) return;
@@ -4591,10 +4596,17 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
               <p class="text-xs text-purple-400/70 mt-0.5">Jogue clássicos direto no navegador</p>
             </div>
             <div class="flex flex-wrap justify-end gap-2">
-              <select onchange="setGamesFilter('console', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">🎮 Todos</option><option value="gba">🟣 GBA</option><option value="gb">🟡 GB</option><option value="gbc">🎨 GBC</option><option value="snes">🕹️ SNES</option><option value="megadrive">🔵 Mega Drive</option><option value="nes">🔴 NES</option><option value="n64">🟢 N64</option></select>
+              <select onchange="setGamesFilter('console', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">🎮 Todos</option><option value="gba">🟣 GBA</option><option value="gb">🟡 GB</option><option value="gbc">🎨 GBC</option><option value="snes">🕹️ SNES</option><option value="megadrive">🔵 Mega Drive</option><option value="nes">🔴 NES</option><option value="mastersystem">🟠 Master System</option><option value="n64">🟢 N64</option><option value="psp">🔴 PSP</option></select><select onchange="setGamesFilter('origin', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">📚 Todos os jogos</option><option value="lux">⭐ Catálogo Lux</option><option value="external">📁 ROMs do dispositivo</option></select><button onclick="document.getElementById('externalRomInput').click()" class="bg-purple-600 hover:bg-purple-500 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-white transition-colors">Abrir ROM</button><input id="externalRomInput" type="file" accept=".gb,.gbc,.gba,.nes,.sfc,.smc,.sms,.md,.gen,.n64,.z64,.v64,.iso,.cso,.pbp" class="hidden" onchange="importExternalRom(this.files[0]); this.value=''">
               <button onclick="setGamesFilter('favorites')" aria-pressed="${gamesFavoritesOnly}" class="${gamesFavoritesOnly ? 'bg-rose-500/20 border-rose-400/60 text-rose-200' : 'bg-[#120c1f] border-purple-900/60 text-purple-200 hover:border-rose-400/60'} border rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors flex items-center gap-1"><i data-lucide="heart" class="w-3.5 h-3.5 ${gamesFavoritesOnly ? 'fill-current' : ''}"></i> Favoritos</button>
               ${currentUser?.role === 'admin' ? `<button onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-rose-200 transition-colors">Revisar não aprovados</button><select onchange="setGamesFilter('status', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">Status: todos</option><option value="approved">✓ Aprovados</option><option value="pending">◷ Pendentes</option></select>` : ''}
             </div>
+          </div>
+          <div class="mb-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div><p class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Cores do emulador</p><p class="mt-1 text-[10px] text-purple-300/70">As bolinhas indicam o teste do core, não o status do jogo.</p></div>
+              <div id="gameCoreStatusList" class="flex flex-wrap gap-2 text-[10px] font-bold text-purple-200"></div>
+            </div>
+            <p id="externalRomStatus" class="mt-2 text-[10px] text-purple-400/80"></p>
           </div>
           ${activeSearchQuery ? `<div class="mb-6 border-t border-purple-900/50 pt-5 flex flex-wrap items-center gap-3"><h3 class="text-xl font-extrabold text-white">Resultados para: <span class="text-purple-400">&quot;${escapeGameHtml(activeSearchQuery)}&quot;</span></h3><button onclick="clearSearchFilter()" class="bg-purple-950 hover:bg-rose-600 text-purple-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"><i data-lucide="x" class="w-3.5 h-3.5"></i> Limpar busca</button></div>` : ''}
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-4">
@@ -4605,14 +4617,14 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
       gamesList.forEach(game => {
         html += `
-          <div onclick="openGameEmulatorById('${escapeGameHtml(game.id)}')" 
+          <div onclick="openGameCard('${escapeGameHtml(game.id)}')" 
                class="flex flex-col bg-[#120c1f] rounded-2xl border ${currentUser?.role === 'admin' ? (game.status === 'approved' ? 'border-emerald-500/70' : 'border-rose-500/70') : 'border-purple-950/80'} hover:border-purple-500/70 overflow-hidden cursor-pointer group transition-all duration-300 hover:-translate-y-1.5 shadow-lg">
             <div class="w-full aspect-[2/3] bg-purple-950/40 flex items-center justify-center relative overflow-hidden">
               ${game.logo ? `<img src="${escapeGameHtml(game.logo)}" alt="Capa de ${escapeGameHtml(game.name)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">` : '<div class="w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform"><i data-lucide="gamepad-2" class="w-6 h-6"></i></div>'}
               <span class="absolute top-2 right-2 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-purple-900/80 text-purple-200">
                 ${game.console}
               </span>
-              <button onclick="toggleGameFavoriteById('${escapeGameHtml(game.id)}', event)" title="${isGameFavorite(game) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}" aria-label="${isGameFavorite(game) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}" aria-pressed="${isGameFavorite(game)}" class="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#120c1f]/90 border ${isGameFavorite(game) ? 'border-rose-400/70 text-rose-400' : 'border-purple-700/70 text-purple-200'} hover:bg-rose-500 hover:border-rose-400 hover:text-white flex items-center justify-center transition-all"><i data-lucide="heart" class="w-4 h-4 ${isGameFavorite(game) ? 'fill-current' : ''}"></i></button>
+              ${game.source === 'lux' ? `<button onclick="toggleGameFavoriteById('${escapeGameHtml(game.id)}', event)" title="${isGameFavorite(game) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}" aria-label="${isGameFavorite(game) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}" aria-pressed="${isGameFavorite(game)}" class="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#120c1f]/90 border ${isGameFavorite(game) ? 'border-rose-400/70 text-rose-400' : 'border-purple-700/70 text-purple-200'} hover:bg-rose-500 hover:border-rose-400 hover:text-white flex items-center justify-center transition-all"><i data-lucide="heart" class="w-4 h-4 ${isGameFavorite(game) ? 'fill-current' : ''}"></i></button>` : ''}
               ${currentUser?.role === 'admin' ? `<div class="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all"><button onclick="adminEditGame('${escapeGameHtml(game.id)}', event)" title="Editar jogo" aria-label="Editar jogo" class="w-7 h-7 rounded-lg bg-[#120c1f]/90 border border-purple-700/70 text-purple-200 hover:bg-purple-600 hover:text-white flex items-center justify-center"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button onclick="adminDeleteGame('${escapeGameHtml(game.id)}', event)" title="Remover jogo e ROM" aria-label="Remover jogo e ROM" class="w-7 h-7 rounded-lg bg-[#120c1f]/90 border border-rose-800/70 text-rose-300 hover:bg-rose-600 hover:text-white flex items-center justify-center"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div>` : ''}
             </div>
             <div class="p-3 bg-[#120c1f] border-t border-purple-950/40">
@@ -4627,6 +4639,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       html += `</div></div>`;
       container.innerHTML = html;
+      const coreStatusList = document.getElementById('gameCoreStatusList');
+      if (coreStatusList) coreStatusList.innerHTML = (window.LuxExternalRoms?.coreStatuses?.() || []).map(core => `<span title="${escapeGameHtml(core.description)}" class="inline-flex items-center gap-1 rounded-full border border-purple-900/60 bg-[#120c1f] px-2 py-1"><span class="h-2 w-2 rounded-full ${core.tested ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${escapeGameHtml(core.label)}</span>`).join('');
       lucide.createIcons();
     }
 
