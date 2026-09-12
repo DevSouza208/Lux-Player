@@ -4532,9 +4532,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     let gamesConsoleFilter = 'all';
     let gamesStatusFilter = 'all';
     let gamesFavoritesOnly = false;
+    let gamesOriginFilter = 'all';
     function setGamesFilter(type, value) {
       if (type === 'console') gamesConsoleFilter = value;
       else if (type === 'status') gamesStatusFilter = value;
+      else if (type === 'origin') gamesOriginFilter = value;
       else gamesFavoritesOnly = !gamesFavoritesOnly;
       renderGamesCatalog();
     }
@@ -4542,7 +4544,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     function gameMatchesSearch(game) {
       const normalizedQuery = normalizeSearchText(activeSearchQuery);
       if (!normalizedQuery) return true;
-      const searchItem = { name: [game.name, game.console, game.sourceFileName].filter(Boolean).join(' ') };
+      const searchItem = { name: [game.name, game.console, game.sourceFileName, game.source === 'external' ? 'rom externa local dispositivo' : 'lux'].filter(Boolean).join(' ') };
       return getSearchScore(getCachedSearchData(searchItem), normalizedQuery.split(' '), normalizedQuery) >= 0;
     }
 
@@ -4562,17 +4564,19 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       let gamesList = [];
       try {
         const records = await loadGamesCatalog();
-        gamesList = records.map(game => ({
-          id: game.id,
-          name: game.title || 'Sem título',
-          console: game.console || 'snes',
-          players: Math.max(1, Number(game.players) || 1),
-          coop: game.coop,
-          url: game.rom_url || gameStorageUrl(game.rom_path),
-          logo: game.cover_url || gameStorageUrl(game.cover_path),
-          status: game.status || 'pending',
-          sourceFileName: game.source_file_name || ''
-        })).filter(game => (gamesConsoleFilter === 'all' || game.console === gamesConsoleFilter) && (gamesStatusFilter === 'all' || game.status === gamesStatusFilter) && (!gamesFavoritesOnly || isGameFavorite(game)) && gameMatchesSearch(game));
+        const luxGames = records.map(game => ({
+          id: game.id, name: game.title || 'Sem título', console: game.console || 'snes',
+          players: Math.max(1, Number(game.players) || 1), coop: game.coop,
+          url: game.rom_url || gameStorageUrl(game.rom_path), logo: game.cover_url || gameStorageUrl(game.cover_path),
+          status: game.status || 'pending', sourceFileName: game.source_file_name || '', source: 'lux'
+        }));
+        const externalGames = (await window.LuxExternalRoms?.list?.() || []).map(game => ({ ...game, source: 'external', status: 'external', players: Math.max(1, Number(game.players) || 1) }));
+        gamesList = [...luxGames, ...externalGames].filter(game =>
+          (gamesOriginFilter === 'all' || game.source === gamesOriginFilter) &&
+          (gamesConsoleFilter === 'all' || game.console === gamesConsoleFilter) &&
+          (gamesStatusFilter === 'all' || game.status === gamesStatusFilter) &&
+          (!gamesFavoritesOnly || (game.source === 'lux' && isGameFavorite(game))) && gameMatchesSearch(game)
+        );
       } catch (error) {
         console.error('Erro ao carregar jogos:', error);
         container.innerHTML = `<p class="text-xs text-rose-400 p-6">Não foi possível carregar os jogos: ${escapeGameHtml(error.message || 'erro desconhecido')}</p>`;
