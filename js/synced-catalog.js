@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260912-xtream-sync-1';
+  const BRIDGE_VERSION = '20260912-xtream-sync-2';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -268,6 +268,12 @@
     return { count: built.items.length, stats: built.stats };
   };
 
+  window.LuxSyncedCatalog = {
+    reload: loadSyncedCatalog,
+    manifestUrl: deriveManifestUrl,
+    version: BRIDGE_VERSION
+  };
+
   const install = () => {
     if (window.__luxSyncedCatalogBridgeInstalled) return true;
     if (typeof window.loadMediaSourcesInPriority !== 'function') return false;
@@ -319,10 +325,124 @@
     return true;
   };
 
-  if (install()) return;
+  if (!install()) {
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (install() || attempts >= 160) clearInterval(timer);
+    }, 50);
+  }
+})();
+
+(() => {
+  const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
+  let syncBusy = false;
+
+  const getStatus = () => document.getElementById('adminPlaylistCatalogSyncStatus');
+  const getButton = () => document.getElementById('adminPlaylistCatalogSyncButton');
+
+  const setStatus = (message, kind = 'normal') => {
+    const status = getStatus();
+    if (!status) return;
+    status.textContent = message;
+    status.className = 'mt-2 min-h-[18px] text-[11px] ' + (
+      kind === 'ok' ? 'text-emerald-300' :
+      kind === 'error' ? 'text-rose-300' :
+      'text-purple-300'
+    );
+  };
+
+  const installAdminSyncButton = () => {
+    if (document.getElementById('adminPlaylistCatalogSyncButton')) return true;
+    const categoryButton = document.getElementById('adminCategorySyncButton');
+    if (!categoryButton?.parentElement) return false;
+
+    const button = document.createElement('button');
+    button.id = 'adminPlaylistCatalogSyncButton';
+    button.type = 'button';
+    button.className = 'flex-1 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all disabled:opacity-50';
+    button.textContent = 'Sincronizar catálogo IPTV';
+    button.addEventListener('click', () => window.adminSyncPlaylistCatalog?.());
+    categoryButton.parentElement.appendChild(button);
+
+    const status = document.createElement('p');
+    status.id = 'adminPlaylistCatalogSyncStatus';
+    status.className = 'mt-2 min-h-[18px] text-[11px] text-purple-300';
+    status.setAttribute('role', 'status');
+
+    const categoryStatus = document.getElementById('adminCategorySyncStatus');
+    if (categoryStatus) categoryStatus.insertAdjacentElement('afterend', status);
+    else categoryButton.parentElement.insertAdjacentElement('afterend', status);
+    return true;
+  };
+
+  window.adminSyncPlaylistCatalog = async function () {
+    if (syncBusy) return;
+
+    const isAdmin = String(currentUser?.accountRole || currentUser?.role || '').toLowerCase() === 'admin';
+    if (!isAdmin) {
+      setStatus('Apenas o administrador pode sincronizar o catálogo.', 'error');
+      return;
+    }
+
+    const username = String(currentUser?.user || '').trim();
+    const password = String(currentUser?.pass || '');
+    if (!username || !password) {
+      setStatus('Faça login novamente antes de sincronizar.', 'error');
+      return;
+    }
+
+    const button = getButton();
+    syncBusy = true;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Sincronizando...';
+    }
+    setStatus('Sincronizando sua M3U + catálogo PHP. Isso pode levar alguns segundos...');
+
+    try {
+      const response = await fetch(`${WORKER_BASE}/sync-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || data?.result?.message || `Worker respondeu HTTP ${response.status}`);
+      }
+
+      setStatus('Conversão concluída. Recarregando o catálogo HTTPS...');
+      if (typeof window.loadMediaSourcesInPriority === 'function') {
+        const loaded = await window.loadMediaSourcesInPriority();
+        if (!loaded) throw new Error('O catálogo foi convertido, mas o Lux não conseguiu recarregá-lo.');
+      }
+
+      if (typeof window.setSection === 'function') window.setSection(currentSection || 'home');
+      const stats = window.__luxSyncedXtreamStats;
+      const seriesText = Number.isFinite(Number(stats?.officialSeries))
+        ? ` · ${stats.officialSeries} séries oficiais`
+        : '';
+      setStatus(`Catálogo IPTV sincronizado e aplicado${seriesText}.`, 'ok');
+    } catch (error) {
+      setStatus(error?.message || 'Não foi possível sincronizar o catálogo IPTV.', 'error');
+    } finally {
+      syncBusy = false;
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Sincronizar catálogo IPTV';
+      }
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installAdminSyncButton, { once: true });
+  } else {
+    installAdminSyncButton();
+  }
+
   let attempts = 0;
   const timer = setInterval(() => {
     attempts += 1;
-    if (install() || attempts >= 160) clearInterval(timer);
-  }, 50);
+    if (installAdminSyncButton() || attempts >= 120) clearInterval(timer);
+  }, 100);
 })();
