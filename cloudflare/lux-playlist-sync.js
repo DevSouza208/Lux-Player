@@ -117,15 +117,36 @@ async function readPreviousCatalogManifest(env, username) {
   }
 }
 
+function r2HttpMetadata(contentType) {
+  return {
+    contentType,
+    cacheControl: "no-cache, no-store, max-age=0"
+  };
+}
+
 async function saveRemoteResponseToR2(env, key, response, contentType) {
   if (!response.body) throw new Error("Fornecedor retornou resposta sem conteúdo.");
-  await env.LISTS_BUCKET.put(key, response.body, {
-    httpMetadata: {
-      contentType,
-      cacheControl: "no-cache, no-store, max-age=0"
-    }
-  });
-  return Number(response.headers.get("content-length")) || null;
+
+  const rawLength = response.headers.get("content-length");
+  const contentLength = /^\d+$/.test(String(rawLength || "")) ? Number(rawLength) : 0;
+  const options = { httpMetadata: r2HttpMetadata(contentType) };
+
+  // Quando o fornecedor informa o tamanho, mantemos streaming real sem bufferizar.
+  if (Number.isSafeInteger(contentLength) && contentLength > 0) {
+    const fixed = new FixedLengthStream(contentLength);
+    await Promise.all([
+      response.body.pipeTo(fixed.writable),
+      env.LISTS_BUCKET.put(key, fixed.readable, options)
+    ]);
+    return contentLength;
+  }
+
+  // Alguns servidores Xtream respondem em chunked transfer e não enviam
+  // Content-Length. R2 não aceita um ReadableStream de tamanho desconhecido
+  // em put(), então neste caso usamos um valor de tamanho fixo (ArrayBuffer).
+  const buffer = await response.arrayBuffer();
+  await env.LISTS_BUCKET.put(key, buffer, options);
+  return buffer.byteLength;
 }
 
 async function syncCatalogPart(env, source, versionPrefix, part) {
@@ -167,13 +188,10 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
   const previousManifest = await readPreviousCatalogManifest(env, username);
   const saved = [];
 
-  // Duas chamadas por vez: rápido o bastante sem bombardear o fornecedor.
-  for (let index = 0; index < catalogParts.length; index += 2) {
-    const batch = catalogParts.slice(index, index + 2);
-    const batchResults = await Promise.all(
-      batch.map(part => syncCatalogPart(env, source, versionPrefix, part))
-    );
-    saved.push(...batchResults);
+  // Um endpoint grande por vez. Se o fornecedor vier sem Content-Length,
+  // o fallback precisa bufferizar somente aquele arquivo, nunca vários juntos.
+  for (const part of catalogParts) {
+    saved.push(await syncCatalogPart(env, source, versionPrefix, part));
   }
 
   const files = {};
@@ -194,10 +212,7 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
 
   const manifestKey = `catalogos/${encodedUser}/manifest.json`;
   await env.LISTS_BUCKET.put(manifestKey, JSON.stringify(manifest), {
-    httpMetadata: {
-      contentType: "application/json; charset=utf-8",
-      cacheControl: "no-cache, no-store, max-age=0"
-    }
+    httpMetadata: r2HttpMetadata("application/json; charset=utf-8")
   });
 
   await cleanupOldCatalog(env, username, previousManifest, version);
@@ -205,7 +220,8 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
   return {
     url: `${baseUrl(env)}/${manifestKey}`,
     version,
-    files: Object.keys(files)
+    files: Object.keys(files),
+    bytes
   };
 }
 
@@ -304,11 +320,10 @@ async function syncAll(env) {
   const users = await response.json();
   const results = [];
 
-  // Cron: no máximo duas contas ao mesmo tempo.
-  for (let index = 0; index < users.length; index += 2) {
-    const batch = users.slice(index, index + 2);
-    const batchResults = await Promise.all(batch.map(user => syncUser(env, user)));
-    results.push(...batchResults);
+  // Cron conservador: uma conta por vez. O catálogo de cada conta já faz
+  // bastante I/O e isso evita picos de memória/subrequests no Worker.
+  for (const user of users) {
+    results.push(await syncUser(env, user));
   }
 
   return results;
@@ -353,7 +368,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.2" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.3" });
     }
 
     if (
@@ -402,7 +417,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.6.2"
+      version: "1.6.3"
     });
   },
 
