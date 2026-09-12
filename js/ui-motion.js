@@ -28,6 +28,7 @@
     './js/external-roms.js',
     './js/emulator.js',
     './js/emulator-speed-fix.js',
+    './js/mobile-experimental-cleanup.js',
     './js/mobile-ux.js',
     './js/mobile-lux-console.js',
     './js/mobile-lux-actions.js',
@@ -92,7 +93,7 @@ function animateDashboardEntry() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   document.getElementById('mainDashboard')?.animate(
     [{ opacity: .35, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
-    { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' }
+    { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'none' }
   );
 }
 
@@ -159,16 +160,16 @@ function animateDashboardEntry() {
   if (!window.matchMedia('(max-width: 767px)').matches) return;
 
   const styles = [
-    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-pwafresh1'],
-    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260911-pwafresh1'],
-    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260911-pwafresh1'],
-    ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260911-pwafresh1'],
-    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260911-pwafresh1'],
-    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260911-pwafresh1'],
-    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260911-pwafresh1'],
-    ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260911-pwafresh1'],
-    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260911-pwafresh1'],
-    ['lux-mobile-158-polish', 'css/mobile-lux-158-polish.css?v=20260911-pwafresh1']
+    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260912-cleanup1'],
+    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260912-cleanup1'],
+    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260912-cleanup1'],
+    ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260912-cleanup1'],
+    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260912-cleanup1'],
+    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260912-cleanup1'],
+    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260912-cleanup1'],
+    ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260912-cleanup1'],
+    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260912-cleanup1'],
+    ['lux-mobile-158-polish', 'css/mobile-lux-158-polish.css?v=20260912-cleanup1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
@@ -182,10 +183,11 @@ function animateDashboardEntry() {
 
   const loadMobileScripts = () => {
     const scripts = [
-      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-pwafresh1'],
-      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-pwafresh1'],
-      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260911-pwafresh1'],
-      ['lux-mobile-settings', 'js/mobile-lux-settings.js?v=20260911-pwafresh1']
+      ['lux-mobile-experimental-cleanup', 'js/mobile-experimental-cleanup.js?v=20260912-cleanup1'],
+      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260912-cleanup1'],
+      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260912-cleanup1'],
+      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260912-cleanup1'],
+      ['lux-mobile-settings', 'js/mobile-lux-settings.js?v=20260912-cleanup1']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;
