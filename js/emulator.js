@@ -6,6 +6,8 @@ let gameSaveBusy = false;
 let resolveGameSaveChoice = null;
 let emulatorFastForward = false;
 let gamePlayTimer = null;
+let activeRomObjectUrl = null;
+let romDownloadBusy = false;
 
 function getGameSaveKey(game, user = currentUser) { return `lux-play:user-save:${encodeURIComponent(user?.user || '')}${typeof profileLocalSuffix === 'function' ? profileLocalSuffix(user) : ''}:${getCloudGameSaveKey(game)}`; }
 function getGameSaveSlots(game) { try { return JSON.parse(localStorage.getItem(getGameSaveKey(game)) || '{}'); } catch (_) { return {}; } }
@@ -30,6 +32,7 @@ function openGameEmulator(gameItem) {
   if (!modal || !titleEl) return;
   pendingEmulatorGame = gameItem;
   activeEmulatorGame = gameItem;
+  activeRomObjectUrl = gameItem.localUrl || null;
   requestedSaveSlot = loadSlot;
   titleEl.innerText = gameItem.name;
   modal.classList.remove('hidden');
@@ -59,7 +62,7 @@ function startEmulatorSession() {
   const gameItem = pendingEmulatorGame;
   document.getElementById('emulatorIntro')?.classList.add('hidden');
   window.EJS_player = '#emulatorContainer';
-  window.EJS_gameUrl = gameItem.url;
+  window.EJS_gameUrl = gameItem.localUrl || gameItem.url;
   window.EJS_core = getEmulatorCore(gameItem.console);
   window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
   window.EJS_color = '#7c3aed';
@@ -82,6 +85,10 @@ function getEmulatorCore(consoleType) {
 }
 
 function closeGameEmulator() {
+  if (activeRomObjectUrl) {
+    try { URL.revokeObjectURL(activeRomObjectUrl); } catch (_) {}
+    activeRomObjectUrl = null;
+  }
   pauseGamePlayTimer();if(gamePlayTimer?.interval)clearInterval(gamePlayTimer.interval);gamePlayTimer=null;
   finishGameSaveChoice(null);
   try { window.EJS_emulator?.pause?.(); window.EJS_emulator?.callEvent?.('exit'); if (window.EJS_emulator && typeof window.EJS_emulator.destroy === 'function') window.EJS_emulator.destroy(); } catch (error) { console.warn('Não foi possível encerrar o emulador:', error); }
@@ -146,14 +153,67 @@ function updateGameDetailsActions(game) {
   if (!actions) return;
   const favorite = typeof isGameFavorite === 'function' && isGameFavorite(game);
   const favoriteButton = `<button onclick="toggleCurrentGameFavorite(event)" class="w-full mb-2 border ${favorite ? 'border-rose-500/60 bg-rose-500/15 text-rose-200' : 'border-purple-800/60 bg-purple-950/60 text-purple-200'} hover:bg-rose-500/20 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"><i data-lucide="heart" class="w-4 h-4 ${favorite ? 'fill-current' : ''}"></i> ${favorite ? 'Nos favoritos' : 'Adicionar aos favoritos'}</button>`;
-  actions.innerHTML = favoriteButton + (hasGameSave(game)
+  const downloadButton = '<button id="gameDownloadButton" onclick="downloadCurrentGame()" class="w-full mb-2 border border-indigo-800/70 bg-indigo-950/50 text-indigo-200 hover:bg-indigo-900/70 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-center items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i><span>Baixar para jogar localmente</span></button>';
+  actions.innerHTML = favoriteButton + downloadButton + (hasGameSave(game)
     ? '<button onclick="chooseGameSaveSlot()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Continuar</button><button onclick="startGameFromDetails()" class="w-full mt-2 bg-purple-950/60 hover:bg-purple-900 text-purple-100 font-bold py-3 rounded-xl text-sm border border-purple-800/60 transition-all">Novo jogo</button>'
     : '<button onclick="startGameFromDetails()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4 fill-white"></i> Novo jogo</button>');
+  refreshGameDownloadButton(game);
   const playTime=document.createElement('p');playTime.id='gameDetailsPlayTime';playTime.className='mt-3 text-xs text-purple-300';playTime.textContent=`Tempo jogado: ${formatGamePlayTime(getGamePlayTime(game))}`;actions.appendChild(playTime);
   const hltb=document.createElement('a');hltb.href='https://howlongtobeat.com/?q='+encodeURIComponent(game.name||'');hltb.target='_blank';hltb.rel='noopener noreferrer';hltb.className='block mt-2 text-xs text-indigo-300 hover:text-white';hltb.textContent='Ver duração no HowLongToBeat ↗';actions.appendChild(hltb);
   lucide.createIcons();
 }
-function startGameFromDetails(loadSlot = null) { if (!currentGameDetails) return; const game = { ...currentGameDetails, loadSlot }; closeGameDetails(); openGameEmulator(game); }
+async function startGameFromDetails(loadSlot = null) {
+  if (!currentGameDetails) return;
+  const game = currentGameDetails;
+  let localUrl = null;
+  try { localUrl = (await window.LuxRomCache?.get(game))?.url || null; } catch (error) { console.warn('ROM local indisponível:', error); }
+  const playableGame = { ...game, loadSlot, localUrl };
+  closeGameDetails();
+  openGameEmulator(playableGame);
+}
+
+async function refreshGameDownloadButton(game = currentGameDetails) {
+  const button = document.getElementById('gameDownloadButton');
+  if (!button || !game) return;
+  const label = button.querySelector('span');
+  try {
+    const cached = await window.LuxRomCache?.status(game);
+    if (currentGameDetails !== game || !button.isConnected) return;
+    button.disabled = false;
+    button.classList.toggle('border-emerald-700/70', Boolean(cached));
+    button.classList.toggle('bg-emerald-950/50', Boolean(cached));
+    button.classList.toggle('text-emerald-200', Boolean(cached));
+    if (label) label.textContent = cached ? 'Baixado: jogar usando cópia local' : 'Baixar para jogar localmente';
+  } catch (_) {
+    if (label) label.textContent = 'Baixar para jogar localmente';
+  }
+}
+
+async function downloadCurrentGame() {
+  const game = currentGameDetails;
+  const button = document.getElementById('gameDownloadButton');
+  const label = button?.querySelector('span');
+  if (!game || !button || romDownloadBusy || !window.LuxRomCache) return;
+  romDownloadBusy = true;
+  button.disabled = true;
+  if (label) label.textContent = 'Baixando ROM... 0%';
+  try {
+    await window.LuxRomCache.download(game, progress => {
+      if (label && button.isConnected) label.textContent = `Baixando ROM... ${Math.round(progress * 100)}%`;
+    });
+    if (label && button.isConnected) label.textContent = 'Baixado: jogar usando cópia local';
+    button.classList.add('border-emerald-700/70', 'bg-emerald-950/50', 'text-emerald-200');
+  } catch (error) {
+    if (label && button.isConnected) label.textContent = error.message || 'Não foi possível baixar a ROM';
+    console.warn('Download da ROM:', error);
+  } finally {
+    romDownloadBusy = false;
+    if (button.isConnected) {
+      button.disabled = false;
+      lucide.createIcons();
+    }
+  }
+}
 
 function chooseGameSaveSlot() {
   if (!currentGameDetails) return;
