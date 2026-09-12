@@ -8,7 +8,7 @@ const headers = {
 };
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const gameIdPattern = /^[1-9][0-9]*$/;
 
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
@@ -22,7 +22,7 @@ Deno.serve(async (request: Request) => {
     if (typeof username !== 'string' || !username || typeof password !== 'string' || !password) {
       return json({ error: 'Login necessário.' }, 401);
     }
-    if (typeof gameId !== 'string' || !uuidPattern.test(gameId)) {
+    if (typeof gameId !== 'string' || !gameIdPattern.test(gameId)) {
       return json({ error: 'Jogo inválido.' }, 400);
     }
     if (!['get', 'save'].includes(action)) return json({ error: 'Ação inválida.' }, 400);
