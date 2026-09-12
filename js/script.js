@@ -1,5 +1,99 @@
 const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
+
+    const TMDB_API_KEY = '3fd2be6f0c70a2a598f084ddfb75487c';
+    const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
+    const tmdbMetadataCache = new Map();
+    const tmdbMetadataPending = new Map();
+    const tmdbRequestQueue = [];
+    let tmdbActiveRequests = 0;
+
+    function normalizeTmdbTitle(str = '') {
+      return String(str)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '')
+        .replace(/\\(.*?\\)/g, '')
+        .replace(/\\[.*?\\]/g, '')
+        .replace(/\\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\\b/g, '')
+        .replace(/[^a-z0-9]/g, ' ')
+        .replace(/\\s+/g, ' ')
+        .trim();
+    }
+
+    function drainTmdbRequestQueue() {
+      while (tmdbActiveRequests < 4 && tmdbRequestQueue.length > 0) {
+        const next = tmdbRequestQueue.shift();
+        tmdbActiveRequests++;
+        Promise.resolve()
+          .then(next.task)
+          .then(next.resolve, next.reject)
+          .finally(() => {
+            tmdbActiveRequests--;
+            drainTmdbRequestQueue();
+          });
+      }
+    }
+
+    function enqueueTmdbRequest(task) {
+      return new Promise((resolve, reject) => {
+        tmdbRequestQueue.push({ task, resolve, reject });
+        drainTmdbRequestQueue();
+      });
+    }
+
+    function getTmdbSearchTitle(item) {
+      return String(item?.seriesName || item?.name || '')
+        .replace(/\\s+S\\d+\\s*E\\d+.*$/i, '')
+        .replace(/\\s+T\\d+\\s*E\\d+.*$/i, '')
+        .replace(/\\s+\\d+X\\d+.*$/i, '')
+        .trim();
+    }
+
+    async function fetchTmdbMetadata(item) {
+      if (!item || item.type === 'live') return null;
+      const mediaType = item.type === 'series' ? 'tv' : 'movie';
+      const title = getTmdbSearchTitle(item);
+      const normalizedTitle = normalizeTmdbTitle(title);
+      if (!normalizedTitle) return null;
+
+      const cacheKey = mediaType + ':' + normalizedTitle;
+      if (tmdbMetadataCache.has(cacheKey)) return tmdbMetadataCache.get(cacheKey);
+      if (tmdbMetadataPending.has(cacheKey)) return tmdbMetadataPending.get(cacheKey);
+
+      const request = enqueueTmdbRequest(async () => {
+        const url = 'https://api.themoviedb.org/3/search/' + mediaType
+          + '?api_key=' + encodeURIComponent(TMDB_API_KEY)
+          + '&language=pt-BR&include_adult=false&query=' + encodeURIComponent(title);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('TMDB HTTP ' + response.status);
+        const data = await response.json();
+        const result = (data.results || []).find(entry => entry.poster_path || entry.overview) || data.results?.[0];
+        if (!result) return null;
+
+        return {
+          id: result.id,
+          title: result.title || result.name || title,
+          overview: result.overview || '',
+          posterUrl: result.poster_path ? TMDB_IMAGE_BASE_URL + 'w500' + result.poster_path : '',
+          backdropUrl: result.backdrop_path ? TMDB_IMAGE_BASE_URL + 'original' + result.backdrop_path : '',
+          releaseDate: result.release_date || result.first_air_date || '',
+          score: result.vote_average || 0
+        };
+      }).then(metadata => {
+        tmdbMetadataCache.set(cacheKey, metadata);
+        return metadata;
+      }).catch(error => {
+        console.warn('Falha ao buscar metadados no TMDB:', title, error);
+        tmdbMetadataCache.set(cacheKey, null);
+        return null;
+      }).finally(() => {
+        tmdbMetadataPending.delete(cacheKey);
+      });
+
+      tmdbMetadataPending.set(cacheKey, request);
+      return request;
+    }
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
     const NOTIFICATION_SHEET_ID = '1BCtYvuyNd7POr1VbKTFRbOCKIh1W6iGewVh-zuk-Et4';
@@ -2850,7 +2944,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const posterEl = document.getElementById('heroPosterImage');
 
       try {
-        const res = await fetch('https://api.themoviedb.org/3/trending/all/week?api_key=3fd2be6f0c70a2a598f084ddfb75487c&language=pt-BR');
+        const res = await fetch('https://api.themoviedb.org/3/trending/all/week?api_key=' + encodeURIComponent(TMDB_API_KEY) + '&language=pt-BR');
         const data = await res.json();
         if(currentUser!==bannerUser)return;
         const tmdbResults = (data.results || []).filter(profileAllowsMedia);
@@ -3997,6 +4091,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             <p class="text-[10px] text-purple-400/80 truncate mt-0.5 md:mt-1">${c.group}</p>
           `;
           card.appendChild(infoDiv);
+          if (c.type === 'movies' || c.type === 'series') {
+            hydrateMediaCard(c, posterContainer);
+          }
         }
 
         fragment.appendChild(card);
@@ -4052,6 +4149,27 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       container.appendChild(hoverOverlay);
     }
 
+    async function hydrateMediaCard(item, posterContainer) {
+      const metadata = await fetchTmdbMetadata(item);
+      if (!metadata?.posterUrl || !posterContainer) return;
+
+      const currentImage = posterContainer.querySelector('img');
+      if (currentImage) {
+        currentImage.src = metadata.posterUrl;
+        return;
+      }
+
+      const fav = isFavorite(item);
+      posterContainer.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = metadata.posterUrl;
+      img.className = "w-full h-full object-cover group-hover:scale-105 transition-transform duration-300";
+      img.loading = "lazy";
+      posterContainer.appendChild(img);
+      addPosterOverlays(posterContainer, item, fav);
+      lucide.createIcons();
+    }
+
     function handleVodClick(item) {
       if (currentSection === 'movies') {
         openMovieModal(item);
@@ -4093,6 +4211,23 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       document.getElementById('movieModal').classList.remove('hidden');
 
+      const tmdbMetadata = await fetchTmdbMetadata(item);
+      if (tmdbMetadata) {
+        if (tmdbMetadata.overview) {
+          document.getElementById('movieModalPlot').innerText = tmdbMetadata.overview;
+        }
+        if (tmdbMetadata.releaseDate) {
+          document.getElementById('movieModalYear').innerText = tmdbMetadata.releaseDate;
+        }
+        if (tmdbMetadata.posterUrl) {
+          coverContainer.innerHTML = '';
+          const tmdbImg = document.createElement('img');
+          tmdbImg.src = tmdbMetadata.posterUrl;
+          tmdbImg.className = "w-full h-full object-cover";
+          coverContainer.appendChild(tmdbImg);
+        }
+      }
+
       const xcCreds = resolveUserCredentials(currentUser);
       if (xcCreds.isXc && item.url) {
         const match = item.url.match(/\/movie\/[^/]+\/[^/]+\/([^\.]+)\./);
@@ -4105,7 +4240,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             const data = await res.json();
             if (data && data.info) {
               const info = data.info;
-              document.getElementById('movieModalPlot').innerText = info.plot || info.description || 'Sinopse não disponível.';
+              document.getElementById('movieModalPlot').innerText = tmdbMetadata?.overview || info.plot || info.description || 'Sinopse não disponível.';
               if (info.releasedate || info.year) {
                 document.getElementById('movieModalYear').innerText = info.releasedate || info.year;
               }
@@ -4119,7 +4254,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           document.getElementById('movieModalPlot').innerText = 'Sinopse não disponível.';
         }
       } else {
-        document.getElementById('movieModalPlot').innerText = 'Sinopse disponível apenas via servidor Xtream Codes.';
+        document.getElementById('movieModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
       }
       lucide.createIcons();
     }
@@ -4170,6 +4305,20 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       `;
       document.getElementById('seriesModal').classList.remove('hidden');
 
+      const tmdbMetadata = await fetchTmdbMetadata(series);
+      if (tmdbMetadata) {
+        if (tmdbMetadata.overview) {
+          document.getElementById('seriesModalPlot').innerText = tmdbMetadata.overview;
+        }
+        if (tmdbMetadata.posterUrl) {
+          coverContainer.innerHTML = '';
+          const tmdbImg = document.createElement('img');
+          tmdbImg.src = tmdbMetadata.posterUrl;
+          tmdbImg.className = "w-full h-full object-cover";
+          coverContainer.appendChild(tmdbImg);
+        }
+      }
+
       const xcCreds = resolveUserCredentials(currentUser);
 
       if (xcCreds.isXc && series.series_id) {
@@ -4183,7 +4332,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
           if (data && data.info) {
             const info = data.info;
-            document.getElementById('seriesModalPlot').innerText = info.plot || info.description || 'Sinopse não disponível.';
+            document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || info.plot || info.description || 'Sinopse não disponível.';
           } else {
             document.getElementById('seriesModalPlot').innerText = 'Sinopse não disponível.';
           }
@@ -4220,7 +4369,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         }
       } else if (series.m3uEpisodes) {
         currentSeriesEpisodesData = series.m3uEpisodes;
-        document.getElementById('seriesModalPlot').innerText = 'Episódios agrupados automaticamente a partir da lista M3U.';
+        document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || 'Episódios agrupados automaticamente a partir da lista M3U.';
         const seasonNumbers = Object.keys(currentSeriesEpisodesData).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
         document.getElementById('seriesModalStats').innerText = `${seasonNumbers.length} Temporada(s)`;
         if (seasonNumbers.length) {
@@ -4243,7 +4392,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-slate-400 p-6 text-center">Nenhum episódio cadastrado nesta série.</p>';
         }
       } else {
-        document.getElementById('seriesModalPlot').innerText = 'Sinopse disponível apenas via servidor Xtream Codes.';
+        document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
         document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-purple-400 p-6 text-center">Série disponível via lista direta.</p>';
       }
       lucide.createIcons();
