@@ -167,7 +167,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       // O Xtream fornece categorias, capas e temporadas completas.
       // Quando existir, ele permanece como fonte principal para preservar os agrupamentos do fornecedor.
       if (user.urlXc && user.userXc && user.senhaXc) {
-        candidates.push({ kind: 'xtream', label: 'Xtream Codes', server: user.urlXc, user: user.userXc, pass: user.senhaxc });
+        candidates.push({ kind: 'xtream', label: 'Xtream Codes', server: user.urlXc, user: user.userXc, pass: user.senhaXc });
       }
 
       const addM3uCandidate = (value, label) => {
