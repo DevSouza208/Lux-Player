@@ -13,8 +13,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/\(.*?\\)/g, '')
-        .replace(/\[.*?\\]/g, '')
+        .replace(/\(.*?\)/g, '')
+        .replace(/\[.*?\]/g, '')
         .replace(/\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\b/g, '')
         .replace(/[^a-z0-9]/g, ' ')
         .replace(/\s+/g, ' ')
@@ -4245,13 +4245,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
                 document.getElementById('movieModalYear').innerText = info.releasedate || info.year;
               }
             } else {
-              document.getElementById('movieModalPlot').innerText = 'Sinopse não disponível.';
+              document.getElementById('movieModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
             }
           } catch(e) {
-            document.getElementById('movieModalPlot').innerText = 'Sinopse não disponível.';
+            document.getElementById('movieModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
           }
         } else {
-          document.getElementById('movieModalPlot').innerText = 'Sinopse não disponível.';
+          document.getElementById('movieModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
         }
       } else {
         document.getElementById('movieModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
@@ -4334,7 +4334,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             const info = data.info;
             document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || info.plot || info.description || 'Sinopse não disponível.';
           } else {
-            document.getElementById('seriesModalPlot').innerText = 'Sinopse não disponível.';
+            document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
           }
 
           const seasonNumbers = Object.keys(currentSeriesEpisodesData)
@@ -4364,7 +4364,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-slate-400 p-6 text-center">Nenhum episódio cadastrado nesta série.</p>';
           }
         } catch (err) {
-          document.getElementById('seriesModalPlot').innerText = 'Sinopse não disponível.';
+          document.getElementById('seriesModalPlot').innerText = tmdbMetadata?.overview || 'Sinopse não disponível.';
           document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-rose-400 p-6 text-center">Erro ao buscar episódios do servidor.</p>';
         }
       } else if (series.m3uEpisodes) {
