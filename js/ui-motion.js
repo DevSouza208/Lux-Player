@@ -220,3 +220,33 @@ function animateDashboardEntry() {
   if (document.readyState === 'complete') loadMobileScripts();
   else window.addEventListener('load', loadMobileScripts, { once: true });
 })();
+
+// Séries M3U são agrupadas depois do parse. O mapa público de categorias precisa
+// ser reaplicado após esse agrupamento, quando o item finalmente possui o nome
+// base da série usado pelo admin (ex.: "Breaking Bad" em vez de "Breaking Bad S01E01").
+(() => {
+  let attempts = 0;
+  const installSeriesCategoryFix = () => {
+    const original = window.groupM3uSeriesEpisodes;
+    if (typeof original !== 'function') return false;
+    if (original.__luxSharedSeriesCategoryFix) return true;
+
+    const patched = function (items) {
+      const grouped = original.call(this, items);
+      if (!Array.isArray(grouped) || typeof window.applySharedCategoryToItem !== 'function') return grouped;
+      grouped.forEach(item => {
+        if (item?.type === 'series') window.applySharedCategoryToItem(item);
+      });
+      return grouped;
+    };
+    patched.__luxSharedSeriesCategoryFix = true;
+    window.groupM3uSeriesEpisodes = patched;
+    return true;
+  };
+
+  if (installSeriesCategoryFix()) return;
+  const timer = setInterval(() => {
+    attempts += 1;
+    if (installSeriesCategoryFix() || attempts >= 100) clearInterval(timer);
+  }, 50);
+})();
