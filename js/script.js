@@ -37,6 +37,71 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     let activeAdminTab = 'clientes';
 
+    let mediaSourceState = { available: false, kind: '', label: '', count: 0 };
+
+    function setMediaSourceState(kind, label, count = allMediaItems.length) {
+      mediaSourceState = { available: true, kind, label, count: Number(count) || 0 };
+      updateMediaSourceVisibility();
+    }
+
+    function clearMediaSourceState() {
+      mediaSourceState = { available: false, kind: '', label: '', count: 0 };
+      allMediaItems = [];
+      updateMediaSourceVisibility();
+    }
+
+    function updateMediaSourceVisibility() {
+      ['navLive', 'navMovies', 'navSeries', 'bNavLive', 'bNavMovies', 'bNavSeries'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.classList.toggle('hidden', !mediaSourceState.available);
+      });
+    }
+
+    function getMediaSourceCandidates(user = currentUser) {
+      if (!user) return [];
+      const candidates = [];
+      const m3uValue = String(user.m3uUrl || '').trim();
+
+      if (/^https?:\/\//i.test(m3uValue)) {
+        candidates.push({ kind: 'm3u-url', label: 'Lista M3U por URL', value: m3uValue });
+      }
+      if (user.urlXc && user.userXc && user.senhaXc) {
+        candidates.push({ kind: 'xtream', label: 'Xtream Codes', server: user.urlXc, user: user.userXc, pass: user.senhaXc });
+      }
+      if (/^m3u-storage:[a-f0-9-]{36}$/i.test(m3uValue)) {
+        candidates.push({ kind: 'm3u-storage', label: 'Arquivo M3U no Supabase', value: m3uValue });
+      }
+      return candidates;
+    }
+
+    async function loadMediaSourcesInPriority() {
+      const candidates = getMediaSourceCandidates();
+      const failures = [];
+      if (!candidates.length) {
+        clearMediaSourceState();
+        return false;
+      }
+
+      for (const source of candidates) {
+        try {
+          const result = source.kind === 'xtream'
+            ? await loadFromXtreamApi(source.server, source.user, source.pass)
+            : await loadPlaylist(source.value);
+          const count = Number(result?.count ?? allMediaItems.length);
+          if (!count) throw new Error('A fonte não retornou nenhum item utilizável.');
+          setMediaSourceState(source.kind, source.label, count);
+          return true;
+        } catch (error) {
+          failures.push(source.label + ': ' + (error?.message || 'falha desconhecida'));
+          console.warn('[Lux Play] Fonte indisponível:', source.label, error);
+        }
+      }
+
+      clearMediaSourceState();
+      console.warn('[Lux Play] Nenhuma fonte principal carregada.', failures);
+      return false;
+    }
+
     function getJsonStorage(key, fallback) {
       try {
         const raw = localStorage.getItem(key);
@@ -1311,24 +1376,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function resolveUserCredentials(user) {
-      if (user.m3uUrl?.startsWith('m3u-storage:')) return { isXc: false, url: user.m3uUrl };
-      if (user.urlXc && user.userXc && user.senhaXc) {
-        return { isXc: true, server: user.urlXc, user: user.userXc, pass: user.senhaXc };
-      }
-      if (user.m3uUrl && (user.m3uUrl.includes('get.php') || user.m3uUrl.includes('player_api.php'))) {
-        try {
-          const u = new URL(user.m3uUrl);
-          const username = u.searchParams.get('username') || u.searchParams.get('user');
-          const password = u.searchParams.get('password') || u.searchParams.get('pass');
-          if (username && password) {
-            return { isXc: true, server: u.origin, user: username, pass: password };
-          }
-        } catch (e) {}
-      }
-      if (user.m3uUrl) {
-        return { isXc: false, url: user.m3uUrl };
-      }
-      return { isXc: false, url: '' };
+      const source = getMediaSourceCandidates(user)[0];
+      if (!source) return { isXc: false, url: '' };
+      if (source.kind === 'xtream') return { isXc: true, server: source.server, user: source.user, pass: source.pass };
+      return { isXc: false, url: source.value };
     }
 
     async function handleLogin() {
@@ -1451,14 +1502,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const statusMsg = document.getElementById('splashStatusMessage');
       if (statusMsg) statusMsg.innerText = "Configurando sua experiência... O primeiro acesso pode demorar cerca de 1 min.";
 
-      const xcCreds = resolveUserCredentials(currentUser);
-
-      if (xcCreds.isXc) {
-        await loadFromXtreamApi(xcCreds.server, xcCreds.user, xcCreds.pass);
-      } else if (xcCreds.url) {
-        await loadPlaylist(xcCreds.url);
-      } else {
-        // Contas sem playlist também carregam o catálogo compartilhado.
+      const mediaLoaded = await loadMediaSourcesInPriority();
+      if (!mediaLoaded && statusMsg) {
+        statusMsg.innerText = 'Nenhuma lista principal configurada. Você ainda pode usar Jogos e Leitura.';
       }
 
       try { await loadSharedVodCatalog(); } catch (error) { alert(error.message); }
@@ -1492,12 +1538,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         const updated = users.find(u => u.user.toLowerCase() === currentUser.user.toLowerCase());
         if (updated) {
           currentUser = {...updated,accountRole:updated.role,profile:currentUser.profile,role:currentUser.profile?.is_child?'user':updated.role};
-          const xcCreds = resolveUserCredentials(currentUser);
-          if (xcCreds.isXc) {
-            await loadFromXtreamApi(xcCreds.server, xcCreds.user, xcCreds.pass);
-          } else if (xcCreds.url) {
-            await loadPlaylist(xcCreds.url);
-          }
+          await loadMediaSourcesInPriority();
         }
         await loadSharedVodCatalog();
         setSection(currentSection);
@@ -2322,11 +2363,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           return a.isAdult ? 1 : -1;
         });
 
+        if (!parsedItems.length) throw new Error('O Xtream não retornou canais, filmes ou séries.');
         allMediaItems = parsedItems.filter(profileAllowsMedia);
         mergeSharedVodsIntoPlayer();
+        return { count: parsedItems.length };
       } catch (err) {
-        const fallbackM3u = `${cleanServer}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=m3u8`;
-        await loadPlaylist(fallbackM3u);
+        throw new Error('Falha ao carregar o Xtream Codes: ' + (err?.message || 'resposta inválida'));
       }
     }
 
@@ -2346,6 +2388,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         if (!parsed.length) throw new Error('Nenhum canal com endereço HTTP/HTTPS encontrado. Escolha uma lista de canais, não um manifesto de vídeo.');
         allMediaItems = parsed.filter(profileAllowsMedia).sort((a, b) => Number(a.isAdult) - Number(b.isAdult));
         mergeSharedVodsIntoPlayer();
+        setMediaSourceState('local-m3u', 'Arquivo M3U local', parsed.length);
         activeSearchQuery = '';
         isAdultUnlocked = false;
         status.textContent = `${file.name}: ${parsed.length} itens lidos.`;
@@ -2360,23 +2403,21 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function loadPlaylist(url) {
-      try {
-        url = String(url || '').trim();
-        const text = url.startsWith('m3u-storage:')
-          ? await downloadUserPlaylist()
-          : await (await smartFetch(url)).text();
-        const parsed = parseM3U(text);
+      url = String(url || '').trim();
+      const text = url.startsWith('m3u-storage:')
+        ? await downloadUserPlaylist()
+        : await (await smartFetch(url)).text();
+      const parsed = parseM3U(text);
+      if (!parsed.length) throw new Error('A lista M3U está vazia ou não possui entradas válidas.');
 
-        parsed.sort((a, b) => {
-          if (Boolean(a.isAdult) === Boolean(b.isAdult)) return 0;
-          return a.isAdult ? 1 : -1;
-        });
+      parsed.sort((a, b) => {
+        if (Boolean(a.isAdult) === Boolean(b.isAdult)) return 0;
+        return a.isAdult ? 1 : -1;
+      });
 
-        allMediaItems = parsed.filter(profileAllowsMedia);
-        mergeSharedVodsIntoPlayer();
-      } catch (err) {
-        alert('Erro ao carregar lista M3U: ' + (err.message || 'Falha desconhecida.'));
-      }
+      allMediaItems = parsed.filter(profileAllowsMedia);
+      mergeSharedVodsIntoPlayer();
+      return { count: parsed.length };
     }
 
     function parseM3U(data) {
@@ -2442,6 +2483,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     });
 
     function setSection(section) {
+      if (['live', 'movies', 'series'].includes(section) && !mediaSourceState.available) {
+        section = 'home';
+      }
       if (currentSection !== section) animateDashboardEntry();
       currentSection = section;
       
@@ -4779,7 +4823,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
 
       toggleConfigModal();
-      loadPlaylist(finalUrl);
+      loadPlaylist(finalUrl)
+        .then(result => setMediaSourceState('m3u-url', 'Lista M3U por URL', result?.count))
+        .catch(error => alert('Erro ao carregar lista M3U: ' + (error.message || 'Falha desconhecida.')));
     }
 
     let gamesConsoleFilter = 'all';
