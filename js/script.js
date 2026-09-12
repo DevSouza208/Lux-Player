@@ -4668,7 +4668,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             </div>
           </div>
           ${activeSearchQuery ? `<div class="mb-6 border-t border-purple-900/50 pt-5 flex flex-wrap items-center gap-3"><h3 class="text-xl font-extrabold text-white">Resultados para: <span class="text-purple-400">&quot;${escapeGameHtml(activeSearchQuery)}&quot;</span></h3><button onclick="clearSearchFilter()" class="bg-purple-950 hover:bg-rose-600 text-purple-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"><i data-lucide="x" class="w-3.5 h-3.5"></i> Limpar busca</button></div>` : ''}
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-4">
+          <div id="gamesCatalogGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-4">
       `;
 
       if (gamesList.length === 0) {
