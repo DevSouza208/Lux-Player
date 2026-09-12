@@ -1,0 +1,225 @@
+(() => {
+  'use strict';
+
+  if (window.__luxRuntimeStabilityFixInstalled) return;
+  window.__luxRuntimeStabilityFixInstalled = '20260912-stability1';
+
+  const normalizeText = value => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\.(mkv|mp4|avi|mov|ts|m3u8?|flv|webm)$/i, '')
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const normalizeAssetUrl = value => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const url = new URL(raw);
+      url.hash = '';
+      return `${url.origin}${url.pathname}`.replace(/\/+$/, '').toLowerCase();
+    } catch (_) {
+      return raw.split('#')[0].split('?')[0].replace(/\/+$/, '').toLowerCase();
+    }
+  };
+
+  const normalizeType = value => {
+    const type = String(value || '').toLowerCase();
+    if (type === 'movie' || type === 'movies' || type === 'vod') return 'movies';
+    if (type === 'live' || type === 'tv') return 'live';
+    return type;
+  };
+
+  const extractFlexibleStreamId = value => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    try {
+      const parsed = new URL(raw);
+      for (const key of ['stream_id', 'stream', 'id']) {
+        const candidate = parsed.searchParams.get(key);
+        if (/^\d+$/.test(String(candidate || ''))) return String(candidate);
+      }
+
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      const last = decodeURIComponent(parts.at(-1) || '');
+      const match = last.match(/^(\d+)(?:\.[a-z0-9]{1,10})?$/i);
+      if (match) return match[1];
+    } catch (_) {}
+
+    const clean = raw.split(/[?#]/)[0].replace(/\/+$/, '');
+    const last = clean.split('/').filter(Boolean).at(-1) || '';
+    const match = last.match(/^(\d+)(?:\.[a-z0-9]{1,10})?$/i);
+    return match ? match[1] : '';
+  };
+
+  const addToMap = (map, key, item) => {
+    if (!key) return;
+    const list = map.get(key) || [];
+    list.push(item);
+    map.set(key, list);
+  };
+
+  let cachedPlaylistUrl = '';
+  let cachedRawItems = null;
+
+  const loadRawPlaylistItems = async () => {
+    const manifest = window.__luxSyncedXtreamManifest;
+    const playlistUrl = String(manifest?.playlist || '').trim();
+    if (!playlistUrl || typeof window.parseM3U !== 'function') return [];
+    if (cachedPlaylistUrl === playlistUrl && Array.isArray(cachedRawItems)) return cachedRawItems;
+
+    const response = await fetch(playlistUrl, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`playlist HTTP ${response.status}`);
+    const text = await response.text();
+    const parsed = window.parseM3U(text).filter(item => item?.url);
+    cachedPlaylistUrl = playlistUrl;
+    cachedRawItems = parsed;
+    return parsed;
+  };
+
+  const repairSyncedPlaybackUrls = async () => {
+    if (!window.__luxSyncedXtreamActive || typeof allMediaItems === 'undefined' || !Array.isArray(allMediaItems)) return;
+
+    let rawItems;
+    try {
+      rawItems = await loadRawPlaylistItems();
+    } catch (error) {
+      console.warn('[Lux Play] Não foi possível validar os endereços de reprodução.', error);
+      return;
+    }
+    if (!rawItems.length) return;
+
+    const byTypeAndId = new Map();
+    const byTypeAndName = new Map();
+    const byTypeAndLogo = new Map();
+
+    rawItems.forEach(raw => {
+      const type = normalizeType(raw.type);
+      if (type !== 'live' && type !== 'movies') return;
+      const id = extractFlexibleStreamId(raw.url);
+      if (id && !byTypeAndId.has(`${type}|${id}`)) byTypeAndId.set(`${type}|${id}`, raw);
+      addToMap(byTypeAndName, `${type}|${normalizeText(raw.name)}`, raw);
+      addToMap(byTypeAndLogo, `${type}|${normalizeAssetUrl(raw.logo)}`, raw);
+    });
+
+    let repaired = 0;
+    let directFallbacks = 0;
+    let stillMissing = 0;
+
+    for (const item of allMediaItems) {
+      if (item?.source !== 'synced-xtream') continue;
+      const type = normalizeType(item.type);
+      if (type !== 'live' && type !== 'movies') continue;
+      if (String(item.url || '').trim()) continue;
+
+      const streamId = String(item.stream_id ?? '').trim();
+      let match = streamId ? byTypeAndId.get(`${type}|${streamId}`) : null;
+
+      if (!match) {
+        const nameMatches = byTypeAndName.get(`${type}|${normalizeText(item.name)}`) || [];
+        if (nameMatches.length === 1) match = nameMatches[0];
+        else if (nameMatches.length > 1) {
+          const logo = normalizeAssetUrl(item.logo || item.stream_icon);
+          match = nameMatches.find(candidate => logo && normalizeAssetUrl(candidate.logo) === logo) || nameMatches[0];
+        }
+      }
+
+      if (!match) {
+        const logoMatches = byTypeAndLogo.get(`${type}|${normalizeAssetUrl(item.logo || item.stream_icon)}`) || [];
+        if (logoMatches.length === 1) match = logoMatches[0];
+      }
+
+      if (match?.url) {
+        item.url = match.url;
+        repaired += 1;
+        continue;
+      }
+
+      const direct = String(item.direct_source || item.directSource || '').trim();
+      if (/^https?:\/\//i.test(direct)) {
+        item.url = direct;
+        directFallbacks += 1;
+        continue;
+      }
+
+      stillMissing += 1;
+    }
+
+    if (window.__luxSyncedXtreamStats) {
+      window.__luxSyncedXtreamStats.playbackRepaired = repaired;
+      window.__luxSyncedXtreamStats.playbackDirectFallbacks = directFallbacks;
+      window.__luxSyncedXtreamStats.playbackMissing = stillMissing;
+    }
+
+    console.info('[Lux Play] Endereços de reprodução validados.', { repaired, directFallbacks, stillMissing });
+  };
+
+  const installCatalogRepair = () => {
+    if (window.__luxCatalogPlaybackRepairInstalled) return true;
+    if (!window.__luxSyncedCatalogBridgeInstalled || typeof window.loadMediaSourcesInPriority !== 'function') return false;
+
+    const originalLoad = window.loadMediaSourcesInPriority;
+    window.loadMediaSourcesInPriority = async function () {
+      const result = await originalLoad.apply(this, arguments);
+      if (result && window.__luxSyncedXtreamActive) await repairSyncedPlaybackUrls();
+      return result;
+    };
+
+    window.__luxCatalogPlaybackRepairInstalled = true;
+    window.LuxPlaybackRepair = { run: repairSyncedPlaybackUrls, extractStreamId: extractFlexibleStreamId };
+    return true;
+  };
+
+  const sameProfile = (a, b) => {
+    if (!a || !b) return false;
+    if (a.data_key && b.data_key) return String(a.data_key) === String(b.data_key);
+    return Number(a.slot || 1) === Number(b.slot || 1);
+  };
+
+  const installFastProfileEntry = () => {
+    if (window.__luxFastProfileEntryInstalled) return true;
+    if (typeof window.activateAccountProfile !== 'function' || typeof window.syncCloudProgress !== 'function') return false;
+
+    const originalActivate = window.activateAccountProfile;
+
+    window.activateAccountProfile = async function (profile) {
+      const syncFunction = window.syncCloudProgress;
+      let deferredSync = false;
+      const deferOnly = async () => { deferredSync = true; };
+
+      window.syncCloudProgress = deferOnly;
+      try {
+        return await originalActivate.apply(this, arguments);
+      } finally {
+        if (window.syncCloudProgress === deferOnly) window.syncCloudProgress = syncFunction;
+
+        if (deferredSync && typeof syncFunction === 'function' && sameProfile(currentUser?.profile, profile)) {
+          setTimeout(() => {
+            Promise.resolve(syncFunction()).catch(error => {
+              console.warn('[Lux Play] Sincronização em segundo plano indisponível.', error);
+            });
+          }, 0);
+        }
+      }
+    };
+
+    window.__luxFastProfileEntryInstalled = true;
+    return true;
+  };
+
+  let attempts = 0;
+  const install = () => {
+    attempts += 1;
+    const catalogReady = installCatalogRepair();
+    const profileReady = installFastProfileEntry();
+    if ((catalogReady && profileReady) || attempts >= 240) clearInterval(timer);
+  };
+
+  const timer = setInterval(install, 50);
+  install();
+})();
