@@ -24,6 +24,7 @@
     './js/script.js',
     './js/profiles.js',
     './js/game-save-store.js',
+    './js/game-rom-cache.js',
     './js/emulator.js',
     './js/emulator-speed-fix.js',
     './js/mobile-ux.js',
