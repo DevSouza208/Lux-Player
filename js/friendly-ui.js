@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-6';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-7';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -99,7 +99,7 @@
   const loadRuntimeStabilityFix = () => {
     if (document.querySelector('script[data-lux-runtime-stability]')) return;
     const script = document.createElement('script');
-    script.src = 'js/runtime-stability-fix.js?v=20260912-stability1';
+    script.src = 'js/runtime-stability-fix.js?v=20260912-stability2';
     script.async = true;
     script.dataset.luxRuntimeStability = '1';
     document.head.appendChild(script);
