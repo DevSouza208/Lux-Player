@@ -157,10 +157,10 @@
   applyTransparency(readTransparency());
 
   const observer = new MutationObserver(mutations => {
-    applyTransparency(readTransparency());
     for (const mutation of mutations) {
       mutation.addedNodes.forEach(node => {
         if (!(node instanceof Element)) return;
+        if (node.id === 'emulatorModal' || node.querySelector?.('#emulatorModal')) applyTransparency(readTransparency());
         if (node.matches('.lux-console-settings-sheet')) injectSlider(node);
         node.querySelectorAll?.('.lux-console-settings-sheet').forEach(injectSlider);
       });
