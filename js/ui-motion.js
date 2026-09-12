@@ -2,20 +2,28 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
+  const RESET_VERSION = '20260912-mobile-emulator-restore-1';
+  const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
 
-  // Second pass after the refresh: remove the temporary marker and continue normally.
-  if (freshMarker) {
+  // Second pass after the forced refresh: mark this restore as applied,
+  // clean the temporary query and continue normally from now on.
+  if (freshMarker === RESET_VERSION) {
+    try { localStorage.setItem(RESET_KEY, RESET_VERSION); } catch (_) {}
     currentUrl.searchParams.delete('__lux_pwa_fresh');
+    currentUrl.searchParams.delete('__lux_cache_bust');
     const cleanUrl = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
     try { window.history.replaceState(window.history.state, '', cleanUrl); } catch (_) {}
     return;
   }
 
-  // Only refresh web caches/assets. Never touch localStorage or IndexedDB because
-  // Lux Play keeps saves, preferences and other user data there.
-  const preserveCache = name => String(name || '').startsWith('lux-controller-');
+  try {
+    if (localStorage.getItem(RESET_KEY) === RESET_VERSION) return;
+  } catch (_) {}
+
+  // This reset touches only web caches/service workers. Saves, ROM cache,
+  // preferences and user data stored in localStorage/IndexedDB are preserved.
   const refreshTargets = [
     './index.html',
     './css/style.css',
@@ -50,19 +58,29 @@
     if ('caches' in window) {
       try {
         const names = await caches.keys();
-        await Promise.all(names.filter(name => !preserveCache(name)).map(name => caches.delete(name)));
+        await Promise.all(names.map(name => caches.delete(name)));
       } catch (_) {}
     }
 
-    await Promise.allSettled(refreshTargets.map(url =>
-      fetch(url, { cache: 'reload', credentials: 'same-origin' }).catch(() => null)
-    ));
+    // Remove any stale service worker left by an older PWA build.
+    try {
+      const registrations = await navigator.serviceWorker?.getRegistrations?.();
+      if (registrations?.length) await Promise.allSettled(registrations.map(registration => registration.unregister()));
+    } catch (_) {}
+
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await Promise.allSettled(refreshTargets.map(target => {
+      const url = new URL(target, window.location.href);
+      url.searchParams.set('__lux_cache_bust', stamp);
+      return fetch(url.href, { cache: 'no-store', credentials: 'same-origin' }).catch(() => null);
+    }));
   })();
 
-  const timeout = new Promise(resolve => setTimeout(resolve, 2600));
+  const timeout = new Promise(resolve => setTimeout(resolve, 3000));
   Promise.race([refresh, timeout]).finally(() => {
     const next = new URL(window.location.href);
-    next.searchParams.set('__lux_pwa_fresh', Date.now().toString(36));
+    next.searchParams.set('__lux_pwa_fresh', RESET_VERSION);
+    next.searchParams.set('__lux_cache_bust', Date.now().toString(36));
     window.location.replace(next.href);
   });
 })();
@@ -130,7 +148,7 @@ function animateDashboardEntry() {
     meta.content = content;
   };
 
-  ensureLink('manifest', 'manifest.webmanifest?v=20260911-icons1');
+  ensureLink('manifest', 'manifest.webmanifest?v=20260912-restore1');
   ensureLink('icon', 'lux-play-icon.svg?v=20260911-icons1', { type: 'image/svg+xml' });
   ensureLink('apple-touch-icon', 'icon.png?v=20260911-icons1');
   ensureMeta('theme-color', '#09060e');
@@ -140,9 +158,9 @@ function animateDashboardEntry() {
 
 (() => {
   const modules = [
-    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260910-v151'],
-    ['lux-remote-host', 'js/lux-remote-host.js?v=20260910-v151'],
-    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260911-pwafresh1']
+    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-restore1'],
+    ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-restore1'],
+    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-restore1']
   ];
   modules.forEach(([name, src]) => {
     if (document.querySelector(`script[data-${name}]`)) return;
@@ -159,16 +177,16 @@ function animateDashboardEntry() {
   if (!window.matchMedia('(max-width: 767px)').matches) return;
 
   const styles = [
-    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260911-pwafresh1'],
-    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260911-pwafresh1'],
-    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260911-pwafresh1'],
-    ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260911-pwafresh1'],
-    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260911-pwafresh1'],
-    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260911-pwafresh1'],
-    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260911-pwafresh1'],
-    ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260911-pwafresh1'],
-    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260911-pwafresh1'],
-    ['lux-mobile-158-polish', 'css/mobile-lux-158-polish.css?v=20260911-pwafresh1']
+    ['lux-mobile-ux', 'css/mobile-ux.css?v=20260912-restore1'],
+    ['lux-mobile-console', 'css/mobile-lux-console.css?v=20260912-restore1'],
+    ['lux-mobile-controls', 'css/mobile-lux-controls.css?v=20260912-restore1'],
+    ['lux-mobile-landscape-tune', 'css/mobile-lux-landscape-tune.css?v=20260912-restore1'],
+    ['lux-mobile-ergonomics-tune', 'css/mobile-lux-ergonomics-tune.css?v=20260912-restore1'],
+    ['lux-mobile-context', 'css/mobile-lux-context.css?v=20260912-restore1'],
+    ['lux-mobile-final-tune', 'css/mobile-lux-final-tune.css?v=20260912-restore1'],
+    ['lux-mobile-settings', 'css/mobile-lux-settings.css?v=20260912-restore1'],
+    ['lux-mobile-landscape-final', 'css/mobile-lux-landscape-final.css?v=20260912-restore1'],
+    ['lux-mobile-158-polish', 'css/mobile-lux-158-polish.css?v=20260912-restore1']
   ];
   styles.forEach(([name, href]) => {
     if (document.querySelector(`link[data-${name}]`)) return;
@@ -182,10 +200,10 @@ function animateDashboardEntry() {
 
   const loadMobileScripts = () => {
     const scripts = [
-      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260911-pwafresh1'],
-      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260911-pwafresh1'],
-      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260911-pwafresh1'],
-      ['lux-mobile-settings', 'js/mobile-lux-settings.js?v=20260911-pwafresh1']
+      ['lux-mobile-ux', 'js/mobile-ux.js?v=20260912-restore1'],
+      ['lux-mobile-console', 'js/mobile-lux-console.js?v=20260912-restore1'],
+      ['lux-mobile-actions', 'js/mobile-lux-actions.js?v=20260912-restore1'],
+      ['lux-mobile-settings', 'js/mobile-lux-settings.js?v=20260912-restore1']
     ];
     scripts.forEach(([name, src]) => {
       if (document.querySelector(`script[data-${name}]`)) return;
