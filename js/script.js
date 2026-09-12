@@ -164,13 +164,19 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const m3uHttps = String(user.m3uHttpsUrl || '').trim();
       const isElectron = Boolean(window.luxElectron);
 
-      // No Electron, a lista original pode ser usada diretamente.
-      // No navegador/PWA/Vercel, o HTTP original é bloqueado de propósito:
-      // somente o arquivo HTTPS sincronizado pelo Worker entra como M3U.
-      if (isElectron && /^https?:\/\//i.test(m3uOriginal)) {
-        candidates.push({ kind: 'm3u-url', label: 'Lista M3U original (Electron)', value: m3uOriginal });
-      } else if (!isElectron && /^https:\/\//i.test(m3uHttps)) {
-        candidates.push({ kind: 'm3u-url', label: 'Lista M3U HTTPS sincronizada', value: m3uHttps });
+      const addM3uCandidate = (value, label) => {
+        if (!/^https?:\/\//i.test(value)) return;
+        if (candidates.some(candidate => candidate.kind === 'm3u-url' && candidate.value === value)) return;
+        candidates.push({ kind: 'm3u-url', label, value });
+      };
+
+      // Electron: lista original primeiro; navegador/PWA: lista HTTPS primeiro.
+      if (isElectron) {
+        addM3uCandidate(m3uOriginal, 'Lista M3U original (Electron)');
+        addM3uCandidate(m3uHttps, 'Lista M3U HTTPS sincronizada');
+      } else {
+        addM3uCandidate(m3uHttps, 'Lista M3U HTTPS sincronizada');
+        addM3uCandidate(m3uOriginal, 'Lista M3U original (fallback HTTP)');
       }
 
       if (user.urlXc && user.userXc && user.senhaXc) {
