@@ -2429,6 +2429,20 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       });
     }
 
+    async function fetchXtreamJson(url, timeoutMs = 7000) {
+      if (!String(url || '').trim()) return [];
+      let timer;
+      try {
+        const timeout = new Promise(resolve => {
+          timer = setTimeout(() => resolve([]), timeoutMs);
+        });
+        const request = smartFetch(url).then(response => response.json()).catch(() => []);
+        return await Promise.race([request, timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
     async function loadFromXtreamApi(server, user, pass) {
       const cleanServer = server.replace(/\/+$/, '');
       const baseApi = `${cleanServer}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
@@ -2447,12 +2461,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           vodStreams,
           seriesStreams
         ] = await Promise.all([
-          smartFetch(`${baseApi}&action=get_live_categories`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_vod_categories`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_series_categories`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_live_streams`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_vod_streams`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_series`).then(r => r.json()).catch(() => [])
+          fetchXtreamJson(`${baseApi}&action=get_live_categories`),
+          fetchXtreamJson(`${baseApi}&action=get_vod_categories`),
+          fetchXtreamJson(`${baseApi}&action=get_series_categories`),
+          fetchXtreamJson(`${baseApi}&action=get_live_streams`),
+          fetchXtreamJson(`${baseApi}&action=get_vod_streams`),
+          fetchXtreamJson(`${baseApi}&action=get_series`)
         ]);
 
         const liveCatMap = Object.fromEntries(liveCatsRes.map(c => [c.category_id, c.category_name]));
