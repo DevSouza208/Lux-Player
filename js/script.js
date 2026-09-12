@@ -21,8 +21,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         .trim();
     }
 
+    function getTmdbRequestLimit() {
+      return currentSection === 'movies' || currentSection === 'series' ? 4 : 1;
+    }
+
     function drainTmdbRequestQueue() {
-      while (tmdbActiveRequests < 4 && tmdbRequestQueue.length > 0) {
+      while (tmdbActiveRequests < getTmdbRequestLimit() && tmdbRequestQueue.length > 0) {
         const next = tmdbRequestQueue.shift();
         tmdbActiveRequests++;
         Promise.resolve()
@@ -4075,6 +4079,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
               posterContainer.appendChild(createFallbackPoster(c, isAdult));
               addPosterOverlays(posterContainer, c, fav);
               lucide.createIcons();
+              hydrateMediaCard(c, posterContainer);
             };
             posterContainer.appendChild(img);
           } else {
@@ -4150,14 +4155,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function hydrateMediaCard(item, posterContainer) {
-      const metadata = await fetchTmdbMetadata(item);
-      if (!metadata?.posterUrl || !posterContainer) return;
+      if (!posterContainer || posterContainer.querySelector('img') || item.logo) return;
 
-      const currentImage = posterContainer.querySelector('img');
-      if (currentImage) {
-        currentImage.src = metadata.posterUrl;
-        return;
-      }
+      const metadata = await fetchTmdbMetadata(item);
+      if (!metadata?.posterUrl || !posterContainer || posterContainer.querySelector('img')) return;
 
       const fav = isFavorite(item);
       posterContainer.innerHTML = '';
@@ -4165,6 +4166,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       img.src = metadata.posterUrl;
       img.className = "w-full h-full object-cover group-hover:scale-105 transition-transform duration-300";
       img.loading = "lazy";
+      img.onerror = () => {
+        posterContainer.innerHTML = '';
+        posterContainer.appendChild(createFallbackPoster(item, item.isAdult));
+        addPosterOverlays(posterContainer, item, fav);
+        lucide.createIcons();
+      };
       posterContainer.appendChild(img);
       addPosterOverlays(posterContainer, item, fav);
       lucide.createIcons();
@@ -4219,7 +4226,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         if (tmdbMetadata.releaseDate) {
           document.getElementById('movieModalYear').innerText = tmdbMetadata.releaseDate;
         }
-        if (tmdbMetadata.posterUrl) {
+        if (tmdbMetadata.posterUrl && !item.logo) {
           coverContainer.innerHTML = '';
           const tmdbImg = document.createElement('img');
           tmdbImg.src = tmdbMetadata.posterUrl;
@@ -4240,7 +4247,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             const data = await res.json();
             if (data && data.info) {
               const info = data.info;
-              document.getElementById('movieModalPlot').innerText = tmdbMetadata?.overview || info.plot || info.description || 'Sinopse não disponível.';
+              document.getElementById('movieModalPlot').innerText = info.plot || info.description || tmdbMetadata?.overview || 'Sinopse não disponível.';
               if (info.releasedate || info.year) {
                 document.getElementById('movieModalYear').innerText = info.releasedate || info.year;
               }
@@ -4310,7 +4317,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         if (tmdbMetadata.overview) {
           document.getElementById('seriesModalPlot').innerText = tmdbMetadata.overview;
         }
-        if (tmdbMetadata.posterUrl) {
+        if (tmdbMetadata.posterUrl && !series.logo) {
           coverContainer.innerHTML = '';
           const tmdbImg = document.createElement('img');
           tmdbImg.src = tmdbMetadata.posterUrl;
