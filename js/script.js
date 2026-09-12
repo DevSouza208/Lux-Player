@@ -165,9 +165,27 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const isElectron = Boolean(window.luxElectron);
 
       // O Xtream fornece categorias, capas e temporadas completas.
-      // Quando existir, ele permanece como fonte principal para preservar os agrupamentos do fornecedor.
+      // Primeiro usa as credenciais separadas; depois reconhece automaticamente
+      // links M3U do tipo get.php?username=...&password=....
+      let xtreamSource = null;
       if (user.urlXc && user.userXc && user.senhaXc) {
-        candidates.push({ kind: 'xtream', label: 'Xtream Codes', server: user.urlXc, user: user.userXc, pass: user.senhaXc });
+        xtreamSource = {
+          server: user.urlXc,
+          user: user.userXc,
+          pass: user.senhaXc
+        };
+      } else if (/https?:\/\/[^\s]+(?:get\.php|player_api\.php)/i.test(m3uOriginal)) {
+        try {
+          const playlistUrl = new URL(m3uOriginal);
+          const username = playlistUrl.searchParams.get('username') || playlistUrl.searchParams.get('user');
+          const password = playlistUrl.searchParams.get('password') || playlistUrl.searchParams.get('pass');
+          if (username && password) {
+            xtreamSource = { server: playlistUrl.origin, user: username, pass: password };
+          }
+        } catch (_) {}
+      }
+      if (xtreamSource) {
+        candidates.push({ kind: 'xtream', label: 'Xtream Codes detectado na M3U', ...xtreamSource });
       }
 
       const addM3uCandidate = (value, label) => {
