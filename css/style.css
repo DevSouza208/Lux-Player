@@ -279,6 +279,17 @@
 .games-filter-panel select, .games-filter-panel > button { width: 100%; min-height: 38px; }
 .game-core-toggle-icon { display: none; }
 @media (max-width: 767px) {
+  #gamesSection > div > div:first-child:has(.games-catalog-actions) { flex-wrap: wrap; gap: 12px; }
+  #gamesSection > div > div:first-child:has(.games-catalog-actions) > div:first-child { flex: 1 1 100%; min-width: 0; }
+  #gamesSection .games-catalog-actions { display: flex !important; width: 100%; flex-wrap: nowrap; align-items: center; gap: 8px; }
+  #gamesSection .games-catalog-actions > button { width: auto; flex: 1; min-height: 42px; }
+  #gamesSection .games-filter-menu > summary { width: 42px; height: 42px; padding: 0; }
+  #gamesSection .games-filter-menu > summary > span { display: none; }
+  #gamesSection .games-filter-menu > summary::after { content: none; }
+  #gamesSection .games-filter-panel { width: min(320px, calc(100vw - 48px)); }
+  #gamesSection .lux-mobile-games-actions { display: none !important; }
+}
+@media (max-width: 767px) {
   #gameCoreStatusPanel { padding: 10px 14px; margin-bottom: 14px; }
   #gameCoreStatusPanel > div:first-child { flex-wrap: nowrap; gap: 8px; }
   #gameCoreStatusPanel > div:first-child > div > p + p { display: none; }

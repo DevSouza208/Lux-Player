@@ -56,6 +56,15 @@ test('old and concurrent uploads cannot replace newer cloud state', async () => 
   assert.equal(atob(loaded.save.dataBase64), 'newer');
   assert.equal((await (await app.call(payload)).json()).newerCloud, true);
 });
+test('native slot zero roundtrips in the cloud and remains isolated from states and profiles', async () => {
+  const app = cloud();
+  assert.equal((await app.call({ ...payload, slot: 0 })).status, 200);
+  assert.equal(atob((await (await app.call({ action: 'load', slot: 0 })).json()).save.dataBase64), 'save-data');
+  for (const extra of [{ slot: 1 }, { slot: 0, username: 'bob' }, { slot: 0, profileSlot: 2 }]) {
+    assert.equal((await (await app.call({ action: 'load', ...extra })).json()).save, null);
+  }
+  for (const slot of [null, '', false, -1, 4]) assert.equal((await app.call({ ...payload, slot })).status, 400);
+});
 test('invalid save formats, slots and excessive payloads are rejected', async () => {
   const app = cloud();
   for (const override of [{slot:4}, {format:'bad'}, {dataBase64:'!!'}, {dataBase64:''}, {updatedAt:Date.now()+3600000}])
@@ -122,6 +131,40 @@ test('different saves ask before choosing local or cloud; cancellation preserves
     assert.equal(c.loaded,choice || undefined);
     assert.equal(writes,choice ? 1 : 0);
   }
+});
+test('native save is persisted before upload and stays pending on network failure', async () => {
+  const { c } = emulator();
+  let local, flushed = false;
+  c.window.EJS_emulator.gameManager.saveSaveFiles = async () => { flushed = true; };
+  c.window.EJS_emulator.gameManager.getSaveFile = async () => { assert.equal(flushed, true); return new Uint8Array([7, 8]); };
+  c.readLocalGameSave = async () => local;
+  c.writeLocalGameSave = async (game, slot, state, updatedAt, pending, user, cloudBaseAt) => { local = { game, slot, state, updatedAt, pending, cloudBaseAt }; };
+  c.uploadLocalGameSave = async record => { assert.equal(record, local); assert.equal(record.slot, 0); throw Error('offline'); };
+  const result = await c.saveNativeGame();
+  assert.equal(result.savedLocally, true);
+  assert.equal(result.syncError.message, 'offline');
+  assert.equal(local.pending, true);
+  assert.deepEqual([...local.state], [7, 8]);
+});
+
+test('native cloud download is cached locally with cloud revision for offline reuse', async () => {
+  const { c } = emulator();
+  const state = new Uint8Array([3, 4]);
+  let local, loaded;
+  c.window.EJS_emulator.gameManager.FS = { writeFile: (_path, bytes) => { loaded = bytes; } };
+  c.window.EJS_emulator.gameManager.getSaveFilePath = () => '/save.srm';
+  c.readLocalGameSave = async () => local;
+  c.loadCloudGameSave = async () => ({ state, updatedAt: 1200 });
+  c.writeLocalGameSave = async (game, slot, bytes, updatedAt, pending, user, cloudBaseAt) => { local = { state: bytes, updatedAt, pending, cloudBaseAt }; assert.equal(slot, 0); };
+  await c.loadNativeGameSave();
+  assert.equal(loaded, state);
+  assert.equal(local.pending, false);
+  assert.equal(local.cloudBaseAt, 1200);
+  c.loadCloudGameSave = async () => { throw Error('offline'); };
+  c.uploadLocalGameSave = async () => { throw Error('offline'); };
+  loaded = null;
+  await c.loadNativeGameSave();
+  assert.equal(loaded, state);
 });
 test('identical save data skips the choice even with different timestamps', async () => {
   const {c}=emulator();

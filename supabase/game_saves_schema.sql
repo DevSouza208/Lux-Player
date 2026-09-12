@@ -2,7 +2,7 @@
 create table if not exists public.user_game_saves (
   user_name text not null,
   game_key text not null,
-  slot smallint not null check (slot between 1 and 3),
+  slot smallint not null check (slot between 0 and 3),
   storage_path text not null,
   state_format text not null default 'arraybuffer',
   client_updated_at bigint not null,
@@ -12,6 +12,10 @@ create table if not exists public.user_game_saves (
 
 create index if not exists user_game_saves_user_game_idx
   on public.user_game_saves (user_name, game_key, client_updated_at desc);
+
+-- Slot 0 stores native saves; slots 1-3 remain save states.
+alter table public.user_game_saves drop constraint if exists user_game_saves_slot_check;
+alter table public.user_game_saves add constraint user_game_saves_slot_check check (slot between 0 and 3);
 
 insert into storage.buckets (id, name, public)
 values ('game-saves', 'game-saves', false)

@@ -35,80 +35,6 @@
     return sheet;
   }
 
-  function openGamesFilters() {
-    const sheet = createSheet('luxMobileGamesFilters', 'Filtros de jogos');
-    const body = sheet.querySelector('.lux-mobile-sheet-body');
-    const consoleValue = typeof gamesConsoleFilter !== 'undefined' ? gamesConsoleFilter : 'all';
-    const statusValue = typeof gamesStatusFilter !== 'undefined' ? gamesStatusFilter : 'all';
-    const favoriteValue = typeof gamesFavoritesOnly !== 'undefined' && gamesFavoritesOnly;
-    const isAdmin = currentUser?.role === 'admin';
-
-    body.innerHTML = `<label class="lux-mobile-filter-field">Console
-      <select id="luxMobileGameConsole">
-        <option value="all">Todos os consoles</option><option value="gba">Game Boy Advance</option><option value="gb">Game Boy</option><option value="gbc">Game Boy Color</option><option value="snes">SNES</option><option value="megadrive">Mega Drive</option><option value="nes">NES</option><option value="n64">Nintendo 64</option>
-      </select></label>
-      ${isAdmin ? `<label class="lux-mobile-filter-field">Status<select id="luxMobileGameStatus"><option value="all">Todos</option><option value="approved">Aprovados</option><option value="pending">Pendentes</option></select></label>` : ''}
-      <button id="luxMobileGameFavorites" type="button" class="lux-mobile-filter-toggle ${favoriteValue ? 'active' : ''}">${icon('heart')} ${favoriteValue ? 'Somente favoritos' : 'Mostrar somente favoritos'}</button>
-      <button id="luxMobileGameApply" type="button" class="lux-mobile-sheet-primary">Aplicar filtros</button>`;
-
-    const consoleSelect = $('luxMobileGameConsole');
-    consoleSelect.value = consoleValue;
-    const statusSelect = $('luxMobileGameStatus');
-    if (statusSelect) statusSelect.value = statusValue;
-    let favorite = favoriteValue;
-
-    $('luxMobileGameFavorites').onclick = event => {
-      favorite = !favorite;
-      event.currentTarget.classList.toggle('active', favorite);
-      event.currentTarget.innerHTML = `${icon('heart')} ${favorite ? 'Somente favoritos' : 'Mostrar somente favoritos'}`;
-      refreshIcons();
-    };
-
-    $('luxMobileGameApply').onclick = () => {
-      if (typeof setGamesFilter === 'function') {
-        setGamesFilter('console', consoleSelect.value);
-        if (statusSelect) setGamesFilter('status', statusSelect.value);
-        if ((typeof gamesFavoritesOnly !== 'undefined' && gamesFavoritesOnly) !== favorite) setGamesFilter('favorites');
-      }
-      closeSheet(sheet);
-    };
-
-    sheet.hidden = false;
-    overlay(true);
-    refreshIcons();
-  }
-
-  function enhanceGamesSection() {
-    const section = $('gamesSection');
-    if (!section || section.classList.contains('hidden')) return;
-    const root = section.firstElementChild;
-    if (!root) return;
-    const head = root.querySelector(':scope > div.flex.items-center.justify-between');
-    if (!head) return;
-    head.classList.add('lux-mobile-games-head');
-    const filters = head.children[1];
-    if (filters && !filters.classList.contains('lux-mobile-original-filters')) filters.classList.add('lux-mobile-original-filters');
-    if (!head.querySelector('.lux-mobile-games-actions')) {
-      const actions = document.createElement('div');
-      actions.className = 'lux-mobile-games-actions';
-      const openRom = document.createElement('button');
-      openRom.type = 'button';
-      openRom.className = 'lux-mobile-open-rom-button';
-      openRom.innerHTML = `${icon('folder-open')} <span>Abrir ROM</span>`;
-      openRom.onclick = () => $('externalRomInput')?.click();
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'lux-mobile-filter-button';
-      button.setAttribute('aria-label', 'Filtros de jogos');
-      button.title = 'Filtros de jogos';
-      button.innerHTML = icon('sliders-horizontal');
-      button.onclick = openGamesFilters;
-      actions.append(openRom, button);
-      head.appendChild(actions);
-      refreshIcons();
-    }
-  }
-
   function openReadingFilters() {
     const sheet = createSheet('luxMobileReadingFilters', 'Filtros da biblioteca');
     const body = sheet.querySelector('.lux-mobile-sheet-body');
@@ -188,8 +114,6 @@
     };
   }
 
-  const games = $('gamesSection');
-  if (games) new MutationObserver(() => queueMicrotask(enhanceGamesSection)).observe(games, { childList: true, subtree: true });
   const reading = $('readingSection');
   if (reading) new MutationObserver(() => queueMicrotask(enhanceReadingSection)).observe(reading, { childList: true, subtree: true });
   const splash = $('loadingSplash');
@@ -197,6 +121,5 @@
     document.body.classList.toggle('lux-mobile-overlay-open', !splash.classList.contains('hidden'));
   }).observe(splash, { attributes: true, attributeFilter: ['class'] });
 
-  enhanceGamesSection();
   enhanceReadingSection();
 })();

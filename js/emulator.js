@@ -457,16 +457,21 @@ async function loadNativeGameSave(game = activeEmulatorGame) {
     let local = await readLocalGameSave(nativeGame, 0, user);
     let cloud = null;
     try { cloud = await loadCloudGameSave(nativeGame, 0, user); } catch (_) {}
+    if (currentUser !== user || activeEmulatorGame !== game) return;
     let selected = local;
-    if (!selected || (cloud && Number(cloud.updatedAt) > Number(selected.updatedAt))) selected = cloud;
-    if (local && (!cloud || Number(local.updatedAt) > Number(cloud.updatedAt))) {
+    if (cloud && local && await gameSaveStatesEqual(local.state, cloud.state)) {
+      await writeLocalGameSave(nativeGame, 0, local.state, local.updatedAt, false, user, cloud.updatedAt);
+    } else if (cloud && (!local || (!local.pending && Number(cloud.updatedAt) > Number(local.updatedAt)))) {
+      selected = cloud;
+      await writeLocalGameSave(nativeGame, 0, cloud.state, cloud.updatedAt, false, user, cloud.updatedAt);
+    } else if (local && (local.pending || !cloud || Number(local.updatedAt) > Number(cloud.updatedAt))) {
       await uploadLocalGameSave(local, user).catch(() => null);
     }
     if (!selected?.state || currentUser !== user || activeEmulatorGame !== game) return;
     const path = emulator.gameManager.getSaveFilePath?.();
     if (!path) return;
     emulator.gameManager.FS.writeFile(path, selected.state);
-    emulator.gameManager.loadSaveFiles?.();
+    await emulator.gameManager.loadSaveFiles?.();
   } catch (error) {
     console.warn('Save natural indisponível:', error);
   }
@@ -475,8 +480,8 @@ async function loadNativeGameSave(game = activeEmulatorGame) {
 async function saveNativeGame(game = activeEmulatorGame, user = currentUser) {
   const emulator = window.EJS_emulator;
   if (!game || !user || !emulator?.gameManager?.getSaveFile) throw new Error('O save natural ainda não está disponível.');
-  emulator.gameManager.saveSaveFiles?.();
-  const state = emulator.gameManager.getSaveFile(false);
+  await emulator.gameManager.saveSaveFiles?.();
+  const state = await emulator.gameManager.getSaveFile(false);
   if (!state || !state.byteLength) throw new Error('Este jogo ainda não criou um save natural. Salve dentro do jogo primeiro.');
   const nativeGame = nativeGameRecord(game);
   const updatedAt = Date.now();

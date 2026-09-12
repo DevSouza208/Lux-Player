@@ -36,7 +36,7 @@ Deno.serve(async (request) => {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'Dados inválidos.' }, 400);
     const { action, username, password, gameKey: requestedGameKey, slot, updatedAt, dataBase64, format, expectedCloudAt = null } = body;
     if (typeof username !== 'string' || !username || username.length > 256 || typeof password !== 'string' || !password || password.length > 1024) return json({ error: 'Login necessário.' }, 401);
-    if (typeof requestedGameKey !== 'string' || !requestedGameKey || requestedGameKey.length > 500 || ![1, 2, 3].includes(Number(slot))) {
+    if (typeof requestedGameKey !== 'string' || !requestedGameKey || requestedGameKey.length > 500 || ![0, 1, 2, 3].includes(slot)) {
       return json({ error: 'Dados do save inválidos.' }, 400);
     }
     const url = Deno.env.get('SUPABASE_URL');

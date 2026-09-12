@@ -4620,6 +4620,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const menu = document.createElement('details');
       menu.className = 'games-filter-menu';
       const summary = document.createElement('summary');
+      summary.setAttribute('aria-label', 'Filtros de jogos');
       summary.innerHTML = '<i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>Filtros</span>';
       const panel = document.createElement('div');
       panel.className = 'games-filter-panel';

@@ -416,7 +416,10 @@
     button.id = 'luxGamepadSetupBtn'; button.type = 'button'; button.onclick = openLuxGamepadSetup;
     button.className = 'bg-purple-600 hover:bg-purple-500 border border-purple-400/40 text-white rounded-lg px-3 py-1.5 text-[11px] font-bold transition-colors flex items-center gap-1.5';
     button.innerHTML = '<i data-lucide="smartphone" class="w-3.5 h-3.5"></i><span>Lux Gamepad</span>';
-    consoleFilter.parentElement?.insertBefore(button, consoleFilter); window.lucide?.createIcons?.();
+    const panel = games.querySelector('.games-filter-panel');
+    if (panel) panel.appendChild(button);
+    else consoleFilter.parentElement?.insertBefore(button, consoleFilter);
+    window.lucide?.createIcons?.();
   }
 
   function init() {
