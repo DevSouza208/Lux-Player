@@ -5,6 +5,7 @@ let requestedSaveSlot = null;
 let gameSaveBusy = false;
 let resolveGameSaveChoice = null;
 let emulatorFastForward = false;
+let emulatorContextMenuGuard = null;
 let gamePlayTimer = null;
 let activeRomObjectUrl = null;
 let romDownloadBusy = false;
@@ -36,6 +37,7 @@ function openGameEmulator(gameItem) {
   requestedSaveSlot = loadSlot;
   titleEl.innerText = gameItem.name;
   modal.classList.remove('hidden');
+  enableEmulatorTouchGuard();
   document.getElementById('emulatorIntroName').textContent = gameItem.name || 'Jogo';
   document.getElementById('emulatorIntroConsole').textContent = gameItem.consoleLabel || String(gameItem.console || 'Console').toUpperCase();
   const header=document.querySelector('#emulatorModal .border-b');
@@ -85,7 +87,25 @@ function getEmulatorCore(consoleType) {
   }
 }
 
+function enableEmulatorTouchGuard() {
+  const container = document.getElementById('emulatorContainer');
+  if (!container) return;
+  container.style.touchAction = 'none';
+  container.style.userSelect = 'none';
+  container.style.webkitUserSelect = 'none';
+  container.style.webkitTouchCallout = 'none';
+  emulatorContextMenuGuard = event => {
+    if (event.target?.closest?.('#emulatorContainer')) event.preventDefault();
+  };
+  document.addEventListener('contextmenu', emulatorContextMenuGuard, true);
+}
+
+function disableEmulatorTouchGuard() {
+  if (emulatorContextMenuGuard) document.removeEventListener('contextmenu', emulatorContextMenuGuard, true);
+  emulatorContextMenuGuard = null;
+}
 function closeGameEmulator() {
+  disableEmulatorTouchGuard();
   if (activeRomObjectUrl) {
     try { URL.revokeObjectURL(activeRomObjectUrl); } catch (_) {}
     activeRomObjectUrl = null;
