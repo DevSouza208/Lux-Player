@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-2';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-3';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -9,6 +9,12 @@
     [/Erro de conexão com Supabase\./gi, 'Não foi possível carregar os clientes. Tente novamente.'],
     [/Consultando status públicos\.\.\./gi, 'Atualizando informações...'],
     [/Carregando os status públicos\.\.\./gi, 'Preparando informações...'],
+    [/Configurando sua experiência\.\.\. O primeiro acesso pode demorar cerca de 1 min\./gi, 'Preparando tudo para você... No primeiro acesso pode levar um pouquinho mais.'],
+    [/Carregando seus perfis\.\.\./gi, 'Preparando seus perfis...'],
+    [/Carregando perfis\.\.\./gi, 'Preparando seus perfis...'],
+    [/Carregando catálogo de jogos/gi, 'Preparando seus jogos'],
+    [/Buscando dados do jogo\.\.\./gi, 'Procurando informações do jogo...'],
+    [/Carregando guia de programação\.\.\./gi, 'Preparando a programação...'],
     [/Baixando categorias e canais\.\.\./gi, 'Preparando seus canais...'],
     [/Baixando catálogo e categorias\.\.\./gi, 'Organizando seu catálogo...'],
     [/Baixando catálogo HTTPS sincronizado\.\.\./gi, 'Preparando seu catálogo...'],
@@ -17,6 +23,11 @@
     [/Sincronizando temporadas e episódios\.\.\./gi, 'Carregando episódios...'],
     [/Sincronizando sua M3U \+ catálogo PHP\. Isso pode levar alguns segundos\.\.\./gi, 'Atualizando seu catálogo. Isso pode levar alguns instantes...'],
     [/Conversão concluída\. Recarregando o catálogo HTTPS\.\.\./gi, 'Catálogo atualizado. Preparando os novos conteúdos...'],
+    [/Catálogo IPTV sincronizado e aplicado/gi, 'Catálogo atualizado com sucesso'],
+    [/Sincronizando\.\.\./gi, 'Atualizando...'],
+    [/Sincronizando ([^\n]+?)\.\.\./gi, 'Atualizando $1...'],
+    [/Sincronização parcial de /gi, 'Atualização parcial de '],
+    [/sincronizado com sucesso/gi, 'atualizado com sucesso'],
     [/Catálogo Xtream HTTPS sincronizado/gi, 'Catálogo atualizado'],
     [/Lista M3U HTTPS sincronizada/gi, 'Catálogo atualizado'],
     [/Arquivo M3U no Supabase/gi, 'Lista salva'],
@@ -24,6 +35,9 @@
     [/Lista M3U original \(Electron\)/gi, 'Lista principal'],
     [/Este cliente não possui URL M3U HTTP\/HTTPS para sincronizar/gi, 'Este cliente ainda não possui uma lista configurada para atualização'],
     [/Sincronizar catálogo IPTV de ([^•]+)/gi, 'Atualizar catálogo de $1'],
+    [/Sincronizar catálogo IPTV/gi, 'Atualizar catálogo'],
+    [/fornecedor respondeu HTTP \d+/gi, 'O serviço de conteúdo não respondeu agora. Tente novamente.'],
+    [/A URL não contém credenciais Xtream reconhecíveis/gi, 'A lista deste cliente não pôde ser preparada automaticamente.'],
     [/Worker respondeu HTTP \d+/gi, 'O serviço de atualização não respondeu como esperado'],
     [/Provided readable stream must have a known length[^\n]*/gi, 'Não foi possível concluir a atualização do catálogo. Tente novamente.']
   ];
