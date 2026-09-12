@@ -12,12 +12,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       return String(str)
         .toLowerCase()
         .normalize('NFD')
-        .replace(/[\\u0300-\\u036f]/g, '')
-        .replace(/\\(.*?\\)/g, '')
-        .replace(/\\[.*?\\]/g, '')
-        .replace(/\\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\\b/g, '')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\(.*?\\)/g, '')
+        .replace(/\[.*?\\]/g, '')
+        .replace(/\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\b/g, '')
         .replace(/[^a-z0-9]/g, ' ')
-        .replace(/\\s+/g, ' ')
+        .replace(/\s+/g, ' ')
         .trim();
     }
 
@@ -44,9 +44,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     function getTmdbSearchTitle(item) {
       return String(item?.seriesName || item?.name || '')
-        .replace(/\\s+S\\d+\\s*E\\d+.*$/i, '')
-        .replace(/\\s+T\\d+\\s*E\\d+.*$/i, '')
-        .replace(/\\s+\\d+X\\d+.*$/i, '')
+        .replace(/\s+S\d+\s*E\d+.*$/i, '')
+        .replace(/\s+T\d+\s*E\d+.*$/i, '')
+        .replace(/\s+\d+X\d+.*$/i, '')
         .trim();
     }
 
