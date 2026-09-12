@@ -1541,6 +1541,36 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
+    let editingAdminUsername = null;
+    let adminUserSaving = false;
+    const adminUserFields = {
+      adminNewName: 'nome', adminNewUser: 'usuario', adminNewPass: 'senha',
+      adminNewDue: 'vencimento', adminNewM3u: 'lista_m3u', adminNewUserXc: 'userxc',
+      adminNewPassXc: 'senhaxc', adminNewUrlXc: 'urlxc', adminNewAdultPin: 'senha18+', adminNewRole: 'cargo'
+    };
+    function adminEditUser(user) {
+      if (currentUser?.role !== 'admin' || adminUserSaving) return;
+      editingAdminUsername = user.usuario;
+      for (const [id, key] of Object.entries(adminUserFields)) document.getElementById(id).value = user[key] || (key === 'cargo' ? 'user' : '');
+      document.getElementById('adminNewUser').readOnly = true;
+      const title = document.getElementById('adminUserFormTitle');
+      title.textContent = 'Editar cliente';
+      document.getElementById('adminUserSubmit').textContent = 'Salvar alterações';
+      document.getElementById('adminUserCancelEdit').classList.remove('hidden');
+      document.getElementById('adminUserEditHint').classList.remove('hidden');
+      title.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('adminNewName').focus({ preventScroll: true });
+    }
+    function resetAdminUserForm() {
+      if (adminUserSaving) return;
+      editingAdminUsername = null;
+      for (const [id, key] of Object.entries(adminUserFields)) document.getElementById(id).value = key === 'cargo' ? 'user' : '';
+      document.getElementById('adminNewUser').readOnly = false;
+      document.getElementById('adminUserFormTitle').textContent = 'Cadastrar Novo Cliente';
+      document.getElementById('adminUserSubmit').textContent = 'Cadastrar cliente';
+      document.getElementById('adminUserCancelEdit').classList.add('hidden');
+      document.getElementById('adminUserEditHint').classList.add('hidden');
+    }
     async function loadAdminUsersList() {
       const container = document.getElementById('adminUsersListContainer');
       container.innerHTML = '<p class="text-xs text-purple-400/60 text-center py-4">Carregando clientes...</p>';
@@ -1562,13 +1592,20 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           row.className = "flex items-center justify-between p-2.5 bg-[#180f29] border border-purple-900/40 rounded-xl";
           row.innerHTML = `
             <div class="min-w-0 pr-2">
-              <p class="text-xs font-bold text-white truncate">${u.nome} <span class="text-[10px] text-purple-400 font-mono">(${u.usuario})</span></p>
-              <p class="text-[10px] text-slate-400 truncate">Venc: ${u.vencimento || 'Ilimitado'} • Cargo: ${u.cargo || 'user'}</p>
+              <p class="text-xs font-bold text-white truncate">${escapeGameHtml(u.nome)} <span class="text-[10px] text-purple-400 font-mono">(${escapeGameHtml(u.usuario)})</span></p>
+              <p class="text-[10px] text-slate-400 truncate">Venc: ${escapeGameHtml(u.vencimento || 'Ilimitado')} • Cargo: ${escapeGameHtml(u.cargo || 'user')}</p>
             </div>
-            <button onclick="adminDeleteUser('${u.usuario}')" class="bg-rose-950/60 hover:bg-rose-900 text-rose-400 p-1.5 rounded-lg text-xs transition-all shrink-0" title="Excluir">
+            <div class="flex items-center gap-2 shrink-0">
+            <button type="button" data-edit-user class="bg-purple-950/60 hover:bg-purple-800 text-purple-200 p-2 rounded-lg transition-all" title="Editar cliente" aria-label="Editar cliente">
+              <i data-lucide="pencil" class="w-4 h-4"></i>
+            </button>
+            <button type="button" data-delete-user class="bg-rose-950/60 hover:bg-rose-900 text-rose-400 p-2 rounded-lg text-xs transition-all shrink-0" title="Excluir" aria-label="Excluir cliente">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
             </button>
+            </div>
           `;
+          row.querySelector('[data-edit-user]').onclick = () => adminEditUser(u);
+          row.querySelector('[data-delete-user]').onclick = () => adminDeleteUser(u.usuario);
           container.appendChild(row);
         });
         lucide.createIcons();
@@ -1578,8 +1615,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function adminCreateUser() {
+      if (currentUser?.role !== 'admin' || adminUserSaving) return;
+      const editing = editingAdminUsername;
       const nome = document.getElementById('adminNewName').value.trim();
-      const usuario = document.getElementById('adminNewUser').value.trim();
+      const usuario = editing || document.getElementById('adminNewUser').value.trim();
       const senha = document.getElementById('adminNewPass').value.trim();
       const vencimento = document.getElementById('adminNewDue').value.trim();
       const lista_m3u = document.getElementById('adminNewM3u').value.trim();
@@ -1594,7 +1633,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         return;
       }
 
-      const { error } = await supabaseClient.from('usuarios').insert([{
+      const record = {
         usuario,
         nome,
         senha,
@@ -1605,12 +1644,25 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         senhaxc,
         urlxc,
         'senha18+': senhaAdulto
-      }]);
+      };
+      adminUserSaving = true;
+      const submit = document.getElementById('adminUserSubmit');
+      submit.disabled = true;
+      document.getElementById('adminUserCancelEdit').disabled = true;
+      try {
+      const { data, error } = editing
+        ? await supabaseClient.from('usuarios').update(record).eq('usuario', editing).select('*').single()
+        : await supabaseClient.from('usuarios').insert([record]);
 
       if (error) {
-        alert('Erro ao cadastrar: ' + error.message);
+        alert('Não foi possível salvar: ' + error.message);
       } else {
-        alert('Cliente cadastrado com sucesso!');
+        if (editing && currentUser?.user === editing && data) {
+          currentUser = { ...currentUser, ...parseSupabaseUsers([data])[0] };
+          if (localStorage.getItem('lux_auth_user')) localStorage.setItem('lux_auth_pass', currentUser.pass);
+          document.getElementById('userExpiryBadge').textContent = currentUser.dueDate ? `Val: ${currentUser.dueDate}` : 'Val: Ilimitada';
+        }
+        alert(editing ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!');
         document.getElementById('adminNewName').value = '';
         document.getElementById('adminNewUser').value = '';
         document.getElementById('adminNewPass').value = '';
@@ -1621,7 +1673,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         document.getElementById('adminNewUrlXc').value = '';
         document.getElementById('adminNewAdultPin').value = '';
         loadAdminUsersList();
+        adminUserSaving = false;
+        resetAdminUserForm();
       }
+      } catch (error) { alert('Não foi possível salvar o cliente. Tente novamente.'); }
+      finally { adminUserSaving = false; submit.disabled = false; document.getElementById('adminUserCancelEdit').disabled = false; }
     }
 
     async function adminDeleteUser(usuarioId) {
@@ -2186,6 +2242,35 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       } catch (err) {
         const fallbackM3u = `${cleanServer}/get.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&type=m3u_plus&output=m3u8`;
         await loadPlaylist(fallbackM3u);
+      }
+    }
+
+    async function importLocalM3u(input) {
+      const file = input.files?.[0];
+      const user = currentUser;
+      const status = document.getElementById('localM3uStatus');
+      if (!file || !user) return;
+      input.disabled = true;
+      status.textContent = 'Lendo arquivo...';
+      try {
+        if (!/\.m3u8?$/i.test(file.name)) throw new Error('Escolha um arquivo .m3u ou .m3u8.');
+        if (file.size > 25 * 1024 * 1024) throw new Error('O limite para este teste é de 25 MB.');
+        const text = await file.text();
+        if (currentUser !== user) throw new Error('O perfil mudou. Selecione o arquivo novamente.');
+        const parsed = parseM3U(text).filter(item => /^https?:\/\//i.test(item.url));
+        if (!parsed.length) throw new Error('Nenhum canal com endereço HTTP/HTTPS encontrado. Escolha uma lista de canais, não um manifesto de vídeo.');
+        allMediaItems = parsed.filter(profileAllowsMedia).sort((a, b) => Number(a.isAdult) - Number(b.isAdult));
+        mergeSharedVodsIntoPlayer();
+        activeSearchQuery = '';
+        isAdultUnlocked = false;
+        status.textContent = `${file.name}: ${parsed.length} itens lidos.`;
+        document.getElementById('configModal').classList.add('hidden');
+        setSection('live');
+      } catch (error) {
+        status.textContent = error.message || 'Não foi possível abrir o arquivo.';
+      } finally {
+        input.disabled = false;
+        input.value = '';
       }
     }
 
