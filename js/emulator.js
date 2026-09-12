@@ -487,7 +487,7 @@ async function saveNativeGame(game = activeEmulatorGame, user = currentUser) {
   return true;
 }
 
-async function saveNativeGameAndClose() {
+async function saveNativeGameFromExit() {
   const game = activeEmulatorGame;
   const user = currentUser;
   const status = document.getElementById('saveExitStatus');
@@ -499,8 +499,7 @@ async function saveNativeGameAndClose() {
     status.textContent = 'Salvando o progresso normal do jogo...';
     window.EJS_emulator?.pause?.(); pauseGamePlayTimer();
     await saveNativeGame(game, user);
-    status.textContent = 'Save normal sincronizado!';
-    closeGameEmulator();
+    status.textContent = 'Save normal sincronizado. Agora você pode salvar também um Save State abaixo.';
   } catch (error) {
     status.textContent = error.message || 'Não foi possível salvar o progresso normal.';
   } finally {
@@ -590,7 +589,7 @@ function createGameDetailsModalDOM() {
 
 function createSaveExitModalDOM() {
   if (document.getElementById('saveExitModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha como salvar: o save normal é o arquivo criado pelo próprio jogo; o save state captura a tela atual em qualquer momento.</p><button onclick="saveNativeGameAndClose()" class="mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70">Salvar jogo normal</button><p class="mt-4 text-[10px] font-bold uppercase tracking-wide text-purple-400">Salvar como save state</p><div id="saveExitSlots" class="mt-2 grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-4 w-full rounded-xl border border-purple-800/70 bg-purple-950/50 py-2.5 text-xs font-bold text-purple-200 hover:bg-rose-950/70 hover:text-rose-200">Fechar sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha como salvar: o save normal é o arquivo criado pelo próprio jogo; o save state captura a tela atual em qualquer momento.</p><button onclick="saveNativeGameFromExit()" class="mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70">Salvar jogo normal</button><p class="mt-4 text-[10px] font-bold uppercase tracking-wide text-purple-400">Salvar como save state</p><div id="saveExitSlots" class="mt-2 grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-4 w-full rounded-xl border border-purple-800/70 bg-purple-950/50 py-2.5 text-xs font-bold text-purple-200 hover:bg-rose-950/70 hover:text-rose-200">Fechar sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
 }
 
 function createContinueSlotModalDOM() {
