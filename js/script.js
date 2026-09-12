@@ -164,23 +164,25 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const m3uHttps = String(user.m3uHttpsUrl || '').trim();
       const isElectron = Boolean(window.luxElectron);
 
+      // O Xtream fornece categorias, capas e temporadas completas.
+      // Quando existir, ele permanece como fonte principal para preservar os agrupamentos do fornecedor.
+      if (user.urlXc && user.userXc && user.senhaXc) {
+        candidates.push({ kind: 'xtream', label: 'Xtream Codes', server: user.urlXc, user: user.userXc, pass: user.senhaxc });
+      }
+
       const addM3uCandidate = (value, label) => {
         if (!/^https?:\/\//i.test(value)) return;
         if (candidates.some(candidate => candidate.kind === 'm3u-url' && candidate.value === value)) return;
         candidates.push({ kind: 'm3u-url', label, value });
       };
 
-      // Electron: lista original primeiro; navegador/PWA: lista HTTPS primeiro.
+      // Sem Xtream funcional: Electron tenta HTTP original; navegador/PWA tenta HTTPS sincronizado.
       if (isElectron) {
         addM3uCandidate(m3uOriginal, 'Lista M3U original (Electron)');
         addM3uCandidate(m3uHttps, 'Lista M3U HTTPS sincronizada');
       } else {
         addM3uCandidate(m3uHttps, 'Lista M3U HTTPS sincronizada');
         addM3uCandidate(m3uOriginal, 'Lista M3U original (fallback HTTP)');
-      }
-
-      if (user.urlXc && user.userXc && user.senhaXc) {
-        candidates.push({ kind: 'xtream', label: 'Xtream Codes', server: user.urlXc, user: user.userXc, pass: user.senhaXc });
       }
       if (/^m3u-storage:[a-f0-9-]{36}$/i.test(m3uOriginal)) {
         candidates.push({ kind: 'm3u-storage', label: 'Arquivo M3U no Supabase', value: m3uOriginal });
