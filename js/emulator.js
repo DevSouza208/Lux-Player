@@ -208,7 +208,7 @@ function renderGameRating(data = {}) {
 async function loadGameRating(game = currentGameDetails) {
   const container = document.getElementById('gameDetailsRating');
   if (!container || !game) return;
-  if (!isRatedGameId(game.id) || !currentUser) {
+  if (!isRatedGameId(game.id)) {
     container.innerHTML = '<p class="text-[10px] text-purple-400/70">Avaliações públicas disponíveis para jogos Lux.</p>';
     return;
   }
@@ -219,10 +219,7 @@ async function loadGameRating(game = currentGameDetails) {
       body: {
         action: 'get',
         gameId: game.id,
-        username: user.user,
-        password: user.pass,
-        profileSlot: user.profile?.slot || 1,
-        profileKey: user.profile?.data_key || ''
+        ...(user ? { username: user.user, password: user.pass, profileSlot: user.profile?.slot || 1, profileKey: user.profile?.data_key || '' } : {})
       }
     });
     if (currentGameDetails !== game || currentUser !== user) return;
