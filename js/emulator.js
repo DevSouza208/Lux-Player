@@ -5,6 +5,7 @@ let requestedSaveSlot = null;
 let gameSaveBusy = false;
 let resolveGameSaveChoice = null;
 let emulatorFastForward = false;
+let emulatorLandscape = false;
 let emulatorContextMenuGuard = null;
 let gamePlayTimer = null;
 let activeRomObjectUrl = null;
@@ -605,7 +606,7 @@ function createGameDetailsModalDOM() {
 
 function createSaveExitModalDOM() {
   if (document.getElementById('saveExitModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha como salvar: o save normal é o arquivo criado pelo próprio jogo; o save state captura a tela atual em qualquer momento.</p><button id="saveNativeExitButton" onclick="saveNativeGameFromExit()" class="mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70">Salvar jogo normal</button><button onclick="toggleSaveStateSlots()" class="mt-3 w-full rounded-xl border border-amber-700/70 bg-amber-950/40 py-3 text-xs font-bold text-amber-200 hover:bg-amber-900/60"><span id="saveStateToggleLabel">Salvar Save State</span></button><div id="saveExitSlots" class="mt-2 hidden grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-4 w-full rounded-xl border border-rose-700/70 bg-rose-950/50 py-2.5 text-xs font-bold text-rose-200 hover:bg-rose-900/70">Sair sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha como salvar: o save normal é o arquivo criado pelo próprio jogo; o save state captura a tela atual em qualquer momento.</p><button id="saveNativeExitButton" onclick="saveNativeGameFromExit()" class="mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70">Salvar jogo normal</button><button onclick="toggleSaveStateSlots()" class="mt-3 w-full rounded-xl border border-amber-700/70 bg-amber-950/40 py-3 text-xs font-bold text-amber-200 hover:bg-amber-900/60"><span id="saveStateToggleLabel">Salvar Save State</span></button><div id="saveExitSlots" class="mt-2 hidden grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-3 w-full rounded-xl border border-rose-700/70 bg-rose-950/50 py-2.5 text-xs font-bold text-rose-200 hover:bg-rose-900/70">Sair sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
 }
 
 function createContinueSlotModalDOM() {
@@ -613,9 +614,24 @@ function createContinueSlotModalDOM() {
   document.body.insertAdjacentHTML('beforeend', `<div id="continueSlotModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Como deseja continuar?</h2><p class="mt-1 text-xs text-purple-300">O save natural é o principal. Se preferir, escolha um dos três save states.</p><div id="continueSlotButtons" class="mt-4 grid grid-cols-1 gap-3"></div><button onclick="document.getElementById('continueSlotModal').classList.add('hidden')" class="mt-4 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>`);
 }
 
+function toggleEmulatorOrientation() {
+  const target = emulatorLandscape ? 'portrait-primary' : 'landscape';
+  const status = document.getElementById('emulatorOrientationStatus');
+  if (!window.screen?.orientation?.lock) {
+    if (status) status.textContent = 'Seu navegador não permite controlar a rotação por este botão.';
+    return;
+  }
+  window.screen.orientation.lock(target).then(() => {
+    emulatorLandscape = !emulatorLandscape;
+    if (status) status.textContent = emulatorLandscape ? 'Tela definida como paisagem.' : 'Tela definida como retrato.';
+  }).catch(() => {
+    if (status) status.textContent = 'O Android bloqueou a rotação. Ative a rotação automática ou abra o app em tela cheia.';
+  });
+}
+
 function createControlsHelpModalDOM() {
   if (document.getElementById('controlsHelpModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="controlsHelpModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Configurar controles</h2><p class="mt-2 text-sm leading-relaxed text-slate-300">O painel nativo do EmulatorJS permite configurar teclado, controle USB ou Bluetooth para <strong>Player 1</strong> e <strong>Player 2</strong>. As preferências ficam salvas neste navegador.</p><p class="mt-3 text-xs text-purple-300">No painel, abra Controls/Controles e escolha o jogador antes de atribuir cada tecla ou botão.</p><button onclick="openNativeControlsPanel()" class="mt-5 w-full rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500">Abrir configurações</button><button onclick="document.getElementById('controlsHelpModal').classList.add('hidden')" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="controlsHelpModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Configurar controles</h2><p class="mt-2 text-sm leading-relaxed text-slate-300">O painel nativo do EmulatorJS permite configurar teclado, controle USB ou Bluetooth para <strong>Player 1</strong> e <strong>Player 2</strong>. As preferências ficam salvas neste navegador.</p><p class="mt-3 text-xs text-purple-300">No painel, abra Controls/Controles e escolha o jogador antes de atribuir cada tecla ou botão.</p><button onclick="toggleEmulatorOrientation()" class="mt-5 w-full rounded-xl border border-indigo-700/70 bg-indigo-950/60 py-3 text-sm font-bold text-indigo-100 hover:bg-indigo-900/70">Girar tela</button><p id="emulatorOrientationStatus" class="mt-2 text-center text-[11px] text-purple-300"></p><button onclick="openNativeControlsPanel()" class="mt-3 w-full rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500">Abrir configurações</button><button onclick="document.getElementById('controlsHelpModal').classList.add('hidden')" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Cancelar</button></div></div>`);
 }
 
 function finishGameSaveChoice(choice) {

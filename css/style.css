@@ -266,3 +266,9 @@
 .game-feature-badge { display:inline-flex; align-items:center; gap:4px; padding:4px 6px; border:1px solid #a78bfa40; border-radius:7px; background:#a78bfa12; color:#ddd6fe; font-size:10px; font-weight:600; line-height:1.2; }
 .game-feature-badge svg { width:13px; height:13px; flex-shrink:0; }
 .game-feature-coop { color:#a7f3d0; background:#34d39912; border-color:#34d39940; }
+
+
+/* Evita espaço vazio entre Save State e Sair sem salvar quando não há mensagem. */
+#saveExitStatus:empty {
+  display: none;
+}
