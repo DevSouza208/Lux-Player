@@ -115,6 +115,7 @@
       case 'nes': return 'nes';
       case 'snes': return 'snes';
       case 'megadrive': case 'genesis': return 'megadrive6';
+      case 'mastersystem': case 'sms': return 'nes';
       case 'n64': return 'n64';
       default: return null;
     }
