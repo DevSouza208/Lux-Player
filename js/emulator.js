@@ -197,19 +197,19 @@ function renderGameRating(data = {}) {
   container.innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <p class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Avaliação da comunidade</p>
-        <p class="mt-1 text-xs text-purple-300">${total ? `${average.toFixed(1).replace('.', ',')} ${averageStars} · ${total} avaliação${total === 1 ? '' : 's'}` : 'Ainda não há avaliações'}</p>
+        <p class="text-xs font-bold uppercase tracking-wide text-purple-400">Avaliação da comunidade</p>
+        <p class="mt-2 text-sm font-semibold text-purple-200">${total ? `${average.toFixed(1).replace('.', ',')} ${averageStars} · ${total} avaliação${total === 1 ? '' : 's'}` : 'Ainda não há avaliações'}</p>
       </div>
       <div class="flex items-center gap-0.5" aria-label="Sua nota">${stars}</div>
     </div>
-    <p class="mt-1 text-[10px] text-purple-400/70">${userRating ? `Sua nota: ${userRating}/5 · clique para alterar` : 'Escolha de 1 a 5 estrelas'}</p>`;
+    <p class="mt-2 text-xs text-purple-400/80">${userRating ? `Sua nota: ${userRating}/5 · clique para alterar` : 'Escolha de 1 a 5 estrelas'}</p>`;
 }
 
 async function loadGameRating(game = currentGameDetails) {
   const container = document.getElementById('gameDetailsRating');
   if (!container || !game) return;
   if (!isRatedGameId(game.id)) {
-    container.innerHTML = '<p class="text-[10px] text-purple-400/70">Avaliações públicas disponíveis para jogos Lux.</p>';
+    container.innerHTML = '<div class="w-full"><p class="text-xs font-bold uppercase tracking-wide text-purple-400">Avaliação da comunidade</p><p class="mt-2 text-sm text-purple-300">Avaliações públicas disponíveis para jogos Lux.</p></div>';
     return;
   }
   container.innerHTML = '<p class="text-xs text-purple-300">Carregando avaliações...</p>';
@@ -466,7 +466,7 @@ function createEmulatorModalDOM() {
 
 function createGameDetailsModalDOM() {
   if (document.getElementById('gameDetailsModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="gameDetailsModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4"><div class="w-full max-w-3xl bg-[#120c1f] border border-purple-900/60 rounded-3xl overflow-hidden shadow-2xl"><div class="flex justify-end px-4 pt-4"><button onclick="closeGameDetails()" title="Fechar" class="text-purple-400 hover:text-white p-2 rounded-xl bg-purple-950/60 hover:bg-rose-600 transition-all"><i data-lucide="x" class="w-5 h-5"></i></button></div><div class="grid md:grid-cols-[220px_1fr] gap-6 px-6 pb-6 md:px-8 md:pb-8"><div id="gameDetailsCover" class="aspect-[2/3] max-h-[330px] mx-auto md:mx-0 rounded-2xl overflow-hidden bg-purple-950/50 border border-purple-900/50 flex items-center justify-center shadow-xl"></div><div class="min-w-0 flex flex-col"><p class="text-[11px] font-bold uppercase tracking-widest text-purple-400 mb-2">Detalhes do jogo</p><h2 id="gameDetailsTitle" class="text-xl md:text-2xl font-bold text-white leading-tight"></h2><div class="flex flex-wrap gap-2 mt-4 text-xs"><span id="gameDetailsConsole" class="bg-purple-600/20 text-purple-200 border border-purple-500/30 rounded-lg px-2.5 py-1"></span><span id="gameDetailsYear" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span><span id="gameDetailsGenres" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span></div><div id="gameDetailsRating" class="mt-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-3"></div><div class="mt-5"><div class="flex items-center justify-between gap-3"><h3 class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Sinopse</h3><button id="gameDetailsTranslate" onclick="translateGameSynopsis()" class="text-[10px] font-bold text-indigo-300 hover:text-white">Traduzir para português</button></div><p id="gameDetailsSynopsis" class="mt-2 max-h-44 overflow-y-auto pr-2 text-sm leading-relaxed text-slate-300"></p></div><div id="gameDetailsActions" class="mt-6"></div></div></div></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="gameDetailsModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-4"><div class="w-full max-w-3xl bg-[#120c1f] border border-purple-900/60 rounded-3xl overflow-hidden shadow-2xl"><div class="flex justify-end px-4 pt-4"><button onclick="closeGameDetails()" title="Fechar" class="text-purple-400 hover:text-white p-2 rounded-xl bg-purple-950/60 hover:bg-rose-600 transition-all"><i data-lucide="x" class="w-5 h-5"></i></button></div><div class="grid md:grid-cols-[220px_1fr] gap-6 px-6 pb-6 md:px-8 md:pb-8"><div id="gameDetailsCover" class="aspect-[2/3] max-h-[330px] mx-auto md:mx-0 rounded-2xl overflow-hidden bg-purple-950/50 border border-purple-900/50 flex items-center justify-center shadow-xl"></div><div class="min-w-0 flex flex-col"><p class="text-[11px] font-bold uppercase tracking-widest text-purple-400 mb-2">Detalhes do jogo</p><h2 id="gameDetailsTitle" class="text-xl md:text-2xl font-bold text-white leading-tight"></h2><div class="flex flex-wrap gap-2 mt-4 text-xs"><span id="gameDetailsConsole" class="bg-purple-600/20 text-purple-200 border border-purple-500/30 rounded-lg px-2.5 py-1"></span><span id="gameDetailsYear" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span><span id="gameDetailsGenres" class="bg-[#180f29] text-purple-300 border border-purple-900/50 rounded-lg px-2.5 py-1"></span></div><div id="gameDetailsRating" class="mt-5 min-h-[96px] rounded-2xl border border-purple-900/50 bg-purple-950/20 p-5 flex items-center"></div><div class="mt-5"><div class="flex items-center justify-between gap-3"><h3 class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Sinopse</h3><button id="gameDetailsTranslate" onclick="translateGameSynopsis()" class="text-[10px] font-bold text-indigo-300 hover:text-white">Traduzir para português</button></div><p id="gameDetailsSynopsis" class="mt-2 max-h-44 overflow-y-auto pr-2 text-sm leading-relaxed text-slate-300"></p></div><div id="gameDetailsActions" class="mt-6"></div></div></div></div></div>`);
 }
 
 function createSaveExitModalDOM() {
