@@ -57,7 +57,17 @@ supabase functions deploy game-metadata
 
 A busca de metadados é opcional: o formulário continua aceitando preenchimento manual quando a função não estiver configurada.
 
-## Upload de VODs para Cloudflare R2
+### Avaliações públicas dos jogos
+
+Execute `game_ratings_schema.sql` no SQL Editor e publique a função:
+
+```bash
+supabase functions deploy game-ratings --no-verify-jwt
+```
+
+Cada conta/perfil possui uma única avaliação por jogo. Ao alterar as estrelas, a nota anterior é substituída e a média pública é recalculada.
+
+# Upload de VODs para Cloudflare R2
 
 Projeto Supabase: `fvcvshppvxihhttwyyvr` (Lux Player).
 Bucket: `luxvod`.
