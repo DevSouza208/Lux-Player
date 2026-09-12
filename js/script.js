@@ -2436,23 +2436,28 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       document.getElementById('splashStatusMessage').innerText = 'Baixando categorias e canais...';
 
       try {
-        const [liveCatsRes, vodCatsRes, seriesCatsRes] = await Promise.all([
+        document.getElementById('splashStatusMessage').innerText = 'Baixando catálogo e categorias...';
+
+        // Categorias e catálogo são independentes: baixamos as seis respostas na mesma rodada.
+        const [
+          liveCatsRes,
+          vodCatsRes,
+          seriesCatsRes,
+          liveStreams,
+          vodStreams,
+          seriesStreams
+        ] = await Promise.all([
           smartFetch(`${baseApi}&action=get_live_categories`).then(r => r.json()).catch(() => []),
           smartFetch(`${baseApi}&action=get_vod_categories`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_series_categories`).then(r => r.json()).catch(() => [])
+          smartFetch(`${baseApi}&action=get_series_categories`).then(r => r.json()).catch(() => []),
+          smartFetch(`${baseApi}&action=get_live_streams`).then(r => r.json()).catch(() => []),
+          smartFetch(`${baseApi}&action=get_vod_streams`).then(r => r.json()).catch(() => []),
+          smartFetch(`${baseApi}&action=get_series`).then(r => r.json()).catch(() => [])
         ]);
 
         const liveCatMap = Object.fromEntries(liveCatsRes.map(c => [c.category_id, c.category_name]));
         const vodCatMap = Object.fromEntries(vodCatsRes.map(c => [c.category_id, c.category_name]));
         const seriesCatMap = Object.fromEntries(seriesCatsRes.map(c => [c.category_id, c.category_name]));
-
-        document.getElementById('splashStatusMessage').innerText = 'Sincronizando filmes e séries...';
-
-        const [liveStreams, vodStreams, seriesStreams] = await Promise.all([
-          smartFetch(`${baseApi}&action=get_live_streams`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_vod_streams`).then(r => r.json()).catch(() => []),
-          smartFetch(`${baseApi}&action=get_series`).then(r => r.json()).catch(() => [])
-        ]);
 
         const parsedItems = [];
 
