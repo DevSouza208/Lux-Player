@@ -482,9 +482,12 @@ async function saveNativeGame(game = activeEmulatorGame, user = currentUser) {
   const updatedAt = Date.now();
   const previous = await readLocalGameSave(nativeGame, 0, user);
   await writeLocalGameSave(nativeGame, 0, state, updatedAt, true, user, previous?.cloudBaseAt ?? null);
-  const result = await uploadLocalGameSave(await readLocalGameSave(nativeGame, 0, user), user);
-  if (result?.newerCloud) throw new Error('A nuvem possui um save natural mais recente.');
-  return true;
+  let syncError = null;
+  try {
+    const result = await uploadLocalGameSave(await readLocalGameSave(nativeGame, 0, user), user);
+    if (result?.newerCloud) syncError = new Error('A nuvem possui um save natural mais recente.');
+  } catch (error) { syncError = error; }
+  return { savedLocally: true, syncError };
 }
 
 async function saveNativeGameFromExit() {
@@ -498,8 +501,10 @@ async function saveNativeGameFromExit() {
   try {
     status.textContent = 'Salvando o progresso normal do jogo...';
     window.EJS_emulator?.pause?.(); pauseGamePlayTimer();
-    await saveNativeGame(game, user);
-    status.textContent = 'Save normal sincronizado. Agora você pode salvar também um Save State abaixo.';
+    const result = await saveNativeGame(game, user);
+    const button = document.getElementById('saveNativeExitButton');
+    if (button) { button.textContent = 'Já salvei — Sair'; button.onclick = closeGameEmulator; button.className = 'w-full rounded-xl border border-emerald-500/70 bg-emerald-600/30 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-600/50'; }
+    status.textContent = result.syncError ? 'Save natural salvo neste dispositivo. A sincronização com a nuvem ficou pendente.' : 'Save natural sincronizado. Agora você pode salvar também um Save State abaixo.';
   } catch (error) {
     status.textContent = error.message || 'Não foi possível salvar o progresso normal.';
   } finally {
@@ -511,10 +516,21 @@ function requestCloseGameEmulator() {
   if (!window.EJS_emulator || !activeEmulatorGame) return closeGameEmulator();
   createSaveExitModalDOM();
   const slots = getGameSaveSlots(activeEmulatorGame);
+  document.getElementById('saveExitSlots').classList.add('hidden');
+  document.getElementById('saveStateToggleLabel').textContent = 'Salvar Save State';
+  const nativeButton = document.getElementById('saveNativeExitButton');
+  if (nativeButton) { nativeButton.textContent = 'Salvar jogo normal'; nativeButton.onclick = saveNativeGameFromExit; nativeButton.className = 'mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70'; }
   document.getElementById('saveExitSlots').innerHTML = [1, 2, 3].map(slot => `<button onclick="saveGameAndClose(${slot})" class="rounded-xl border border-purple-800/70 bg-purple-950/50 hover:bg-purple-800/60 p-3 text-left transition-all"><span class="block text-xs font-bold text-purple-200">Slot ${slot}</span><span class="block mt-1 text-[10px] text-purple-400">${gameSlotDate(slots[slot]) ? `Salvo em ${new Date(gameSlotDate(slots[slot])).toLocaleString('pt-BR')}` : 'Vazio'}</span></button>`).join('');
   document.getElementById('saveExitModal').classList.remove('hidden');
 }
 
+function toggleSaveStateSlots() {
+  const slots = document.getElementById('saveExitSlots');
+  const label = document.getElementById('saveStateToggleLabel');
+  if (!slots) return;
+  const hidden = slots.classList.toggle('hidden');
+  if (label) label.textContent = hidden ? 'Salvar Save State' : 'Ocultar Save States';
+}
 async function saveGameAndClose(slot) {
   const emulator = window.EJS_emulator;
   const game = activeEmulatorGame;
@@ -589,7 +605,7 @@ function createGameDetailsModalDOM() {
 
 function createSaveExitModalDOM() {
   if (document.getElementById('saveExitModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha como salvar: o save normal é o arquivo criado pelo próprio jogo; o save state captura a tela atual em qualquer momento.</p><button onclick="saveNativeGameFromExit()" class="mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70">Salvar jogo normal</button><p class="mt-4 text-[10px] font-bold uppercase tracking-wide text-purple-400">Salvar como save state</p><div id="saveExitSlots" class="mt-2 grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-4 w-full rounded-xl border border-purple-800/70 bg-purple-950/50 py-2.5 text-xs font-bold text-purple-200 hover:bg-rose-950/70 hover:text-rose-200">Fechar sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha como salvar: o save normal é o arquivo criado pelo próprio jogo; o save state captura a tela atual em qualquer momento.</p><button id="saveNativeExitButton" onclick="saveNativeGameFromExit()" class="mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70">Salvar jogo normal</button><button onclick="toggleSaveStateSlots()" class="mt-3 w-full rounded-xl border border-amber-700/70 bg-amber-950/40 py-3 text-xs font-bold text-amber-200 hover:bg-amber-900/60"><span id="saveStateToggleLabel">Salvar Save State</span></button><div id="saveExitSlots" class="mt-2 hidden grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-4 w-full rounded-xl border border-rose-700/70 bg-rose-950/50 py-2.5 text-xs font-bold text-rose-200 hover:bg-rose-900/70">Sair sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
 }
 
 function createContinueSlotModalDOM() {
