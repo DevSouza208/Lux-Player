@@ -1573,7 +1573,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           status.textContent = `Enviando lista: ${Math.round((i + 1) / plan.parts.length * 100)}%`;
         }
         await userPlaylistRequest({ action: 'verify', reference: plan.reference, size: file.size });
-        status.textContent = 'Arquivo enviado. Salvando vínculo com o cliente...';
+        status.textContent = 'Arquivo enviado.';
         return plan.reference;
       } catch (error) { status.textContent = error.message; throw error; }
     }
@@ -1593,6 +1593,28 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     let editingAdminUsername = null;
     let adminUserSaving = false;
+    async function adminAttachPlaylist() {
+      if (currentUser?.role !== 'admin' || adminUserSaving) return;
+      const input = document.getElementById('adminNewM3uFile');
+      const status = document.getElementById('adminM3uUploadStatus');
+      const file = input.files?.[0];
+      if (!file) { status.textContent = 'Selecione um arquivo M3U ou M3U8 para anexar.'; return; }
+      adminUserSaving = true;
+      const controls = ['adminM3uAttach', 'adminUserSubmit', 'adminUserCancelEdit', 'adminNewM3uFile', 'adminNewM3u'].map(id => document.getElementById(id));
+      const disabled = controls.map(control => control.disabled);
+      controls.forEach(control => { control.disabled = true; });
+      try {
+        const reference = await uploadUserPlaylist(file);
+        document.getElementById('adminNewM3u').value = reference;
+        input.value = '';
+        status.textContent = 'Arquivo anexado! Salve o cliente para confirmar a lista.';
+      } catch (error) {
+        status.textContent = error.message || 'Não foi possível enviar o arquivo. Tente novamente.';
+      } finally {
+        adminUserSaving = false;
+        controls.forEach((control, index) => { control.disabled = disabled[index]; });
+      }
+    }
     const adminUserFields = {
       adminNewName: 'nome', adminNewUser: 'usuario', adminNewPass: 'senha',
       adminNewDue: 'vencimento', adminNewM3u: 'lista_m3u', adminNewUserXc: 'userxc',
