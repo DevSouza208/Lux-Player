@@ -267,6 +267,39 @@
 .game-feature-badge svg { width:13px; height:13px; flex-shrink:0; }
 .game-feature-coop { color:#a7f3d0; background:#34d39912; border-color:#34d39940; }
 
+/* Align header actions around the same center and keep the profile image full-size. */
+#appHeader > div:last-child { align-items: center; gap: 8px; }
+#appHeader > div:last-child > button,
+#appHeader #headerProfileButton {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+#appHeader > div:last-child > button:not(.hidden),
+#appHeader #headerProfileButton { display: inline-flex; }
+#appHeader > div:last-child > button > svg { width: 18px; height: 18px; }
+#appHeader #headerProfileButton { margin: 0; overflow: hidden; border-radius: 50%; }
+#headerProfileButton img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* Keep exit actions compact, including after the save button changes state. */
+#saveExitModal > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+#saveExitModal > div > * { margin: 0 !important; }
+#saveExitModal > div > p:first-of-type { margin-bottom: 4px !important; line-height: 1.45; }
+#saveExitModal > div > button { min-height: 44px; padding: 10px 12px; flex-shrink: 0; }
+#saveExitStatus:empty { display: none; }
+#saveExitSlots { gap: 8px; }
+
 /* Loaded in both orientations, including phones opened directly in landscape. */
 @media (orientation: landscape) and (min-width: 560px) and (max-width: 1023px) and (max-height: 600px) {
   #gamesSection #gamesCatalogGrid {
