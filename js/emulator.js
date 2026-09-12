@@ -245,7 +245,7 @@ async function loadGameRating(game = currentGameDetails) {
     const { data, error } = await supabaseClient.functions.invoke('game-ratings', {
       body: {
         action: 'get',
-        gameId: game.id,
+        gameId: String(game.id),
         ...(user ? { username: user.user, password: user.pass, profileSlot: user.profile?.slot || 1, profileKey: user.profile?.data_key || '' } : {})
       }
     });
@@ -268,7 +268,7 @@ async function saveGameRating(rating) {
     const { data, error } = await supabaseClient.functions.invoke('game-ratings', {
       body: {
         action: 'save',
-        gameId: game.id,
+        gameId: String(game.id),
         rating,
         username: user.user,
         password: user.pass,
