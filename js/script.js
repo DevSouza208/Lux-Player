@@ -4162,10 +4162,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function hydrateMediaCard(item, posterContainer) {
-      if (!posterContainer || posterContainer.querySelector('img') || item.logo) return;
+      if (!posterContainer || (posterContainer.querySelector('img') && item.type !== 'series') || (item.logo && item.type !== 'series')) return;
 
       const metadata = await fetchTmdbMetadata(item);
-      if (!metadata?.posterUrl || !posterContainer || posterContainer.querySelector('img')) return;
+      if (!metadata?.posterUrl || !posterContainer || (posterContainer.querySelector('img') && item.type !== 'series')) return;
 
       const fav = isFavorite(item);
       posterContainer.innerHTML = '';
@@ -4324,7 +4324,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         if (tmdbMetadata.overview) {
           document.getElementById('seriesModalPlot').innerText = tmdbMetadata.overview;
         }
-        if (tmdbMetadata.posterUrl && !series.logo) {
+        if (tmdbMetadata.posterUrl) {
           coverContainer.innerHTML = '';
           const tmdbImg = document.createElement('img');
           tmdbImg.src = tmdbMetadata.posterUrl;
