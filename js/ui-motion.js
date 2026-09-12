@@ -93,7 +93,7 @@ function animateDashboardEntry() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   document.getElementById('mainDashboard')?.animate(
     [{ opacity: .35, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
-    { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'none' }
+    { duration: 320, easing: 'cubic-bezier(.2,.8,.2,1)' }
   );
 }
 
