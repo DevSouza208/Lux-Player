@@ -62,16 +62,24 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     function getMediaSourceCandidates(user = currentUser) {
       if (!user) return [];
       const candidates = [];
-      const m3uValue = String(user.m3uUrl || '').trim();
+      const m3uOriginal = String(user.m3uUrl || '').trim();
+      const m3uHttps = String(user.m3uHttpsUrl || '').trim();
+      const isElectron = Boolean(window.luxElectron);
 
-      if (/^https?:\/\//i.test(m3uValue)) {
-        candidates.push({ kind: 'm3u-url', label: 'Lista M3U por URL', value: m3uValue });
+      // No Electron, a lista original pode ser usada diretamente.
+      // No navegador/PWA/Vercel, o HTTP original é bloqueado de propósito:
+      // somente o arquivo HTTPS sincronizado pelo Worker entra como M3U.
+      if (isElectron && /^https?:\/\//i.test(m3uOriginal)) {
+        candidates.push({ kind: 'm3u-url', label: 'Lista M3U original (Electron)', value: m3uOriginal });
+      } else if (!isElectron && /^https:\/\//i.test(m3uHttps)) {
+        candidates.push({ kind: 'm3u-url', label: 'Lista M3U HTTPS sincronizada', value: m3uHttps });
       }
+
       if (user.urlXc && user.userXc && user.senhaXc) {
         candidates.push({ kind: 'xtream', label: 'Xtream Codes', server: user.urlXc, user: user.userXc, pass: user.senhaXc });
       }
-      if (/^m3u-storage:[a-f0-9-]{36}$/i.test(m3uValue)) {
-        candidates.push({ kind: 'm3u-storage', label: 'Arquivo M3U no Supabase', value: m3uValue });
+      if (/^m3u-storage:[a-f0-9-]{36}$/i.test(m3uOriginal)) {
+        candidates.push({ kind: 'm3u-storage', label: 'Arquivo M3U no Supabase', value: m3uOriginal });
       }
       return candidates;
     }
@@ -1329,6 +1337,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         const usuario = row.usuario || '';
         const senha = row.senha || '';
         const lista = row.lista_m3u || '';
+        const listaHttps = row.lista_m3u_https || '';
         const vencimento = row.vencimento || '';
         const userXc = row.userxc || '';
         const senhaXc = row.senhaxc || '';
@@ -1346,6 +1355,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           user: usuario,
           pass: senha,
           m3uUrl: lista,
+          m3uHttpsUrl: listaHttps,
           dueDate: vencimento,
           userXc: userXc,
           senhaXc: senhaXc,
