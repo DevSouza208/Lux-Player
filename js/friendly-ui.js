@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-1';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-2';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -17,6 +17,11 @@
     [/Sincronizando temporadas e episódios\.\.\./gi, 'Carregando episódios...'],
     [/Sincronizando sua M3U \+ catálogo PHP\. Isso pode levar alguns segundos\.\.\./gi, 'Atualizando seu catálogo. Isso pode levar alguns instantes...'],
     [/Conversão concluída\. Recarregando o catálogo HTTPS\.\.\./gi, 'Catálogo atualizado. Preparando os novos conteúdos...'],
+    [/Catálogo Xtream HTTPS sincronizado/gi, 'Catálogo atualizado'],
+    [/Lista M3U HTTPS sincronizada/gi, 'Catálogo atualizado'],
+    [/Arquivo M3U no Supabase/gi, 'Lista salva'],
+    [/Lista M3U original \(fallback HTTP\)/gi, 'Lista principal'],
+    [/Lista M3U original \(Electron\)/gi, 'Lista principal'],
     [/Este cliente não possui URL M3U HTTP\/HTTPS para sincronizar/gi, 'Este cliente ainda não possui uma lista configurada para atualização'],
     [/Sincronizar catálogo IPTV de ([^•]+)/gi, 'Atualizar catálogo de $1'],
     [/Worker respondeu HTTP \d+/gi, 'O serviço de atualização não respondeu como esperado'],
