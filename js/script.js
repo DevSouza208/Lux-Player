@@ -95,6 +95,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       if (!content) return;
       const isHidden = content.classList.toggle('hidden');
       if (label) label.textContent = isHidden ? 'Mostrar cores' : 'Ocultar cores';
+      if (!isHidden) renderAdminCoreStatusPanel();
     }
     function saveAdminCoreStatuses() {
       const selects = [...document.querySelectorAll('#adminCoreStatusList [data-core-status-id]')];
