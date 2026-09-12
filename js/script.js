@@ -2402,7 +2402,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         if (currentUser !== user) throw new Error('O perfil mudou. Selecione o arquivo novamente.');
         const parsed = parseM3U(text).filter(item => /^https?:\/\//i.test(item.url));
         if (!parsed.length) throw new Error('Nenhum canal com endereço HTTP/HTTPS encontrado. Escolha uma lista de canais, não um manifesto de vídeo.');
-        allMediaItems = parsed.filter(profileAllowsMedia).sort((a, b) => Number(a.isAdult) - Number(b.isAdult));
+        const grouped = groupM3uSeriesEpisodes(parsed);
+        allMediaItems = grouped.filter(profileAllowsMedia).sort((a, b) => Number(a.isAdult) - Number(b.isAdult));
         mergeSharedVodsIntoPlayer();
         setMediaSourceState('local-m3u', 'Arquivo M3U local', parsed.length);
         activeSearchQuery = '';
@@ -2431,9 +2432,88 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         return a.isAdult ? 1 : -1;
       });
 
-      allMediaItems = parsed.filter(profileAllowsMedia);
+      const grouped = groupM3uSeriesEpisodes(parsed);
+      allMediaItems = grouped.filter(profileAllowsMedia);
       mergeSharedVodsIntoPlayer();
-      return { count: parsed.length };
+      return { count: parsed.length, groupedCount: grouped.length };
+    }
+
+    function parseM3UEpisodeMeta(item) {
+      if (!item || item.type !== 'series') return null;
+      const name = String(item.name || '').trim();
+      const patterns = [
+        /\bS(?:eason)?\s*0*(\d+)\s*[-_. ]*E(?:pisode)?\s*0*(\d+)\b/i,
+        /\bT(?:emporada)?\s*0*(\d+)\s*[-_. ]*E(?:pis[oó]dio)?\s*0*(\d+)\b/i,
+        /\b(\d{1,2})\s*[x×]\s*0*(\d{1,3})\b/i
+      ];
+      for (const pattern of patterns) {
+        const match = name.match(pattern);
+        if (!match) continue;
+        const baseName = name.slice(0, match.index).replace(/[|:_-]+$/, '').trim();
+        if (!baseName) continue;
+        const episodeTitle = name.slice(match.index + match[0].length).replace(/^[\s|:_-]+/, '').trim();
+        return {
+          seriesName: baseName,
+          seasonNum: Number(match[1]) || 1,
+          episodeNum: Number(match[2]) || 1,
+          episodeTitle: episodeTitle || `Episódio ${Number(match[2]) || 1}`
+        };
+      }
+      return null;
+    }
+
+    function groupM3uSeriesEpisodes(items) {
+      const output = [];
+      const groups = new Map();
+
+      items.forEach(item => {
+        const meta = parseM3UEpisodeMeta(item);
+        if (!meta) {
+          output.push(item);
+          return;
+        }
+
+        const groupKey = normalizeSharedCategoryTitle(meta.seriesName);
+        let series = groups.get(groupKey);
+        if (!series) {
+          const seriesId = `m3u-series-${groupKey || item.id}`;
+          series = {
+            ...item,
+            id: seriesId,
+            series_id: seriesId,
+            name: meta.seriesName,
+            m3uEpisodes: {},
+            source: 'm3u-series',
+            isAdult: Boolean(item.isAdult)
+          };
+          delete series.url;
+          groups.set(groupKey, series);
+          output.push(series);
+        }
+
+        const seasonKey = String(meta.seasonNum);
+        if (!series.m3uEpisodes[seasonKey]) series.m3uEpisodes[seasonKey] = [];
+        series.m3uEpisodes[seasonKey].push({
+          ...item,
+          id: item.id,
+          series_id: series.series_id,
+          seasonNum: meta.seasonNum,
+          episodeNum: meta.episodeNum,
+          episodeTitle: meta.episodeTitle,
+          title: meta.episodeTitle
+        });
+
+        if (!series.logo && item.logo) series.logo = item.logo;
+        series.isAdult = series.isAdult || Boolean(item.isAdult);
+      });
+
+      groups.forEach(series => {
+        Object.values(series.m3uEpisodes).forEach(episodes => {
+          episodes.sort((a, b) => Number(a.episodeNum || 0) - Number(b.episodeNum || 0));
+        });
+      });
+
+      return output;
     }
 
     function normalizeSharedCategoryTitle(value) {
@@ -4138,6 +4218,30 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           document.getElementById('seriesModalPlot').innerText = 'Sinopse não disponível.';
           document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-rose-400 p-6 text-center">Erro ao buscar episódios do servidor.</p>';
         }
+      } else if (series.m3uEpisodes) {
+        currentSeriesEpisodesData = series.m3uEpisodes;
+        document.getElementById('seriesModalPlot').innerText = 'Episódios agrupados automaticamente a partir da lista M3U.';
+        const seasonNumbers = Object.keys(currentSeriesEpisodesData).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+        document.getElementById('seriesModalStats').innerText = `${seasonNumbers.length} Temporada(s)`;
+        if (seasonNumbers.length) {
+          currentSelectedSeason = resumeState && seasonNumbers.includes(Number(resumeState.seasonNum))
+            ? Number(resumeState.seasonNum)
+            : seasonNumbers[0];
+          renderSeasonTabs(seasonNumbers);
+          renderSeasonEpisodes();
+
+          if (autoPlayResume && resumeState) {
+            const episodes = currentSeriesEpisodesData[String(currentSelectedSeason)] || [];
+            const episodeIndex = episodes.findIndex(ep => String(ep.id) === String(resumeState.episodeId));
+            const episode = episodes[episodeIndex >= 0 ? episodeIndex : Number(resumeState.episodeIndex)];
+            if (episode) {
+              closeSeriesModal();
+              openVodPlayer(buildSeriesEpisodeItem(series, currentSelectedSeason, episode, episodeIndex >= 0 ? episodeIndex : Number(resumeState.episodeIndex), episodes));
+            }
+          }
+        } else {
+          document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-slate-400 p-6 text-center">Nenhum episódio cadastrado nesta série.</p>';
+        }
       } else {
         document.getElementById('seriesModalPlot').innerText = 'Sinopse disponível apenas via servidor Xtream Codes.';
         document.getElementById('seriesEpisodesContainer').innerHTML = '<p class="text-xs text-purple-400 p-6 text-center">Série disponível via lista direta.</p>';
@@ -4155,14 +4259,17 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     function buildSeriesEpisodeItem(series, seasonNum, ep, index, episodes) {
       const xcCreds = resolveUserCredentials(currentUser);
-      const cleanServer = xcCreds.server.replace(/\/+$/, '');
+      const cleanServer = xcCreds.server ? xcCreds.server.replace(/\/+$/, '') : '';
       const ext = ep.container_extension || 'mp4';
-      const epNum = ep.episode_num || ep.episode || (index + 1);
-      const epTitle = ep.title ? ep.title.trim() : `Episódio ${epNum}`;
+      const epNum = ep.episode_num || ep.episode || ep.episodeNum || (index + 1);
+      const epTitle = ep.title || ep.episodeTitle ? (ep.title || ep.episodeTitle).trim() : `Episódio ${epNum}`;
+      const episodeUrl = ep.url || (xcCreds.isXc
+        ? `${cleanServer}/series/${xcCreds.user}/${xcCreds.pass}/${ep.id}.${ext}`
+        : '');
 
       return {
         name: `${series.name} - T${seasonNum}E${epNum} (${epTitle})`,
-        url: `${cleanServer}/series/${xcCreds.user}/${xcCreds.pass}/${ep.id}.${ext}`,
+        url: episodeUrl,
         type: 'series',
         id: ep.id,
         series_id: series.series_id || '',
