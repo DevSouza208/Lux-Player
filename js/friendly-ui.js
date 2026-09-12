@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-4';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-5';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -94,13 +94,23 @@
     updateElement(document.body);
   }
 
+  const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
+
   const loadMobileControlOpacity = () => {
-    const media = window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)');
-    if (!media?.matches || document.querySelector('script[data-lux-mobile-control-opacity]')) return;
+    if (!mobileMedia() || document.querySelector('script[data-lux-mobile-control-opacity]')) return;
     const script = document.createElement('script');
     script.src = 'js/mobile-control-opacity.js?v=20260912-opacity1';
     script.async = true;
     script.dataset.luxMobileControlOpacity = '1';
+    document.head.appendChild(script);
+  };
+
+  const loadMobileCustomControls = () => {
+    if (!mobileMedia() || document.querySelector('script[data-lux-mobile-custom-controls]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/mobile-custom-controls.js?v=20260912-custom1';
+    script.async = true;
+    script.dataset.luxMobileCustomControls = '1';
     document.head.appendChild(script);
   };
 
@@ -131,6 +141,7 @@
   const start = () => {
     applyVersionEverywhere();
     loadMobileControlOpacity();
+    loadMobileCustomControls();
     observer.observe(document.documentElement, {
       subtree: true,
       childList: true,
