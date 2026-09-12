@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260912-stability1';
+  window.__luxRuntimeStabilityFixInstalled = '20260912-stability2';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -64,22 +64,15 @@
     map.set(key, list);
   };
 
-  let cachedPlaylistUrl = '';
-  let cachedRawItems = null;
-
   const loadRawPlaylistItems = async () => {
     const manifest = window.__luxSyncedXtreamManifest;
     const playlistUrl = String(manifest?.playlist || '').trim();
     if (!playlistUrl || typeof window.parseM3U !== 'function') return [];
-    if (cachedPlaylistUrl === playlistUrl && Array.isArray(cachedRawItems)) return cachedRawItems;
 
     const response = await fetch(playlistUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error(`playlist HTTP ${response.status}`);
     const text = await response.text();
-    const parsed = window.parseM3U(text).filter(item => item?.url);
-    cachedPlaylistUrl = playlistUrl;
-    cachedRawItems = parsed;
-    return parsed;
+    return window.parseM3U(text).filter(item => item?.url);
   };
 
   const repairSyncedPlaybackUrls = async () => {
@@ -95,13 +88,15 @@
     if (!rawItems.length) return;
 
     const byTypeAndId = new Map();
+    const byAnyId = new Map();
     const byTypeAndName = new Map();
     const byTypeAndLogo = new Map();
 
     rawItems.forEach(raw => {
       const type = normalizeType(raw.type);
-      if (type !== 'live' && type !== 'movies') return;
       const id = extractFlexibleStreamId(raw.url);
+      if (id) addToMap(byAnyId, id, raw);
+      if (type !== 'live' && type !== 'movies') return;
       if (id && !byTypeAndId.has(`${type}|${id}`)) byTypeAndId.set(`${type}|${id}`, raw);
       addToMap(byTypeAndName, `${type}|${normalizeText(raw.name)}`, raw);
       addToMap(byTypeAndLogo, `${type}|${normalizeAssetUrl(raw.logo)}`, raw);
@@ -119,6 +114,11 @@
 
       const streamId = String(item.stream_id ?? '').trim();
       let match = streamId ? byTypeAndId.get(`${type}|${streamId}`) : null;
+
+      if (!match && streamId) {
+        const sameId = byAnyId.get(streamId) || [];
+        if (sameId.length === 1) match = sameId[0];
+      }
 
       if (!match) {
         const nameMatches = byTypeAndName.get(`${type}|${normalizeText(item.name)}`) || [];
@@ -189,20 +189,40 @@
 
     window.activateAccountProfile = async function (profile) {
       const syncFunction = window.syncCloudProgress;
+      const sharedVodFunction = typeof window.loadSharedVodCatalog === 'function' ? window.loadSharedVodCatalog : null;
       let deferredSync = false;
-      const deferOnly = async () => { deferredSync = true; };
+      let deferredSharedVods = false;
+      const deferSyncOnly = async () => { deferredSync = true; };
+      const deferSharedVodsOnly = async () => { deferredSharedVods = true; };
 
-      window.syncCloudProgress = deferOnly;
+      window.syncCloudProgress = deferSyncOnly;
+      if (sharedVodFunction) window.loadSharedVodCatalog = deferSharedVodsOnly;
+
       try {
         return await originalActivate.apply(this, arguments);
       } finally {
-        if (window.syncCloudProgress === deferOnly) window.syncCloudProgress = syncFunction;
+        if (window.syncCloudProgress === deferSyncOnly) window.syncCloudProgress = syncFunction;
+        if (sharedVodFunction && window.loadSharedVodCatalog === deferSharedVodsOnly) window.loadSharedVodCatalog = sharedVodFunction;
 
-        if (deferredSync && typeof syncFunction === 'function' && sameProfile(currentUser?.profile, profile)) {
+        if (!sameProfile(currentUser?.profile, profile)) return;
+
+        if (deferredSync && typeof syncFunction === 'function') {
           setTimeout(() => {
             Promise.resolve(syncFunction()).catch(error => {
               console.warn('[Lux Play] Sincronização em segundo plano indisponível.', error);
             });
+          }, 0);
+        }
+
+        if (deferredSharedVods && typeof sharedVodFunction === 'function') {
+          setTimeout(() => {
+            Promise.resolve(sharedVodFunction())
+              .then(() => {
+                try { if (typeof window.setSection === 'function') window.setSection(currentSection || 'home'); } catch (_) {}
+              })
+              .catch(error => {
+                console.warn('[Lux Play] Conteúdos extras indisponíveis no momento.', error);
+              });
           }, 0);
         }
       }
