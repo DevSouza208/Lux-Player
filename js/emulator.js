@@ -9,6 +9,7 @@ let emulatorContextMenuGuard = null;
 let gamePlayTimer = null;
 let activeRomObjectUrl = null;
 let romDownloadBusy = false;
+let emulatorViewportCleanup = null;
 
 function getGameSaveKey(game, user = currentUser) { return `lux-play:user-save:${encodeURIComponent(user?.user || '')}${typeof profileLocalSuffix === 'function' ? profileLocalSuffix(user) : ''}:${getCloudGameSaveKey(game)}`; }
 function getGameSaveSlots(game) { try { return JSON.parse(localStorage.getItem(getGameSaveKey(game)) || '{}'); } catch (_) { return {}; } }
@@ -38,6 +39,7 @@ function openGameEmulator(gameItem) {
   titleEl.innerText = gameItem.name;
   modal.classList.remove('hidden');
   enableEmulatorTouchGuard();
+  bindEmulatorViewportEvents();
   document.getElementById('emulatorIntroName').textContent = gameItem.name || 'Jogo';
   document.getElementById('emulatorIntroConsole').textContent = gameItem.consoleLabel || String(gameItem.console || 'Console').toUpperCase();
   const header=document.querySelector('#emulatorModal .border-b');
@@ -59,7 +61,7 @@ function toggleEmulatorFastForward(){
   const button=document.getElementById('emulatorFastForward');if(button){button.classList.toggle('bg-purple-600',emulatorFastForward);button.textContent=emulatorFastForward?'Fast-forward ligado':'Fast-forward';}
 }
 
-function fitEmulatorViewport() {
+function fitEmulatorViewport(notify = true) {
   const container = document.getElementById('emulatorContainer');
   if (!container) return;
   const stage = container.parentElement;
@@ -71,9 +73,30 @@ function fitEmulatorViewport() {
   container.style.height = '100%';
   container.style.minWidth = '0';
   container.style.minHeight = '0';
-  window.dispatchEvent(new Event('resize'));
-  requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-  setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+  if (notify) {
+    window.dispatchEvent(new Event('resize'));
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+  }
+}
+function bindEmulatorViewportEvents() {
+  if (emulatorViewportCleanup) emulatorViewportCleanup();
+  const refresh = () => {
+    requestAnimationFrame(() => fitEmulatorViewport(false));
+    setTimeout(() => fitEmulatorViewport(false), 160);
+  };
+  window.addEventListener('resize', refresh, { passive: true });
+  window.addEventListener('orientationchange', refresh, { passive: true });
+  window.visualViewport?.addEventListener('resize', refresh, { passive: true });
+  window.screen?.orientation?.addEventListener?.('change', refresh);
+  emulatorViewportCleanup = () => {
+    window.removeEventListener('resize', refresh);
+    window.removeEventListener('orientationchange', refresh);
+    window.visualViewport?.removeEventListener('resize', refresh);
+    window.screen?.orientation?.removeEventListener?.('change', refresh);
+    emulatorViewportCleanup = null;
+  };
+  refresh();
 }
 
 function startEmulatorSession() {
@@ -129,6 +152,7 @@ function disableEmulatorTouchGuard() {
   emulatorContextMenuGuard = null;
 }
 function closeGameEmulator() {
+  emulatorViewportCleanup?.();
   disableEmulatorTouchGuard();
   if (activeRomObjectUrl) {
     try { URL.revokeObjectURL(activeRomObjectUrl); } catch (_) {}
