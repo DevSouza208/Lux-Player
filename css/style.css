@@ -267,6 +267,27 @@
 .game-feature-badge svg { width:13px; height:13px; flex-shrink:0; }
 .game-feature-coop { color:#a7f3d0; background:#34d39912; border-color:#34d39940; }
 
+#gamesSection .lux-mobile-games-actions { display: none; }
+.games-catalog-actions { align-items: center; }
+.games-filter-menu { position: relative; }
+.games-filter-menu > summary { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid #6b21a866; border-radius: 12px; background: #180f29; color: #e9d5ff; font-size: 12px; font-weight: 700; cursor: pointer; list-style: none; }
+.games-filter-menu > summary::-webkit-details-marker { display: none; }
+.games-filter-menu > summary svg { width: 18px; height: 18px; }
+.games-filter-menu[open] > summary { border-color: #a855f7; }
+.games-filter-panel { position: absolute; z-index: 35; top: calc(100% + 8px); right: 0; display: flex; flex-direction: column; gap: 14px; width: 280px; max-width: calc(100vw - 40px); max-height: 65dvh; overflow-y: auto; padding: 18px; border: 1px solid #6b21a8; border-radius: 16px; background: #160d24; box-shadow: 0 18px 48px #0009; }
+.games-filter-panel label { display: flex; flex-direction: column; gap: 6px; color: #c4b5fd; font-size: 11px; font-weight: 600; }
+.games-filter-panel select, .games-filter-panel > button { width: 100%; min-height: 38px; }
+.game-core-toggle-icon { display: none; }
+@media (max-width: 767px) {
+  #gameCoreStatusPanel { padding: 10px 14px; margin-bottom: 14px; }
+  #gameCoreStatusPanel > div:first-child { flex-wrap: nowrap; gap: 8px; }
+  #gameCoreStatusPanel > div:first-child > div > p + p { display: none; }
+  #gameCoreStatusToggle { width: 32px; height: 32px; flex-shrink: 0; padding: 0; }
+  #gameCoreStatusToggleLabel { display: none; }
+  #gameCoreStatusToggle .game-core-toggle-icon { display: inline-block; font-size: 22px; line-height: 1; }
+  #gameCoreStatusToggle[aria-expanded="true"] .game-core-toggle-icon { transform: rotate(180deg); }
+}
+
 /* Align header actions around the same center and keep the profile image full-size. */
 #appHeader > div:last-child { align-items: center; gap: 8px; }
 #appHeader > div:last-child > button,

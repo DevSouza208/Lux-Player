@@ -15,7 +15,8 @@ Deno.serve(async (request: Request) => {
   if (request.method !== 'POST') return json({ error: 'Método não permitido.' }, 405);
 
   try {
-    const body = await request.json();
+    let body;
+    try { body = await request.json(); } catch { return json({ error: 'JSON inválido.' }, 400); }
     const action = body?.action;
     if (!['get', 'save'].includes(action)) return json({ error: 'Ação inválida.' }, 400);
 
@@ -43,7 +44,7 @@ Deno.serve(async (request: Request) => {
       }
 
       const statuses = body?.statuses;
-      if (!statuses || typeof statuses !== 'object') return json({ error: 'Status inválidos.' }, 400);
+      if (!statuses || typeof statuses !== 'object' || Array.isArray(statuses) || !Object.keys(statuses).length || Object.keys(statuses).length > allowed.size || Object.entries(statuses).some(([id, status]) => !allowed.has(id) || !['tested', 'untested'].includes(String(status)))) return json({ error: 'Status inválidos.' }, 400);
       const rows = Object.entries(statuses)
         .filter(([coreId, status]) => allowed.has(coreId) && (status === 'tested' || status === 'untested'))
         .map(([coreId, status]) => ({ core_id: coreId, status }));

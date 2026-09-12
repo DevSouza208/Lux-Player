@@ -1,5 +1,9 @@
 project_id = "fvcvshppvxihhttwyyvr"
 
+[functions.core-statuses]
+# Leitura pública; a função exige administrador para gravar.
+verify_jwt = false
+
 [functions.r2-upload-url]
 # A função valida o login legado e cargo=admin no servidor.
 verify_jwt = false

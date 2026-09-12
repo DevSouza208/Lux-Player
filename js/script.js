@@ -76,59 +76,91 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         panel.classList.toggle('hidden', panel.id !== targetId);
       });
 
-      if (tab === 'games') { renderAdminCoreStatusPanel(); syncCoreStatusesFromCloud(); }
+      if (tab === 'games') { if (!coreStatusDraft) renderAdminCoreStatusPanel(); syncCoreStatusesFromCloud(); }
       if (tab === 'books') { renderAdminBooksList(); window.LuxReadingAdmin?.refresh(); }
       if (tab === 'vods') renderAdminVodList();
       if (tab === 'avatars') loadAvatarGallery(true);
     }
 
-    function renderPublicCoreStatusList() {
-      const coreStatusList = document.getElementById('gameCoreStatusList');
-      if (!coreStatusList) return;
-      coreStatusList.innerHTML = (window.LuxExternalRoms?.coreStatuses?.() || []).map(core => `<span title="${escapeGameHtml(core.description || core.label)}" class="inline-flex items-center gap-1 rounded-full border border-purple-900/60 bg-[#120c1f] px-2 py-1"><span class="h-2 w-2 rounded-full ${core.tested ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${escapeGameHtml(core.label)}</span>`).join('');
+    let coreStatusRequest = 0;
+    let coreStatusSaving = false;
+    let coreStatusDraft = false;
+    function coresReady() {
+      const cores = window.LuxExternalRoms?.coreStatuses?.() || [];
+      return cores.length > 0 && cores.every(core => core.status !== 'unknown');
     }
-
+    function renderPublicCoreStatusList() {
+      const list = document.getElementById('gameCoreStatusList');
+      if (!list) return;
+      list.innerHTML = (window.LuxExternalRoms?.coreStatuses?.() || []).map(core =>
+        '<span title="' + escapeGameHtml(core.label + (core.status === 'unknown' ? ' · aguardando status público' : '')) + '" class="inline-flex items-center gap-1 rounded-full border border-purple-900/60 bg-[#120c1f] px-2 py-1"><span class="h-2 w-2 rounded-full ' + (core.status === 'unknown' ? 'bg-slate-500' : core.tested ? 'bg-emerald-400' : 'bg-rose-400') + '"></span>' + escapeGameHtml(core.label) + '</span>'
+      ).join('');
+    }
     async function syncCoreStatusesFromCloud() {
-      if (!window.LuxExternalRoms?.setCoreStatuses) return;
+      if (!window.LuxExternalRoms?.setCoreStatuses || coreStatusSaving) return;
+      const request = ++coreStatusRequest;
+      const message = document.getElementById('gameCoreSyncMessage');
+      if (message) message.textContent = 'Consultando status públicos...';
       try {
         const { data, error } = await supabaseClient.functions.invoke('core-statuses', { body: { action: 'get' } });
-        if (error || data?.error || !data?.statuses) throw new Error(data?.error || 'Status indisponível.');
+        if (request !== coreStatusRequest) return;
+        if (error || data?.error || !data?.statuses || typeof data.statuses !== 'object' || Array.isArray(data.statuses)) throw new Error('Status públicos indisponíveis. Tente novamente.');
         window.LuxExternalRoms.setCoreStatuses(data.statuses);
+        if (message) message.textContent = 'Status publicados pelo administrador, iguais para todos os dispositivos.';
         renderPublicCoreStatusList();
-        if (document.getElementById('adminCoreStatusList')) renderAdminCoreStatusPanel();
-      } catch (error) { console.warn('Status dos cores:', error); }
+        if (!coreStatusDraft) renderAdminCoreStatusPanel();
+      } catch (error) {
+        if (request !== coreStatusRequest) return;
+        if (message) message.textContent = coresReady() ? 'Sem conexão. Exibindo a última consulta desta sessão.' : error.message;
+        const adminMessage = document.getElementById('adminCoreStatusMessage');
+        if (adminMessage) adminMessage.textContent = 'Não foi possível consultar os status públicos. Tente novamente.';
+      }
     }
     function renderAdminCoreStatusPanel() {
       const list = document.getElementById('adminCoreStatusList');
+      const save = document.getElementById('adminCoreStatusSave');
+      if (save) save.disabled = coreStatusSaving || !coresReady();
       if (!list || !window.LuxExternalRoms?.coreStatuses) return;
+      if (!coresReady()) { list.textContent = 'Carregando os status públicos...'; return; }
       const cores = window.LuxExternalRoms.coreStatuses();
-      list.innerHTML = cores.map(core => `<label class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-900/50 bg-[#180f29] px-4 py-3"><span class="flex items-center gap-2 text-sm font-bold text-purple-100"><span class="h-3 w-3 rounded-full ${core.tested ? 'bg-emerald-400' : 'bg-rose-400'}"></span>${escapeGameHtml(core.label)}</span><select data-core-status-id="${escapeGameHtml(core.id)}" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-2 text-xs text-purple-200"><option value="tested" ${core.tested ? 'selected' : ''}>Verde · testado e aprovado</option><option value="untested" ${!core.tested ? 'selected' : ''}>Vermelho · não testado</option></select></label>`).join('');
+      list.innerHTML = cores.map(core => '<label class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-purple-900/50 bg-[#180f29] px-4 py-3"><span class="flex items-center gap-2 text-sm font-bold text-purple-100"><span class="h-3 w-3 rounded-full ' + (core.tested ? 'bg-emerald-400' : 'bg-rose-400') + '"></span>' + escapeGameHtml(core.label) + '</span><select data-core-status-id="' + escapeGameHtml(core.id) + '" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-2 text-xs text-purple-200"><option value="tested" ' + (core.tested ? 'selected' : '') + '>Verde · testado e aprovado</option><option value="untested" ' + (!core.tested ? 'selected' : '') + '>Vermelho · não testado</option></select></label>').join('');
+      list.onchange = () => { coreStatusDraft = true; };
     }
-
     function toggleAdminCoreStatusPanel() {
       const content = document.getElementById('adminCoreStatusContent');
       const label = document.getElementById('adminCoreStatusToggleLabel');
       if (!content) return;
       const isHidden = content.classList.toggle('hidden');
       if (label) label.textContent = isHidden ? 'Mostrar cores' : 'Ocultar cores';
-      if (!isHidden) renderAdminCoreStatusPanel();
+      if (!isHidden) { if (!coreStatusDraft) renderAdminCoreStatusPanel(); syncCoreStatusesFromCloud(); }
     }
-    function saveAdminCoreStatuses() {
+    async function saveAdminCoreStatuses() {
       const selects = [...document.querySelectorAll('#adminCoreStatusList [data-core-status-id]')];
-      if (!selects.length || !window.LuxExternalRoms?.saveCoreStatuses) return;
-      const statuses = Object.fromEntries(selects.map(select => [select.dataset.coreStatusId, select.value]));
       const user = currentUser;
-      if (!user) return;
-      window.LuxExternalRoms.saveCoreStatuses(statuses);
+      if (!selects.length || !coresReady() || coreStatusSaving || user?.role !== 'admin') return;
+      const statuses = Object.fromEntries(selects.map(select => [select.dataset.coreStatusId, select.value]));
       const message = document.getElementById('adminCoreStatusMessage');
-      if (message) message.textContent = 'Salvando status para todos os dispositivos...';
-      supabaseClient.functions.invoke('core-statuses', { body: { action: 'save', statuses, username: user.user, password: user.pass } }).then(({ data, error }) => {
-        if (error || data?.error) throw new Error(data?.error || 'Não foi possível salvar os status.');
-        window.LuxExternalRoms.setCoreStatuses(data.statuses || statuses);
-        if (message) message.textContent = 'Status dos cores salvo para todos os dispositivos.';
-        renderAdminCoreStatusPanel();
+      const button = document.getElementById('adminCoreStatusSave');
+      coreStatusSaving = true;
+      ++coreStatusRequest;
+      if (button) button.disabled = true;
+      selects.forEach(select => { select.disabled = true; });
+      if (message) message.textContent = 'Publicando status para todos os dispositivos...';
+      try {
+        const { data, error } = await supabaseClient.functions.invoke('core-statuses', { body: { action: 'save', statuses, username: user.user, password: user.pass } });
+        if (error || data?.error || !data?.statuses || typeof data.statuses !== 'object' || Array.isArray(data.statuses)) throw new Error('Não foi possível publicar. Suas alterações ainda não foram salvas no servidor.');
+        window.LuxExternalRoms.setCoreStatuses(data.statuses);
+        coreStatusDraft = false;
+        if (message) message.textContent = 'Status publicados para todos os dispositivos.';
         renderPublicCoreStatusList();
-      }).catch(error => { if (message) message.textContent = error.message || 'Não foi possível salvar os status.'; });
+        renderAdminCoreStatusPanel();
+      } catch (error) {
+        if (message) message.textContent = error.message;
+      } finally {
+        coreStatusSaving = false;
+        if (button) button.disabled = !coresReady();
+        selects.forEach(select => { select.disabled = false; });
+      }
     }
     let adminR2UnlockedUser = null;
 
@@ -4582,6 +4614,38 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     let gamesStatusFilter = 'all';
     let gamesFavoritesOnly = false;
     let gamesOriginFilter = 'all';
+    function setupDesktopGamesFilters(container) {
+      const actions = container.querySelector('.games-catalog-actions');
+      if (!actions || actions.querySelector('.games-filter-menu')) return;
+      const menu = document.createElement('details');
+      menu.className = 'games-filter-menu';
+      const summary = document.createElement('summary');
+      summary.innerHTML = '<i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>Filtros</span>';
+      const panel = document.createElement('div');
+      panel.className = 'games-filter-panel';
+      const values = {console: gamesConsoleFilter, origin: gamesOriginFilter, status: gamesStatusFilter};
+      const labels = {console: 'Console', origin: 'Origem dos jogos', status: 'Status'};
+      for (const select of actions.querySelectorAll('select')) {
+        const type = select.getAttribute('onchange').match(/setGamesFilter\('([^']+)'/)?.[1];
+        if (!type) continue;
+        const label = document.createElement('label');
+        label.textContent = labels[type];
+        select.value = values[type];
+        label.appendChild(select);
+        panel.appendChild(label);
+      }
+      for (const button of actions.querySelectorAll('button')) {
+        if (/setGamesFilter|reviewUnapprovedGames/.test(button.getAttribute('onclick') || '')) panel.appendChild(button);
+      }
+      menu.append(summary, panel);
+      menu.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { menu.open = false; summary.focus(); }
+      });
+      menu.addEventListener('focusout', event => {
+        if (event.relatedTarget && !menu.contains(event.relatedTarget)) menu.open = false;
+      });
+      actions.appendChild(menu);
+    }
     function setGamesFilter(type, value) {
       if (type === 'console') gamesConsoleFilter = value;
       else if (type === 'status') gamesStatusFilter = value;
@@ -4602,6 +4666,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const label = document.getElementById('gameCoreStatusToggleLabel');
       if (!content) return;
       const isHidden = content.classList.toggle('hidden');
+      if (!isHidden) syncCoreStatusesFromCloud();
+      document.getElementById('gameCoreStatusToggle')?.setAttribute('aria-expanded', String(!isHidden));
       if (label) label.textContent = isHidden ? 'Mostrar cores' : 'Ocultar cores';
     }
     function openGameCard(id) {
@@ -4651,19 +4717,19 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
               <h2 class="text-white font-bold text-lg md:text-xl">Central Retro & Emuladores</h2>
               <p class="text-xs text-purple-400/70 mt-0.5">Jogue clássicos direto no navegador</p>
             </div>
-            <div class="flex flex-wrap justify-end gap-2">
+            <div class="games-catalog-actions flex flex-wrap justify-end gap-2">
               <select onchange="setGamesFilter('console', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">🎮 Todos</option><option value="gba">🟣 GBA</option><option value="gb">🟡 GB</option><option value="gbc">🎨 GBC</option><option value="snes">🕹️ SNES</option><option value="megadrive">🔵 Mega Drive</option><option value="nes">🔴 NES</option><option value="mastersystem">🟠 Master System</option><option value="n64">🟢 N64</option><option value="psp">🔴 PSP</option></select><select onchange="setGamesFilter('origin', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">📚 Todos os jogos</option><option value="lux">⭐ Catálogo Lux</option><option value="external">📁 ROMs do dispositivo</option></select><button onclick="document.getElementById('externalRomInput').click()" class="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 rounded-lg px-3 py-2 text-[11px] font-bold text-white transition-colors">Abrir ROM</button><input id="externalRomInput" type="file" accept=".gb,.gbc,.gba,.nes,.sfc,.smc,.sms,.md,.gen,.n64,.z64,.v64,.iso,.cso,.pbp" class="hidden" onchange="importExternalRom(this.files[0]); this.value=''">
               <button onclick="setGamesFilter('favorites')" aria-pressed="${gamesFavoritesOnly}" class="${gamesFavoritesOnly ? 'bg-rose-500/20 border-rose-400/60 text-rose-200' : 'bg-[#120c1f] border-purple-900/60 text-purple-200 hover:border-rose-400/60'} border rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors flex items-center gap-1"><i data-lucide="heart" class="w-3.5 h-3.5 ${gamesFavoritesOnly ? 'fill-current' : ''}"></i> Favoritos</button>
               ${currentUser?.role === 'admin' ? `<button onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-rose-200 transition-colors">Revisar não aprovados</button><select onchange="setGamesFilter('status', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">Status: todos</option><option value="approved">✓ Aprovados</option><option value="pending">◷ Pendentes</option></select>` : ''}
             </div>
           </div>
-          <div class="mb-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-4">
+          <div id="gameCoreStatusPanel" class="mb-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div><p class="text-[11px] font-bold uppercase tracking-wide text-purple-400">Cores do emulador</p><p class="mt-1 text-[10px] text-purple-300/70">As bolinhas indicam o teste do core, não o status do jogo.</p></div>
-              <button type="button" onclick="togglePublicCoreStatusPanel()" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-1.5 text-[10px] font-bold text-purple-200 hover:bg-purple-900/70"><span id="gameCoreStatusToggleLabel">Mostrar cores</span></button>
+              <button id="gameCoreStatusToggle" type="button" onclick="togglePublicCoreStatusPanel()" aria-expanded="false" aria-controls="gameCoreStatusContent" aria-label="Mostrar ou ocultar cores do emulador" class="rounded-lg border border-purple-800/60 bg-[#120c1f] px-3 py-1.5 text-[10px] font-bold text-purple-200 hover:bg-purple-900/70"><span id="gameCoreStatusToggleLabel">Mostrar cores</span><span class="game-core-toggle-icon" aria-hidden="true">⌄</span></button>
             </div>
             <div id="gameCoreStatusContent" class="mt-3 hidden">
-              <div id="gameCoreStatusList" class="flex flex-wrap gap-2 text-[10px] font-bold text-purple-200"></div>
+              <div id="gameCoreStatusList" class="flex flex-wrap gap-2 text-[10px] font-bold text-purple-200"></div><p id="gameCoreSyncMessage" class="mt-2 text-[10px] text-purple-300" role="status"></p>
               <p id="externalRomStatus" class="mt-2 text-[10px] text-purple-400/80"></p>
             </div>
           </div>
@@ -4698,6 +4764,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       html += `</div></div>`;
       container.innerHTML = html;
+      setupDesktopGamesFilters(container);
       renderPublicCoreStatusList();
       syncCoreStatusesFromCloud();
       lucide.createIcons();

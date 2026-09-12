@@ -8,6 +8,13 @@ alter table public.emulator_core_statuses enable row level security;
 revoke all on public.emulator_core_statuses from anon, authenticated;
 grant select, insert, update, delete on public.emulator_core_statuses to service_role;
 
+-- Inicializa os mesmos valores do catálogo existente, preservando edições publicadas.
+insert into public.emulator_core_statuses (core_id, status) values
+  ('gb', 'tested'), ('gbc', 'tested'), ('gba', 'tested'),
+  ('nes', 'tested'), ('snes', 'tested'), ('megadrive', 'tested'),
+  ('mastersystem', 'tested'), ('n64', 'tested'), ('psp', 'untested')
+on conflict (core_id) do nothing;
+
 create or replace function public.touch_emulator_core_status_updated_at()
 returns trigger
 language plpgsql
