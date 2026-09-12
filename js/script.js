@@ -1860,7 +1860,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
 
       if (files.length > 1) {
-        const allowedExtensions = ['gba', 'gb', 'gbc', 'sfc', 'smc', 'zip', 'md', 'gen', 'bin', 'nes', 'n64', 'z64'];
+        const allowedExtensions = ['gba', 'gb', 'gbc', 'sfc', 'smc', 'zip', 'md', 'gen', 'bin', 'nes', 'sms', 'n64', 'z64'];
         submit.disabled = true;
         draft.disabled = true;
         submit.classList.add('opacity-60', 'cursor-wait');
@@ -2017,7 +2017,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         players: game.players,
         coop: game.coop,
         console: game.console,
-        consoleLabel: String(game.console || 'Console').replace('megadrive', 'Mega Drive').toUpperCase(),
+        consoleLabel: String(game.console || 'Console').replace('mastersystem', 'Master System').replace('megadrive', 'Mega Drive').toUpperCase(),
         url,
         logo: game.cover_url || gameStorageUrl(game.cover_path),
         synopsis: game.synopsis || game.sinopse,
@@ -3356,14 +3356,15 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function clearSearchFilter() {
-      activeSearchQuery = ''; 
-      
+      activeSearchQuery = '';
+
       const isMobile = window.innerWidth < 1024;
+      const isMediaCatalogSection = ['live', 'movies', 'series'].includes(currentSection);
 
       if (currentSection === 'live') {
         const liveChanSec = document.getElementById('liveChannelsSection');
         if (liveChanSec) liveChanSec.classList.remove('hidden');
-      } else {
+      } else if (isMediaCatalogSection) {
         const sidebar = document.getElementById('desktopSidebar');
         if (sidebar && !isMobile) {
           sidebar.style.display = '';
@@ -3373,7 +3374,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
 
       if (currentSection === 'games') renderGamesCatalog();
-      else filterMedia();
+      else if (isMediaCatalogSection) filterMedia();
     }
 
     function renderCurrentPage() {
