@@ -95,7 +95,7 @@ function enableEmulatorTouchGuard() {
   container.style.webkitUserSelect = 'none';
   container.style.webkitTouchCallout = 'none';
   emulatorContextMenuGuard = event => {
-    if (event.target?.closest?.('#emulatorContainer')) event.preventDefault();
+    if (event.target?.closest?.('#emulatorContainer')) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); }
   };
   document.addEventListener('contextmenu', emulatorContextMenuGuard, true);
 }
