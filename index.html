@@ -234,7 +234,7 @@
       </div>
     </section>
 
-    <!-- SEÇÃO: JOGOS (GBA / SNES / MEGA DRIVE / MASTER SYSTEM) -->
+    <!-- SEÇÃO: JOGOS (GBA / SNES / MEGA DRIVE / MASTER SYSTEM / PSP) -->
     <section id="gamesSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex flex-col overflow-hidden hidden">
       <!-- O conteúdo será injetado dinamicamente pela função renderGamesSection() -->
     </section>
@@ -608,7 +608,7 @@
           <div id="gameAdminSourceFile" class="hidden mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"></div>
         </div>
         <div><div class="flex items-center justify-between gap-2"><label class="text-[11px] text-purple-300 font-medium">Título</label><button type="button" onclick="searchGameMetadata()" class="text-[10px] font-bold text-indigo-300 hover:text-white transition-colors flex items-center gap-1"><i data-lucide="search" class="w-3 h-3"></i> Buscar dados</button></div><input id="gameAdminTitle" type="text" placeholder="Nome do jogo" onkeydown="if(event.key === 'Enter') { event.preventDefault(); searchGameMetadata(); }" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
-        <div><label class="text-[11px] text-purple-300 font-medium">Console</label><select id="gameAdminConsole" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"><option value="gba">Game Boy Advance</option><option value="gb">Game Boy</option><option value="gbc">Game Boy Color</option><option value="snes">SNES</option><option value="megadrive">Mega Drive</option><option value="mastersystem">Master System</option><option value="nes">NES</option><option value="n64">Nintendo 64</option></select></div>
+        <div><label class="text-[11px] text-purple-300 font-medium">Console</label><select id="gameAdminConsole" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"><option value="gba">Game Boy Advance</option><option value="gb">Game Boy</option><option value="gbc">Game Boy Color</option><option value="snes">SNES</option><option value="megadrive">Mega Drive</option><option value="mastersystem">Master System</option><option value="psp">PlayStation Portable</option><option value="nes">NES</option><option value="n64">Nintendo 64</option></select></div>
         <div><label class="text-[11px] text-purple-300 font-medium">Ano (opcional)</label><input id="gameAdminYear" type="number" min="1950" max="2100" placeholder="1994" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
         <div><label class="text-[11px] text-purple-300 font-medium">Gêneros (opcional)</label><input id="gameAdminGenres" type="text" placeholder="Ação, Plataforma" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
         <div><label for="gameAdminPlayers" class="text-[11px] text-purple-300 font-medium">Máximo de jogadores</label><input id="gameAdminPlayers" type="number" min="1" max="8" step="1" value="1" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
