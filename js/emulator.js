@@ -72,7 +72,7 @@ function startEmulatorSession() {
   window.EJS_gameName = getGameSaveKey(gameItem);
   window.EJS_defaultOptions = { 'save-state-location': 'browser' };
   window.EJS_startOnLoaded = true;
-  window.EJS_onGameStart = () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); loadRequestedGameSlot(); };
+  window.EJS_onGameStart = async () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); await loadNativeGameSave(gameItem); await loadRequestedGameSlot(); };
   const script = document.createElement('script');
   script.id = 'ejs-script';
   script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
@@ -416,6 +416,70 @@ async function loadRequestedGameSlot() {
   }
 }
 
+function nativeGameRecord(game) {
+  return { ...game, id: String(game?.id || game?.url || game?.name || '') + ':native' };
+}
+
+async function loadNativeGameSave(game = activeEmulatorGame) {
+  const user = currentUser;
+  const emulator = window.EJS_emulator;
+  if (!game || !user || !emulator?.gameManager?.FS) return;
+  const nativeGame = nativeGameRecord(game);
+  try {
+    let local = await readLocalGameSave(nativeGame, 0, user);
+    let cloud = null;
+    try { cloud = await loadCloudGameSave(nativeGame, 0, user); } catch (_) {}
+    let selected = local;
+    if (!selected || (cloud && Number(cloud.updatedAt) > Number(selected.updatedAt))) selected = cloud;
+    if (local && (!cloud || Number(local.updatedAt) > Number(cloud.updatedAt))) {
+      await uploadLocalGameSave(local, user).catch(() => null);
+    }
+    if (!selected?.state || currentUser !== user || activeEmulatorGame !== game) return;
+    const path = emulator.gameManager.getSaveFilePath?.();
+    if (!path) return;
+    emulator.gameManager.FS.writeFile(path, selected.state);
+    emulator.gameManager.loadSaveFiles?.();
+  } catch (error) {
+    console.warn('Save natural indisponível:', error);
+  }
+}
+
+async function saveNativeGame(game = activeEmulatorGame, user = currentUser) {
+  const emulator = window.EJS_emulator;
+  if (!game || !user || !emulator?.gameManager?.getSaveFile) throw new Error('O save natural ainda não está disponível.');
+  emulator.gameManager.saveSaveFiles?.();
+  const state = emulator.gameManager.getSaveFile(false);
+  if (!state || !state.byteLength) throw new Error('Este jogo ainda não criou um save natural. Salve dentro do jogo primeiro.');
+  const nativeGame = nativeGameRecord(game);
+  const updatedAt = Date.now();
+  const previous = await readLocalGameSave(nativeGame, 0, user);
+  await writeLocalGameSave(nativeGame, 0, state, updatedAt, true, user, previous?.cloudBaseAt ?? null);
+  const result = await uploadLocalGameSave(await readLocalGameSave(nativeGame, 0, user), user);
+  if (result?.newerCloud) throw new Error('A nuvem possui um save natural mais recente.');
+  return true;
+}
+
+async function saveNativeGameAndClose() {
+  const game = activeEmulatorGame;
+  const user = currentUser;
+  const status = document.getElementById('saveExitStatus');
+  if (!game || !user || gameSaveBusy) return;
+  gameSaveBusy = true;
+  const controls = [...document.querySelectorAll('#saveExitModal button')];
+  controls.forEach(button => { button.disabled = true; });
+  try {
+    status.textContent = 'Salvando o progresso normal do jogo...';
+    window.EJS_emulator?.pause?.(); pauseGamePlayTimer();
+    await saveNativeGame(game, user);
+    status.textContent = 'Save normal sincronizado!';
+    closeGameEmulator();
+  } catch (error) {
+    status.textContent = error.message || 'Não foi possível salvar o progresso normal.';
+  } finally {
+    gameSaveBusy = false;
+    controls.forEach(button => { button.disabled = false; });
+  }
+}
 function requestCloseGameEmulator() {
   if (!window.EJS_emulator || !activeEmulatorGame) return closeGameEmulator();
   createSaveExitModalDOM();
@@ -498,7 +562,7 @@ function createGameDetailsModalDOM() {
 
 function createSaveExitModalDOM() {
   if (document.getElementById('saveExitModal')) return;
-  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha um dos três slots. Seu progresso será salvo neste dispositivo e na nuvem da sua conta. Aguarde a confirmação do envio.</p><div id="saveExitSlots" class="mt-4 grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-4 w-full rounded-xl border border-purple-800/70 bg-purple-950/50 py-2.5 text-xs font-bold text-purple-200 hover:bg-rose-950/70 hover:text-rose-200">Fechar sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div id="saveExitModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"><div class="w-full max-w-md rounded-3xl border border-purple-800/70 bg-[#120c1f] p-6 shadow-2xl"><h2 class="text-lg font-bold text-white">Salvar antes de sair?</h2><p class="mt-1 text-xs text-purple-300">Escolha como salvar: o save normal é o arquivo criado pelo próprio jogo; o save state captura a tela atual em qualquer momento.</p><button onclick="saveNativeGameAndClose()" class="mt-4 w-full rounded-xl border border-emerald-700/70 bg-emerald-950/50 py-3 text-xs font-bold text-emerald-200 hover:bg-emerald-900/70">Salvar jogo normal</button><p class="mt-4 text-[10px] font-bold uppercase tracking-wide text-purple-400">Salvar como save state</p><div id="saveExitSlots" class="mt-2 grid grid-cols-3 gap-3"></div><p id="saveExitStatus" class="mt-3 text-xs text-purple-300"></p><button onclick="closeGameEmulator()" class="mt-4 w-full rounded-xl border border-purple-800/70 bg-purple-950/50 py-2.5 text-xs font-bold text-purple-200 hover:bg-rose-950/70 hover:text-rose-200">Fechar sem salvar</button><button onclick="returnToGameFromSaveExit()" class="mt-2 w-full py-2 text-xs text-purple-400 hover:text-white">Voltar ao jogo</button></div></div>`);
 }
 
 function createContinueSlotModalDOM() {
