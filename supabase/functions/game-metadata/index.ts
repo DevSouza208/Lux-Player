@@ -10,6 +10,7 @@ function consoleFromPlatforms(platforms: Array<{ name?: string }> = []) {
   const names = platforms.map(platform => (platform.name || '').toLowerCase());
   if (names.some(name => name.includes('game boy advance'))) return 'gba';
   if (names.some(name => name.includes('super nintendo') || name.includes('snes'))) return 'snes';
+  if (names.some(name => name.includes('master system') || name.includes('sega master'))) return 'mastersystem';
   if (names.some(name => name.includes('mega drive') || name.includes('genesis'))) return 'megadrive';
   if (names.some(name => name.includes('nintendo 64'))) return 'n64';
   if (names.some(name => name.includes('nintendo entertainment system'))) return 'nes';
