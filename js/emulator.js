@@ -95,13 +95,20 @@ function enableEmulatorTouchGuard() {
   container.style.webkitUserSelect = 'none';
   container.style.webkitTouchCallout = 'none';
   emulatorContextMenuGuard = event => {
-    if (event.target?.closest?.('#emulatorContainer')) { event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); }
+    const insideEmulator = event.target?.closest?.('#emulatorContainer');
+    if (!insideEmulator) return;
+    if (event.type === 'auxclick' && event.button !== 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
   };
-  document.addEventListener('contextmenu', emulatorContextMenuGuard, true);
+  ['contextmenu', 'dragstart', 'selectstart', 'auxclick', 'gesturestart'].forEach(type => {
+    document.addEventListener(type, emulatorContextMenuGuard, true);
+  });
 }
 
 function disableEmulatorTouchGuard() {
-  if (emulatorContextMenuGuard) document.removeEventListener('contextmenu', emulatorContextMenuGuard, true);
+  if (emulatorContextMenuGuard) ['contextmenu', 'dragstart', 'selectstart', 'auxclick', 'gesturestart'].forEach(type => document.removeEventListener(type, emulatorContextMenuGuard, true));
   emulatorContextMenuGuard = null;
 }
 function closeGameEmulator() {
