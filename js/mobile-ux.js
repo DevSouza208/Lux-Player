@@ -88,13 +88,23 @@
     head.classList.add('lux-mobile-games-head');
     const filters = head.children[1];
     if (filters && !filters.classList.contains('lux-mobile-original-filters')) filters.classList.add('lux-mobile-original-filters');
-    if (!head.querySelector('.lux-mobile-filter-button')) {
+    if (!head.querySelector('.lux-mobile-games-actions')) {
+      const actions = document.createElement('div');
+      actions.className = 'lux-mobile-games-actions';
+      const openRom = document.createElement('button');
+      openRom.type = 'button';
+      openRom.className = 'lux-mobile-open-rom-button';
+      openRom.innerHTML = `${icon('folder-open')} <span>Abrir ROM</span>`;
+      openRom.onclick = () => $('externalRomInput')?.click();
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'lux-mobile-filter-button';
-      button.innerHTML = `${icon('sliders-horizontal')} Filtros`;
+      button.setAttribute('aria-label', 'Filtros de jogos');
+      button.title = 'Filtros de jogos';
+      button.innerHTML = icon('sliders-horizontal');
       button.onclick = openGamesFilters;
-      head.appendChild(button);
+      actions.append(openRom, button);
+      head.appendChild(actions);
       refreshIcons();
     }
   }
