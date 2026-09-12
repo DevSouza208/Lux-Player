@@ -59,6 +59,23 @@ function toggleEmulatorFastForward(){
   const button=document.getElementById('emulatorFastForward');if(button){button.classList.toggle('bg-purple-600',emulatorFastForward);button.textContent=emulatorFastForward?'Fast-forward ligado':'Fast-forward';}
 }
 
+function fitEmulatorViewport() {
+  const container = document.getElementById('emulatorContainer');
+  if (!container) return;
+  const stage = container.parentElement;
+  if (stage) {
+    stage.style.minHeight = '0';
+    stage.style.minWidth = '0';
+  }
+  container.style.width = '100%';
+  container.style.height = '100%';
+  container.style.minWidth = '0';
+  container.style.minHeight = '0';
+  window.dispatchEvent(new Event('resize'));
+  requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+}
+
 function startEmulatorSession() {
   if (!pendingEmulatorGame) return;
   const gameItem = pendingEmulatorGame;
@@ -72,7 +89,7 @@ function startEmulatorSession() {
   window.EJS_gameName = getGameSaveKey(gameItem);
   window.EJS_defaultOptions = { 'save-state-location': 'browser' };
   window.EJS_startOnLoaded = true;
-  window.EJS_onGameStart = async () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); startGamePlayTimer(gameItem); if (gameItem.loadSource !== 'state' && gameItem.loadSource !== 'new') await loadNativeGameSave(gameItem); await loadRequestedGameSlot(); };
+  window.EJS_onGameStart = async () => { document.getElementById('emulatorControlsBtn')?.classList.remove('hidden'); fitEmulatorViewport(); startGamePlayTimer(gameItem); if (gameItem.loadSource !== 'state' && gameItem.loadSource !== 'new') await loadNativeGameSave(gameItem); await loadRequestedGameSlot(); };
   const script = document.createElement('script');
   script.id = 'ejs-script';
   script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
