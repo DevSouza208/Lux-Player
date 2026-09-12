@@ -188,11 +188,11 @@ function renderGameRating(data = {}) {
   const average = Number(data.average) || 0;
   const total = Number(data.total) || 0;
   const userRating = Number(data.userRating) || 0;
-  const stars = Array.from({ length: 5 }, (_, index) => {
+  const stars = currentUser ? Array.from({ length: 5 }, (_, index) => {
     const value = index + 1;
     const active = value <= userRating;
     return `<button type="button" onclick="saveGameRating(${value})" aria-label="Dar ${value} estrela${value > 1 ? 's' : ''}" class="text-2xl leading-none transition-transform hover:scale-110 ${active ? 'text-amber-300' : 'text-purple-800'}">${active ? '★' : '☆'}</button>`;
-  }).join('');
+  }).join('') : '<span class="text-[10px] text-purple-400/70">Entre para avaliar</span>';
   const averageStars = Array.from({ length: 5 }, (_, index) => index + 1 <= Math.round(average) ? '★' : '☆').join('');
   container.innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-3">
