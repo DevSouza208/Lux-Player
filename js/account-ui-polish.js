@@ -17,7 +17,7 @@
   // ============================================================
 
   if (window.__luxAccountUiPolishInstalled) return;
-  window.__luxAccountUiPolishInstalled = '20260913-account-ui1';
+  window.__luxAccountUiPolishInstalled = '20260913-account-ui2';
 
   const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
   let streamStatusRequest = 0;
@@ -146,7 +146,10 @@
       clearTimeout(debounce);
       debounce = setTimeout(refreshAdminStreamStatus, 120);
     });
-    adminObserver.observe(container, { childList: true, subtree: true });
+
+    // Observamos somente mudanças nos filhos DIRETOS do container. Assim a criação/
+    // atualização do nosso próprio badge não dispara uma nova chamada à API em loop.
+    adminObserver.observe(container, { childList: true, subtree: false });
 
     // Atualiza periodicamente somente quando o painel de clientes está visível.
     adminRefreshTimer = setInterval(() => {
