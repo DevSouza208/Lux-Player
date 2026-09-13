@@ -1,12 +1,12 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-20';
+  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-21';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
     [/Não foi possível conectar ao Supabase\. Tente novamente\./gi, 'Não foi possível entrar agora. Verifique sua conexão e tente novamente.'],
     [/Erro ao carregar do Supabase\./gi, 'Não foi possível carregar os clientes.'],
-    [/Erro de conexão com Supabase\./gi, 'Não foi possível carregar os clientes. Tente novamente.'],
+    [/Erro de conexão com Supabase/gi, 'Não foi possível carregar os clientes. Tente novamente.'],
     [/Consultando status públicos\.\.\./gi, 'Atualizando informações...'],
     [/Carregando os status públicos\.\.\./gi, 'Preparando informações...'],
     [/Configurando sua experiência\.\.\. O primeiro acesso pode demorar cerca de 1 min\./gi, 'Preparando tudo para você... No primeiro acesso pode levar um pouquinho mais.'],
@@ -18,6 +18,7 @@
     [/Baixando categorias e canais\.\.\./gi, 'Preparando seus canais...'],
     [/Baixando catálogo e categorias\.\.\./gi, 'Organizando seu catálogo...'],
     [/Baixando catálogo HTTPS sincronizado\.\.\./gi, 'Preparando seu catálogo...'],
+    [/Preparando catálogo oficial do provedor\.\.\./gi, 'Preparando seu catálogo...'],
     [/Buscando temporadas\.\.\./gi, 'Preparando temporadas...'],
     [/Carregando sinopse\.\.\./gi, 'Preparando detalhes...'],
     [/Sincronizando temporadas e episódios\.\.\./gi, 'Carregando episódios...'],
@@ -29,6 +30,7 @@
     [/Sincronização parcial de /gi, 'Atualização parcial de '],
     [/sincronizado com sucesso/gi, 'atualizado com sucesso'],
     [/Catálogo Xtream HTTPS sincronizado/gi, 'Catálogo atualizado'],
+    [/Catálogo oficial do provedor/gi, 'Catálogo oficial'],
     [/Lista M3U HTTPS sincronizada/gi, 'Catálogo atualizado'],
     [/Arquivo M3U no Supabase/gi, 'Lista salva'],
     [/Lista M3U original \(fallback HTTP\)/gi, 'Lista principal'],
@@ -140,7 +142,7 @@
   const loadPlaylistFreshness = () => {
     if (document.querySelector('script[data-lux-playlist-freshness]')) return;
     const script = document.createElement('script');
-    script.src = 'js/playlist-freshness.js?v=20260913-fresh1';
+    script.src = 'js/playlist-freshness.js?v=20260913-provider1';
     script.async = true;
     script.dataset.luxPlaylistFreshness = '1';
     document.head.appendChild(script);
