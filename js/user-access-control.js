@@ -1,12 +1,13 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260913-access1';
+  const VERSION = '20260913-access2';
   if (window.__luxUserAccessControlInstalled === VERSION) return;
   window.__luxUserAccessControlInstalled = VERSION;
 
   const truthy = value => value === true || value === 1 || value === '1' || String(value || '').toLowerCase() === 'true';
   const roleOf = user => String(user?.accountRole || user?.role || 'user').trim().toLowerCase();
+  let loginSyncBusy = false;
 
   const canUseGames = user => {
     const role = roleOf(user);
@@ -42,7 +43,6 @@
           ...user,
           role: normalizedRole,
           accountRole: normalizedRole,
-          // Tester não depende da assinatura IPTV para entrar no Lux.
           dueDate: normalizedRole === 'tester' ? '' : user.dueDate,
           gamesAccess: normalizedRole === 'tester' || normalizedRole === 'admin' || truthy(row.acesso_jogos),
           booksAccess: normalizedRole === 'tester' || normalizedRole === 'admin' || truthy(row.acesso_livros),
@@ -68,6 +68,62 @@
     };
     patched.__luxAccessPatched = true;
     window.isExpired = patched;
+    return true;
+  }
+
+  async function syncSubscriptionBeforeLogin(username, password) {
+    let client = null;
+    try { client = supabaseClient; } catch (_) {}
+    if (!client?.functions?.invoke) return null;
+    const { data, error } = await client.functions.invoke('subscription-sync', {
+      body: { username, password }
+    });
+    if (error) {
+      console.warn('[Lux Access] Não foi possível atualizar a assinatura agora; usando o último vencimento salvo.', error);
+      return null;
+    }
+    return data || null;
+  }
+
+  function installLoginHook() {
+    const original = window.handleLogin;
+    if (typeof original !== 'function' || original.__luxAccessPatched) return typeof original === 'function';
+
+    const patched = async function() {
+      if (loginSyncBusy) return;
+      const username = String(document.getElementById('authEmail')?.value || '').trim();
+      const password = String(document.getElementById('authPass')?.value || '').trim();
+      if (!username || !password) return original.apply(this, arguments);
+
+      loginSyncBusy = true;
+      const status = document.getElementById('authStatusText');
+      const button = document.getElementById('loginBtn');
+      const previousDisabled = button?.disabled;
+      if (button) button.disabled = true;
+      if (status) {
+        status.textContent = 'Atualizando sua assinatura...';
+        status.className = 'text-xs text-center text-purple-400 font-medium';
+      }
+
+      try {
+        const subscription = await syncSubscriptionBeforeLogin(username, password);
+        if (subscription?.allowed === false) {
+          if (status) {
+            const due = subscription.dueDate ? ` Vencimento: ${subscription.dueDate}.` : '';
+            status.textContent = `Sua assinatura IPTV está inativa.${due}`;
+            status.className = 'text-xs text-center text-rose-400 font-medium';
+          }
+          if (button) button.disabled = false;
+          return;
+        }
+      } finally {
+        loginSyncBusy = false;
+        if (button) button.disabled = Boolean(previousDisabled);
+      }
+      return original.apply(this, arguments);
+    };
+    patched.__luxAccessPatched = true;
+    window.handleLogin = patched;
     return true;
   }
 
@@ -272,6 +328,7 @@
     const ready = [
       installUserParser(),
       installExpiryParser(),
+      installLoginHook(),
       installSectionGuard(),
       installStartAppHook(),
       installAdminEditHook(),
@@ -287,6 +344,7 @@
     canGames: () => { try { return canUseGames(currentUser); } catch (_) { return false; } },
     canBooks: () => { try { return canUseBooks(currentUser); } catch (_) { return false; } },
     refresh: applyAccessVisibility,
+    syncSubscription: (username, password) => syncSubscriptionBeforeLogin(username, password),
     version: VERSION
   };
 
