@@ -1,9 +1,14 @@
 (() => {
   'use strict';
-  if (window.__luxSportsLogoDecoratorInstalled === '20260913-footy-fast1') return;
-  window.__luxSportsLogoDecoratorInstalled = '20260913-footy-fast1';
+  if (window.__luxSportsLogoDecoratorInstalled === '20260913-footy-fast2') return;
+  window.__luxSportsLogoDecoratorInstalled = '20260913-footy-fast2';
 
+  const MAX_ACTIVE_LOGOS = 6;
   const failed = new Set();
+  const ready = new Set();
+  const pending = new Map();
+  const queue = [];
+  let active = 0;
   let scheduled = false;
 
   const norm = v => String(v || '')
@@ -70,41 +75,94 @@
     return games.find(g => text.includes(norm(g.home)) && text.includes(norm(g.away))) || null;
   }
 
-  function applyLogo(teamBox, name, priority = false) {
-    const holder = teamBox?.querySelector('div');
-    if (!holder || holder.querySelector('[data-footy-logo]')) return;
-    const url = footyUrl(name);
-    if (!url || failed.has(url)) return;
+  function flushLogo(url, ok) {
+    const callbacks = pending.get(url) || [];
+    pending.delete(url);
+    callbacks.forEach(callback => {
+      try { callback(ok); } catch (_) {}
+    });
+  }
 
+  function pumpLogoQueue() {
+    while (active < MAX_ACTIVE_LOGOS && queue.length) {
+      const url = queue.shift();
+      if (!url || ready.has(url) || failed.has(url)) continue;
+      active += 1;
+      const preload = new Image();
+      preload.alt = '';
+      preload.decoding = 'async';
+      preload.fetchPriority = 'high';
+      preload.referrerPolicy = 'no-referrer';
+      preload.onload = () => {
+        ready.add(url);
+        active -= 1;
+        flushLogo(url, true);
+        pumpLogoQueue();
+      };
+      preload.onerror = () => {
+        failed.add(url);
+        active -= 1;
+        flushLogo(url, false);
+        pumpLogoQueue();
+      };
+      preload.src = url;
+    }
+  }
+
+  function requestLogo(url, callback) {
+    if (!url || failed.has(url)) {
+      callback(false);
+      return;
+    }
+    if (ready.has(url)) {
+      callback(true);
+      return;
+    }
+    if (pending.has(url)) {
+      pending.get(url).push(callback);
+      return;
+    }
+    pending.set(url, [callback]);
+    queue.push(url);
+    pumpLogoQueue();
+  }
+
+  function showLogo(holder, url) {
+    if (!holder?.isConnected || holder.querySelector('[data-footy-logo]')) return;
     const img = document.createElement('img');
     img.dataset.footyLogo = '1';
     img.src = url;
     img.alt = '';
-    img.loading = priority ? 'eager' : 'lazy';
+    img.loading = 'eager';
     img.decoding = 'async';
-    img.fetchPriority = priority ? 'high' : 'low';
     img.referrerPolicy = 'no-referrer';
     img.className = 'h-9 w-9 object-contain';
-    img.style.display = 'none';
-    img.onload = () => {
-      img.style.display = 'block';
-      holder.querySelector('[data-shield-fallback]')?.classList.add('hidden');
-    };
     img.onerror = () => {
       failed.add(url);
       img.remove();
+      holder.querySelector('[data-shield-fallback]')?.classList.remove('hidden');
     };
+    holder.querySelector('[data-shield-fallback]')?.classList.add('hidden');
     holder.prepend(img);
   }
 
-  function decorateCard(card, index) {
+  function applyLogo(teamBox, name) {
+    const holder = teamBox?.querySelector('div');
+    if (!holder || holder.querySelector('[data-footy-logo]')) return;
+    const url = footyUrl(name);
+    if (!url || failed.has(url)) return;
+    requestLogo(url, ok => {
+      if (ok) showLogo(holder, url);
+    });
+  }
+
+  function decorateCard(card) {
     const game = gameForCard(card);
     if (!game) return;
     const grid = card.children?.[1];
     if (!grid || grid.children.length < 3) return;
-    const priority = index < 6;
-    applyLogo(grid.children[0], game.home, priority);
-    applyLogo(grid.children[2], game.away, priority);
+    applyLogo(grid.children[0], game.home);
+    applyLogo(grid.children[2], game.away);
 
     const footer = card.lastElementChild;
     if (footer && !/footylogos/i.test(footer.textContent || '')) {
@@ -113,8 +171,7 @@
   }
 
   function decorate() {
-    const cards = [...document.querySelectorAll('#homeJogosContainer [data-sports-guide-card]')];
-    cards.forEach((card, index) => decorateCard(card, index));
+    document.querySelectorAll('#homeJogosContainer [data-sports-guide-card]').forEach(decorateCard);
   }
 
   function scheduleDecorate() {
@@ -134,7 +191,11 @@
       const observer = new MutationObserver(scheduleDecorate);
       observer.observe(home,{childList:true});
     }
-    window.LuxSportsLogos = { decorate, footyUrl };
+    window.LuxSportsLogos = {
+      decorate,
+      footyUrl,
+      queueStatus: () => ({ active, queued: queue.length, ready: ready.size, failed: failed.size, max: MAX_ACTIVE_LOGOS })
+    };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',boot,{once:true});
