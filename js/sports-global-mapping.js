@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsGlobalMappingInstalled === '20260913-map2') return;
-  window.__luxSportsGlobalMappingInstalled = '20260913-map2';
+  if (window.__luxSportsGlobalMappingInstalled === '20260913-map3') return;
+  window.__luxSportsGlobalMappingInstalled = '20260913-map3';
 
   const GROUP_RE = /(guia\s+de\s+jogos|jogos\s+do\s+dia)/i;
   const QUALITY_RE = /\b(?:fhd|full\s*hd|hd|sd|uhd|4k|8k|hevc|h265|h264|60fps|50fps)\b/gi;
@@ -20,7 +20,11 @@
     'liverpool':'liverpool-fc','bayern de munique':'bayern-munich',
     'fc dallas':'fc-dallas','portland timbers':'portland-timbers','st louis city sc':'st-louis-city-sc',
     'minnesota united fc':'minnesota-united','minnesota united':'minnesota-united','monterrey':'monterrey',
-    'tigres uanl':'tigres-uanl','colorado rapids':'colorado-rapids','cf montreal':'cf-montreal'
+    'tigres uanl':'tigres-uanl','colorado rapids':'colorado-rapids','cf montreal':'cf-montreal',
+    'racing santander':'racing-santander','alaves':'deportivo-alaves','deportivo alaves':'deportivo-alaves',
+    'genoa':'genoa','frosinone':'frosinone-calcio','frosinone calcio':'frosinone-calcio',
+    'borussia dortmund':'borussia-dortmund','dortmund':'borussia-dortmund','augsburg':'fc-augsburg',
+    'fc augsburg':'fc-augsburg','bayer leverkusen':'bayer-leverkusen'
   }));
 
   function allLive() {
@@ -131,9 +135,16 @@
         if(!url) return;
         const img=document.createElement('img');
         img.dataset.footyLogo='1';
-        img.src=url; img.alt=name; img.loading='lazy'; img.referrerPolicy='no-referrer';
+        img.src=url;
+        img.alt='';
+        img.loading='lazy';
+        img.referrerPolicy='no-referrer';
         img.className='h-9 w-9 object-contain';
-        img.onload=()=>holder.querySelector('[data-shield-fallback]')?.classList.add('hidden');
+        img.style.display='none';
+        img.onload=()=>{
+          img.style.display='block';
+          holder.querySelector('[data-shield-fallback]')?.classList.add('hidden');
+        };
         img.onerror=()=>img.remove();
         holder.prepend(img);
       });
