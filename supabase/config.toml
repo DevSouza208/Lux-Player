@@ -31,3 +31,7 @@ verify_jwt = false
 
 [functions.game-metadata]
 verify_jwt = false
+
+[functions.sports-feed]
+# Feed público em leitura; mapeamentos exigem login de administrador no corpo da função.
+verify_jwt = false
