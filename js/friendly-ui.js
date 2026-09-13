@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-13';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-14';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -113,7 +113,7 @@
   const loadSports = () => {
     if (document.querySelector('script[data-lux-sports]')) return;
     const script = document.createElement('script');
-    script.src = 'js/sports.js?v=20260912-sports2';
+    script.src = 'js/sports.js?v=20260912-sports3';
     script.async = true;
     script.dataset.luxSports = '1';
     document.head.appendChild(script);
@@ -125,15 +125,6 @@
     script.src = 'js/sports-home-guard.js?v=20260912-sports-home-guard1';
     script.async = true;
     script.dataset.luxSportsHomeGuard = '1';
-    document.head.appendChild(script);
-  };
-
-  const loadSportsPolish = () => {
-    if (document.querySelector('script[data-lux-sports-polish]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/sports-polish.js?v=20260912-sports-polish2';
-    script.async = true;
-    script.dataset.luxSportsPolish = '1';
     document.head.appendChild(script);
   };
 
@@ -181,7 +172,6 @@
     loadGameDuplicateConsoleFix();
     loadSports();
     loadSportsHomeGuard();
-    loadSportsPolish();
     loadMobileControlOpacity();
     loadMobileCustomControls();
     observer.observe(document.documentElement, {
