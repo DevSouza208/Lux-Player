@@ -1,7 +1,10 @@
 (() => {
   'use strict';
-  if (window.__luxSportsLogoDecoratorInstalled === '20260913-footy1') return;
-  window.__luxSportsLogoDecoratorInstalled = '20260913-footy1';
+  if (window.__luxSportsLogoDecoratorInstalled === '20260913-footy-fast1') return;
+  window.__luxSportsLogoDecoratorInstalled = '20260913-footy-fast1';
+
+  const failed = new Set();
+  let scheduled = false;
 
   const norm = v => String(v || '')
     .normalize('NFD')
@@ -30,6 +33,24 @@
     'fc augsburg':'fc-augsburg','bayer leverkusen':'bayer-leverkusen'
   }));
 
+  function ensureConnectionHints() {
+    if (!document.head.querySelector('link[data-lux-footy-preconnect]')) {
+      const preconnect = document.createElement('link');
+      preconnect.rel = 'preconnect';
+      preconnect.href = 'https://assets.footylogos.com';
+      preconnect.crossOrigin = 'anonymous';
+      preconnect.dataset.luxFootyPreconnect = '1';
+      document.head.appendChild(preconnect);
+    }
+    if (!document.head.querySelector('link[data-lux-footy-dns]')) {
+      const dns = document.createElement('link');
+      dns.rel = 'dns-prefetch';
+      dns.href = '//assets.footylogos.com';
+      dns.dataset.luxFootyDns = '1';
+      document.head.appendChild(dns);
+    }
+  }
+
   function teamSlug(name) {
     const full = norm(name).replace(/\b(?:da|de|do|das|dos)\b/g,' ').replace(/\s+/g,' ').trim();
     const simple = full.replace(/\b(?:clube|club|futebol|football|fc|sc|ec|ac|cf|saf)\b/g,' ').replace(/\s+/g,' ').trim();
@@ -49,17 +70,19 @@
     return games.find(g => text.includes(norm(g.home)) && text.includes(norm(g.away))) || null;
   }
 
-  function applyLogo(teamBox, name) {
+  function applyLogo(teamBox, name, priority = false) {
     const holder = teamBox?.querySelector('div');
     if (!holder || holder.querySelector('[data-footy-logo]')) return;
     const url = footyUrl(name);
-    if (!url) return;
+    if (!url || failed.has(url)) return;
 
     const img = document.createElement('img');
     img.dataset.footyLogo = '1';
     img.src = url;
     img.alt = '';
-    img.loading = 'lazy';
+    img.loading = priority ? 'eager' : 'lazy';
+    img.decoding = 'async';
+    img.fetchPriority = priority ? 'high' : 'low';
     img.referrerPolicy = 'no-referrer';
     img.className = 'h-9 w-9 object-contain';
     img.style.display = 'none';
@@ -67,17 +90,21 @@
       img.style.display = 'block';
       holder.querySelector('[data-shield-fallback]')?.classList.add('hidden');
     };
-    img.onerror = () => img.remove();
+    img.onerror = () => {
+      failed.add(url);
+      img.remove();
+    };
     holder.prepend(img);
   }
 
-  function decorateCard(card) {
+  function decorateCard(card, index) {
     const game = gameForCard(card);
     if (!game) return;
     const grid = card.children?.[1];
     if (!grid || grid.children.length < 3) return;
-    applyLogo(grid.children[0], game.home);
-    applyLogo(grid.children[2], game.away);
+    const priority = index < 6;
+    applyLogo(grid.children[0], game.home, priority);
+    applyLogo(grid.children[2], game.away, priority);
 
     const footer = card.lastElementChild;
     if (footer && !/footylogos/i.test(footer.textContent || '')) {
@@ -86,15 +113,26 @@
   }
 
   function decorate() {
-    document.querySelectorAll('#homeJogosContainer [data-sports-guide-card]').forEach(decorateCard);
+    const cards = [...document.querySelectorAll('#homeJogosContainer [data-sports-guide-card]')];
+    cards.forEach((card, index) => decorateCard(card, index));
+  }
+
+  function scheduleDecorate() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      decorate();
+    });
   }
 
   function boot() {
+    ensureConnectionHints();
     decorate();
     const home = document.getElementById('homeJogosContainer');
     if (home) {
-      const observer = new MutationObserver(() => queueMicrotask(decorate));
-      observer.observe(home,{childList:true,subtree:true});
+      const observer = new MutationObserver(scheduleDecorate);
+      observer.observe(home,{childList:true});
     }
     window.LuxSportsLogos = { decorate, footyUrl };
   }
