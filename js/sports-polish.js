@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxSportsPolishInstalled) return;
-  window.__luxSportsPolishInstalled = '20260912-sports-polish1';
+  window.__luxSportsPolishInstalled = '20260912-sports-polish2';
 
   const state = {
     logos: new Map(),
@@ -11,6 +11,31 @@
     observer: null,
     scheduled: false
   };
+
+  const BROADCASTER_DOMAINS = [
+    [/\b(amazon|prime video)\b/, 'primevideo.com'],
+    [/\b(sportv|spor tv)\b/, 'sportv.globo.com'],
+    [/\bpremiere\b/, 'premiere.globo.com'],
+    [/\bespn\b/, 'espn.com.br'],
+    [/\bdisney\b/, 'disneyplus.com'],
+    [/\bcaze\b/, 'youtube.com'],
+    [/^globo$/, 'globo.com'],
+    [/\b(ge tv|getv)\b/, 'ge.globo.com'],
+    [/\brecord\b/, 'record.r7.com'],
+    [/\bapple tv\b/, 'tv.apple.com'],
+    [/\bparamount\b/, 'paramountplus.com'],
+    [/\b(onefootball|one football)\b/, 'onefootball.com'],
+    [/\bsporty\s*net\b/, 'sportynet.com.br'],
+    [/\bjovem pan\b/, 'jovempan.com.br'],
+    [/\bmetropoles\b/, 'metropoles.com'],
+    [/\btv brasil\b/, 'tvbrasil.ebc.com.br'],
+    [/\bcbf tv\b/, 'cbf.com.br'],
+    [/\bfgf tv\b/, 'fgf.com.br'],
+    [/\bfpf tv\b/, 'futebolpaulista.com.br'],
+    [/\b(xsports|x sports)\b/, 'xsports.com.br'],
+    [/\btve es\b/, 'tve.es.gov.br'],
+    [/\b(canal do benja|ulisses tv|cariocao tv)\b/, 'youtube.com']
+  ];
 
   const normalize = value => String(value || '')
     .normalize('NFD')
@@ -84,6 +109,84 @@
     target.prepend(img);
   }
 
+  function broadcasterDomain(name) {
+    const key = normalize(name);
+    for (const [pattern, domain] of BROADCASTER_DOMAINS) {
+      if (pattern.test(key)) return domain;
+    }
+    return '';
+  }
+
+  function broadcasterIcon(name) {
+    const domain = broadcasterDomain(name);
+    if (!domain) return '';
+    return `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(`https://${domain}`)}&sz=64`;
+  }
+
+  function broadcasterFallback(name) {
+    const fallback = document.createElement('span');
+    fallback.dataset.luxBroadcasterFallback = '1';
+    fallback.className = 'inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-purple-800/70 px-1 text-[8px] font-black text-white';
+    fallback.textContent = String(name || 'TV').trim().slice(0, 2).toUpperCase();
+    return fallback;
+  }
+
+  function appendBroadcasterMark(parent, name) {
+    const icon = broadcasterIcon(name);
+    if (!icon) {
+      parent.appendChild(broadcasterFallback(name));
+      return;
+    }
+    const img = document.createElement('img');
+    img.dataset.luxBroadcasterLogo = '1';
+    img.src = icon;
+    img.alt = `Logo ${name}`;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.referrerPolicy = 'no-referrer';
+    img.className = 'h-5 w-5 shrink-0 rounded-md bg-white/10 object-contain p-0.5';
+    img.addEventListener('error', () => {
+      img.replaceWith(broadcasterFallback(name));
+    }, { once: true });
+    parent.appendChild(img);
+  }
+
+  function polishBroadcasters(card, game) {
+    const broadcasters = Array.isArray(game?.broadcasters) ? game.broadcasters.filter(Boolean) : [];
+    if (!broadcasters.length) return;
+
+    const expected = normalize(broadcasters.join(', '));
+    const box = [...card.querySelectorAll('div')].find(el => {
+      if (el.dataset.luxBroadcasterBox === '1') return true;
+      const text = normalize((el.textContent || '').replace(/^📺\s*/, ''));
+      return text === expected;
+    });
+
+    if (box && box.dataset.luxBroadcasterBox !== '1') {
+      box.dataset.luxBroadcasterBox = '1';
+      box.textContent = '';
+      box.classList.add('flex', 'flex-wrap', 'items-center', 'gap-2');
+      broadcasters.forEach(name => {
+        const chip = document.createElement('span');
+        chip.className = 'inline-flex items-center gap-1.5 rounded-lg bg-purple-950/50 px-2 py-1 text-[10px] text-purple-200';
+        appendBroadcasterMark(chip, name);
+        const label = document.createElement('span');
+        label.textContent = name;
+        chip.appendChild(label);
+        box.appendChild(chip);
+      });
+    }
+
+    const watchButton = card.querySelector('[data-sports-watch]');
+    if (watchButton && !watchButton.querySelector('[data-lux-broadcaster-logo], [data-lux-broadcaster-fallback]')) {
+      const label = String(watchButton.textContent || '').replace(/^Assistir na\s+/i, '').trim();
+      if (label) {
+        watchButton.classList.add('flex', 'items-center', 'justify-center', 'gap-2');
+        appendBroadcasterMark(watchButton, label);
+      }
+    }
+  }
+
   function polishTabs() {
     const api = window.LuxSports;
     const tabs = document.querySelectorAll('[data-lux-sports-tabs] [data-sports-tab]');
@@ -146,6 +249,8 @@
         addLogo(strongs[0], logos.home_logo, `Escudo ${game.home}`);
         addLogo(strongs[2], logos.away_logo, `Escudo ${game.away}`);
       }
+
+      polishBroadcasters(card, game);
     });
   }
 
