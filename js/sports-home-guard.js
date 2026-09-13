@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-global2') return;
-  window.__luxSportsHomeGuardInstalled = '20260913-guide-global2';
+  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-global3') return;
+  window.__luxSportsHomeGuardInstalled = '20260913-guide-global3';
 
   let observer = null;
   let attempts = 0;
@@ -12,6 +12,15 @@
     script.src = 'js/sports-global-mapping.js?v=20260913-global-cache2';
     script.async = true;
     script.dataset.luxSportsLogos = '1';
+    document.head.appendChild(script);
+  }
+
+  function loadSportsAdmin() {
+    if (document.querySelector('script[data-lux-sports-admin]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/sports-admin.js?v=20260913-shields-admin1';
+    script.async = true;
+    script.dataset.luxSportsAdmin = '1';
     document.head.appendChild(script);
   }
 
@@ -31,6 +40,7 @@
   }
 
   loadLogoDecorator();
+  loadSportsAdmin();
   const timer = setInterval(() => {
     attempts += 1;
     if (ensureOwner() || attempts >= 240) clearInterval(timer);
