@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260913-v163-sports-guide7';
+  const RESET_VERSION = '20260913-v163-provider-catalog1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -166,7 +166,7 @@ function animateDashboardEntry() {
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
-    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260912-xtream-sync-1'],
+    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260913-provider-catalog1'],
     ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260912-admin-client-sync-1']
   ];
   modules.forEach(([name, src]) => {
