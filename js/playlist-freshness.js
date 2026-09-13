@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxPlaylistFreshnessInstalled === '20260913-fresh1') return;
-  window.__luxPlaylistFreshnessInstalled = '20260913-fresh1';
+  if (window.__luxPlaylistFreshnessInstalled === '20260913-provider1') return;
+  window.__luxPlaylistFreshnessInstalled = '20260913-provider1';
 
   const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
   const MAX_AGE = 3 * 60 * 60 * 1000;
@@ -60,18 +60,20 @@
     return data || null;
   }
 
-  async function reloadFreshPlaylist(url) {
-    if (!/^https?:\/\//i.test(String(url || ''))) return false;
+  async function reloadProviderCatalog(result, row, account) {
     try {
-      if (typeof loadPlaylist !== 'function') return false;
+      if (window.LuxSyncedCatalog?.reload) {
+        const loaded = await window.LuxSyncedCatalog.reload();
+        return Boolean(loaded?.count);
+      }
+
+      const url = result?.playlist || result?.url || row?.lista_m3u_https || account?.m3uHttpsUrl;
+      if (!/^https?:\/\//i.test(String(url || '')) || typeof loadPlaylist !== 'function') return false;
       await loadPlaylist(url);
-      try {
-        if (currentUser) currentUser.m3uHttpsUrl = url;
-      } catch (_) {}
       try { window.LuxSports?.refresh?.(); } catch (_) {}
       return true;
     } catch (error) {
-      console.warn('[Lux Playlist Freshness] A lista foi atualizada no servidor, mas não pôde ser recarregada nesta sessão.', error);
+      console.warn('[Lux Playlist Freshness] O provedor atualizou, mas o catálogo não pôde ser recarregado nesta sessão.', error);
       return false;
     }
   }
@@ -109,11 +111,10 @@
       if (!row || !/^https?:\/\//i.test(String(row.lista_m3u || '').trim())) return { skipped: 'no-remote-list' };
       if (!force && !isStale(row)) return { fresh: true, syncedAt: row.lista_m3u_sync_at };
 
-      console.info('[Lux Playlist Freshness] Lista antiga detectada. Atualizando apenas a M3U...');
+      console.info('[Lux Playlist Freshness] Catálogo do provedor antigo detectado. Verificando atualização...');
       const result = await syncSelf(account);
-      const url = result?.url || row.lista_m3u_https || account.m3uHttpsUrl;
-      const reloaded = await reloadFreshPlaylist(url);
-      console.info('[Lux Playlist Freshness] M3U atualizada.', { syncedAt: result?.syncedAt, reloaded });
+      const reloaded = await reloadProviderCatalog(result, row, account);
+      console.info('[Lux Playlist Freshness] Catálogo mestre verificado.', { syncedAt: result?.syncedAt, version: result?.version, reloaded });
       checkedUsers.set(username, now());
       return { refreshed: true, reloaded, result };
     } catch (error) {
