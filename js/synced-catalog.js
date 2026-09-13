@@ -1,5 +1,7 @@
 (() => {
-  const BRIDGE_VERSION = '20260912-xtream-sync-2';
+  const BRIDGE_VERSION = '20260913-provider-catalog1';
+  const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
+  const PROVIDER_MANIFEST_URL = `${WORKER_BASE}/provider/manifest.json`;
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -39,7 +41,7 @@
     return match ? String(match[1]) : '';
   };
 
-  const deriveManifestUrl = () => {
+  const deriveLegacyManifestUrl = () => {
     const httpsUrl = String(currentUser?.m3uHttpsUrl || '').trim();
     if (!/^https:\/\//i.test(httpsUrl)) return '';
     try {
@@ -52,16 +54,31 @@
     }
   };
 
-  const fetchJson = async url => {
-    const response = await fetch(url, { cache: 'no-store' });
+  const fetchJson = async (url, cache = 'no-store') => {
+    const response = await fetch(url, { cache });
     if (!response.ok) throw new Error(`HTTP ${response.status} em ${url}`);
     return response.json();
   };
 
-  const fetchText = async url => {
-    const response = await fetch(url, { cache: 'no-store' });
+  const fetchText = async (url, cache = 'force-cache') => {
+    const response = await fetch(url, { cache });
     if (!response.ok) throw new Error(`HTTP ${response.status} em ${url}`);
     return response.text();
+  };
+
+  const loadManifest = async () => {
+    const candidates = [PROVIDER_MANIFEST_URL, deriveLegacyManifestUrl()].filter(Boolean);
+    let lastError = null;
+    for (const url of candidates) {
+      try {
+        const manifest = await fetchJson(url, 'no-store');
+        if (!manifest?.files || !manifest?.playlist) throw new Error('Manifesto incompleto.');
+        return { manifest, url };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error('Manifesto HTTPS não disponível.');
   };
 
   const mapBy = (items, keyFn) => {
@@ -83,6 +100,17 @@
     const byLogo = mapBy(groupedSeries, item => normalizeAssetUrl(item.logo));
     const byName = mapBy(groupedSeries, item => normalizeText(item.name));
 
+    // Índice simples por primeiro token para evitar comparar todas as séries com todas.
+    const byToken = new Map();
+    groupedSeries.forEach(item => {
+      const tokens = normalizeText(item.name).split(' ').filter(token => token.length > 2);
+      const token = tokens[0];
+      if (!token) return;
+      const list = byToken.get(token) || [];
+      list.push(item);
+      byToken.set(token, list);
+    });
+
     return official => {
       const coverKey = normalizeAssetUrl(official?.cover || official?.cover_big || official?.backdrop_path?.[0]);
       if (coverKey) {
@@ -102,9 +130,11 @@
         }
       }
 
+      const firstToken = nameKey.split(' ').find(token => token.length > 2);
+      const candidates = firstToken ? (byToken.get(firstToken) || []) : [];
       let best = null;
       let bestScore = 0;
-      for (const candidate of groupedSeries) {
+      for (const candidate of candidates) {
         if (used.has(candidate)) continue;
         const score = tokenScore(official?.name, candidate?.name);
         if (score > bestScore) {
@@ -137,9 +167,9 @@
     const groupedSeries = groupedM3u.filter(item => item?.type === 'series' && item?.m3uEpisodes);
     const matchSeries = buildSeriesMatcher(groupedSeries);
 
-    const liveCatMap = Object.fromEntries((liveCategories || []).map(item => [String(item.category_id), item.category_name]));
-    const movieCatMap = Object.fromEntries((movieCategories || []).map(item => [String(item.category_id), item.category_name]));
-    const seriesCatMap = Object.fromEntries((seriesCategories || []).map(item => [String(item.category_id), item.category_name]));
+    const liveCatMap = Object.fromEntries((liveCategories || []).map(item => [String(item.category_id), String(item.category_name || '').trim()]));
+    const movieCatMap = Object.fromEntries((movieCategories || []).map(item => [String(item.category_id), String(item.category_name || '').trim()]));
+    const seriesCatMap = Object.fromEntries((seriesCategories || []).map(item => [String(item.category_id), String(item.category_name || '').trim()]));
 
     const parsedItems = [];
     let matchedLive = 0;
@@ -150,17 +180,19 @@
       const streamId = String(item.stream_id ?? '');
       const m3u = rawLiveById.get(streamId);
       if (m3u) matchedLive += 1;
-      const groupName = liveCatMap[String(item.category_id)] || 'Canais';
+      const groupName = liveCatMap[String(item.category_id)] || m3u?.group || 'Canais';
       parsedItems.push({
         ...item,
         id: parsedItems.length,
         stream_id: item.stream_id,
+        category_id: item.category_id,
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
+        providerGroup: groupName,
         logo: item.stream_icon || m3u?.logo || '',
         url: m3u?.url || '',
         type: 'live',
-        source: 'synced-xtream',
+        source: 'provider-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
       });
     });
@@ -169,17 +201,19 @@
       const streamId = String(item.stream_id ?? '');
       const m3u = rawMoviesById.get(streamId);
       if (m3u) matchedMovies += 1;
-      const groupName = movieCatMap[String(item.category_id)] || 'Filmes';
+      const groupName = movieCatMap[String(item.category_id)] || m3u?.group || 'Filmes';
       parsedItems.push({
         ...item,
         id: parsedItems.length,
         stream_id: item.stream_id,
+        category_id: item.category_id,
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
+        providerGroup: groupName,
         logo: item.stream_icon || m3u?.logo || '',
         url: m3u?.url || '',
         type: 'movies',
-        source: 'synced-xtream',
+        source: 'provider-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
       });
     });
@@ -187,16 +221,18 @@
     (series || []).forEach(item => {
       const m3uSeries = matchSeries(item);
       if (m3uSeries) matchedSeries += 1;
-      const groupName = seriesCatMap[String(item.category_id)] || 'Séries';
+      const groupName = seriesCatMap[String(item.category_id)] || m3uSeries?.group || 'Séries';
       parsedItems.push({
         ...item,
         id: parsedItems.length,
         series_id: item.series_id,
+        category_id: item.category_id,
         name: item.name || m3uSeries?.name || 'Sem título',
         group: groupName,
+        providerGroup: groupName,
         logo: item.cover || m3uSeries?.logo || '',
         type: 'series',
-        source: 'synced-xtream',
+        source: 'provider-xtream',
         m3uEpisodes: m3uSeries?.m3uEpisodes || null,
         m3uSeriesName: m3uSeries?.name || '',
         isAdult: isAdultContent(groupName, item.name || m3uSeries?.name) || item.adult === true || String(item.is_adult || '') === '1'
@@ -212,20 +248,20 @@
         matchedLive,
         matchedMovies,
         matchedSeries,
-        officialSeries: (series || []).length
+        officialSeries: (series || []).length,
+        liveCategories: (liveCategories || []).length,
+        movieCategories: (movieCategories || []).length,
+        seriesCategories: (seriesCategories || []).length
       }
     };
   };
 
   const loadSyncedCatalog = async () => {
-    const manifestUrl = deriveManifestUrl();
-    if (!manifestUrl) throw new Error('Manifesto HTTPS não disponível para esta conta.');
-
     const splash = document.getElementById('splashStatusMessage');
-    if (splash) splash.innerText = 'Baixando catálogo HTTPS sincronizado...';
+    if (splash) splash.innerText = 'Preparando catálogo oficial do provedor...';
 
-    const manifest = await fetchJson(manifestUrl);
-    if (!manifest?.files || !manifest?.playlist) throw new Error('Manifesto do catálogo está incompleto.');
+    const { manifest, url: manifestUrl } = await loadManifest();
+    const versionedCache = manifest.scope === 'provider' ? 'force-cache' : 'no-store';
 
     const [
       playlistText,
@@ -236,13 +272,13 @@
       movies,
       series
     ] = await Promise.all([
-      fetchText(manifest.playlist),
-      fetchJson(manifest.files.liveCategories),
-      fetchJson(manifest.files.movieCategories),
-      fetchJson(manifest.files.seriesCategories),
-      fetchJson(manifest.files.live),
-      fetchJson(manifest.files.movies),
-      fetchJson(manifest.files.series)
+      fetchText(manifest.playlist, versionedCache),
+      fetchJson(manifest.files.liveCategories, versionedCache),
+      fetchJson(manifest.files.movieCategories, versionedCache),
+      fetchJson(manifest.files.seriesCategories, versionedCache),
+      fetchJson(manifest.files.live, versionedCache),
+      fetchJson(manifest.files.movies, versionedCache),
+      fetchJson(manifest.files.series, versionedCache)
     ]);
 
     const built = buildCatalogItems({
@@ -254,71 +290,103 @@
       movies,
       series
     });
-
     if (!built.items.length) throw new Error('Catálogo HTTPS não retornou itens utilizáveis.');
 
-    allMediaItems = built.items.map(item => applySharedCategoryToItem(item)).filter(profileAllowsMedia);
+    // No catálogo mestre, nomes e categorias do Xtream são a fonte da verdade.
+    // A antiga organização compartilhada do Admin não é aplicada por cima deles.
+    const providerTruth = manifest.scope === 'provider' || Number(manifest.schemaVersion) >= 3;
+    allMediaItems = (providerTruth
+      ? built.items
+      : built.items.map(item => applySharedCategoryToItem(item)))
+      .filter(profileAllowsMedia);
+
     mergeSharedVodsIntoPlayer();
 
     window.__luxSyncedXtreamActive = true;
+    window.__luxProviderCatalogActive = providerTruth;
     window.__luxSyncedXtreamManifest = manifest;
+    window.__luxSyncedXtreamManifestUrl = manifestUrl;
     window.__luxSyncedXtreamStats = built.stats;
 
-    console.info('[Lux Play] Catálogo Xtream HTTPS carregado.', built.stats);
-    return { count: built.items.length, stats: built.stats };
+    window.dispatchEvent(new CustomEvent('lux:media-updated', {
+      detail: { source: providerTruth ? 'provider-catalog' : 'legacy-synced-catalog', count: allMediaItems.length, version: manifest.version }
+    }));
+    window.dispatchEvent(new CustomEvent('lux:playlist-updated', {
+      detail: { source: providerTruth ? 'provider-catalog' : 'legacy-synced-catalog', version: manifest.version }
+    }));
+
+    console.info('[Lux Play] Catálogo oficial do provedor carregado.', {
+      manifest: manifest.version,
+      providerTruth,
+      ...built.stats
+    });
+    return { count: built.items.length, stats: built.stats, manifest, providerTruth };
   };
 
   window.LuxSyncedCatalog = {
     reload: loadSyncedCatalog,
-    manifestUrl: deriveManifestUrl,
+    manifestUrl: () => PROVIDER_MANIFEST_URL,
+    legacyManifestUrl: deriveLegacyManifestUrl,
     version: BRIDGE_VERSION
   };
 
   const install = () => {
-    if (window.__luxSyncedCatalogBridgeInstalled) return true;
+    if (window.__luxSyncedCatalogBridgeInstalled === BRIDGE_VERSION) return true;
     if (typeof window.loadMediaSourcesInPriority !== 'function') return false;
     if (typeof window.parseM3U !== 'function' || typeof window.groupM3uSeriesEpisodes !== 'function') return false;
-    if (typeof window.applySharedCategoryToItem !== 'function') return false;
+    if (typeof window.profileAllowsMedia !== 'function' && typeof profileAllowsMedia !== 'function') return false;
 
     const originalLoadMediaSourcesInPriority = window.loadMediaSourcesInPriority;
     const originalResolveUserCredentials = window.resolveUserCredentials;
     const originalOpenSeriesModal = window.openSeriesModal;
 
-    window.loadMediaSourcesInPriority = async function () {
+    // Evita empilhar wrappers ao executar uma versão nova do bridge sobre uma antiga.
+    const baseLoader = originalLoadMediaSourcesInPriority.__luxBaseLoader || originalLoadMediaSourcesInPriority;
+    const providerLoader = async function () {
       if (!window.luxElectron) {
         try {
           const result = await loadSyncedCatalog();
-          setMediaSourceState('synced-xtream', 'Catálogo Xtream HTTPS sincronizado', result.count);
+          setMediaSourceState('provider-xtream', 'Catálogo oficial do provedor', result.count);
           return true;
         } catch (error) {
           window.__luxSyncedXtreamActive = false;
-          console.warn('[Lux Play] Catálogo HTTPS indisponível; usando fallback atual.', error);
+          window.__luxProviderCatalogActive = false;
+          console.warn('[Lux Play] Catálogo mestre indisponível; usando fallback atual.', error);
         }
       }
-      return originalLoadMediaSourcesInPriority.apply(this, arguments);
+      return baseLoader.apply(this, arguments);
     };
+    providerLoader.__luxBaseLoader = baseLoader;
+    window.loadMediaSourcesInPriority = providerLoader;
 
-    if (typeof originalResolveUserCredentials === 'function') {
-      window.resolveUserCredentials = function (user) {
+    if (typeof originalResolveUserCredentials === 'function' && !originalResolveUserCredentials.__luxProviderCredentials) {
+      const baseCredentials = originalResolveUserCredentials.__luxBaseCredentials || originalResolveUserCredentials;
+      const patchedCredentials = function (user) {
         if (!window.luxElectron && window.__luxPreferSyncedSeriesEpisodes) {
-          return { isXc: false, url: String(user?.m3uHttpsUrl || user?.m3uUrl || '') };
+          return { isXc: false, url: String(window.__luxSyncedXtreamManifest?.playlist || user?.m3uHttpsUrl || user?.m3uUrl || '') };
         }
-        return originalResolveUserCredentials.apply(this, arguments);
+        return baseCredentials.apply(this, arguments);
       };
+      patchedCredentials.__luxBaseCredentials = baseCredentials;
+      patchedCredentials.__luxProviderCredentials = true;
+      window.resolveUserCredentials = patchedCredentials;
     }
 
-    if (typeof originalOpenSeriesModal === 'function') {
-      window.openSeriesModal = async function (series) {
-        const useSyncedSeries = !window.luxElectron && window.__luxSyncedXtreamActive && series?.source === 'synced-xtream';
-        if (!useSyncedSeries) return originalOpenSeriesModal.apply(this, arguments);
-
+    if (typeof originalOpenSeriesModal === 'function' && !originalOpenSeriesModal.__luxProviderSeries) {
+      const baseOpenSeries = originalOpenSeriesModal.__luxBaseOpenSeries || originalOpenSeriesModal;
+      const patchedOpenSeries = async function (series) {
+        const useSyncedSeries = !window.luxElectron && window.__luxSyncedXtreamActive && /(?:provider|synced)-xtream/.test(String(series?.source || ''));
+        if (!useSyncedSeries) return baseOpenSeries.apply(this, arguments);
         window.__luxPreferSyncedSeriesEpisodes = true;
         try {
-          return await originalOpenSeriesModal.apply(this, arguments);
+          return await baseOpenSeries.apply(this, arguments);
         } finally {
           window.__luxPreferSyncedSeriesEpisodes = false;
         }
       };
+      patchedOpenSeries.__luxBaseOpenSeries = baseOpenSeries;
+      patchedOpenSeries.__luxProviderSeries = true;
+      window.openSeriesModal = patchedOpenSeries;
     }
 
     window.__luxSyncedCatalogBridgeInstalled = BRIDGE_VERSION;
@@ -361,7 +429,7 @@
     button.id = 'adminPlaylistCatalogSyncButton';
     button.type = 'button';
     button.className = 'flex-1 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all disabled:opacity-50';
-    button.textContent = 'Sincronizar catálogo IPTV';
+    button.textContent = 'Atualizar provedor agora';
     button.addEventListener('click', () => window.adminSyncPlaylistCatalog?.());
     categoryButton.parentElement.appendChild(button);
 
@@ -378,17 +446,16 @@
 
   window.adminSyncPlaylistCatalog = async function () {
     if (syncBusy) return;
-
     const isAdmin = String(currentUser?.accountRole || currentUser?.role || '').toLowerCase() === 'admin';
     if (!isAdmin) {
-      setStatus('Apenas o administrador pode sincronizar o catálogo.', 'error');
+      setStatus('Apenas o administrador pode atualizar o provedor.', 'error');
       return;
     }
 
     const username = String(currentUser?.user || '').trim();
     const password = String(currentUser?.pass || '');
     if (!username || !password) {
-      setStatus('Faça login novamente antes de sincronizar.', 'error');
+      setStatus('Faça login novamente antes de atualizar.', 'error');
       return;
     }
 
@@ -396,40 +463,34 @@
     syncBusy = true;
     if (button) {
       button.disabled = true;
-      button.textContent = 'Sincronizando...';
+      button.textContent = 'Atualizando provedor...';
     }
-    setStatus('Sincronizando sua M3U + catálogo PHP. Isso pode levar alguns segundos...');
+    setStatus('Baixando playlist, categorias e catálogo oficiais do provedor...');
 
     try {
-      const response = await fetch(`${WORKER_BASE}/sync-account`, {
+      const response = await fetch(`${WORKER_BASE}/sync-provider`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || data?.result?.message || `Worker respondeu HTTP ${response.status}`);
+        throw new Error(data?.error || `Worker respondeu HTTP ${response.status}`);
       }
 
-      setStatus('Conversão concluída. Recarregando o catálogo HTTPS...');
-      if (typeof window.loadMediaSourcesInPriority === 'function') {
-        const loaded = await window.loadMediaSourcesInPriority();
-        if (!loaded) throw new Error('O catálogo foi convertido, mas o Lux não conseguiu recarregá-lo.');
-      }
+      setStatus('Provedor atualizado. Recarregando o catálogo oficial...');
+      const result = await window.LuxSyncedCatalog?.reload?.();
+      if (!result?.count) throw new Error('O provedor atualizou, mas o catálogo não pôde ser aplicado.');
 
       if (typeof window.setSection === 'function') window.setSection(currentSection || 'home');
-      const stats = window.__luxSyncedXtreamStats;
-      const seriesText = Number.isFinite(Number(stats?.officialSeries))
-        ? ` · ${stats.officialSeries} séries oficiais`
-        : '';
-      setStatus(`Catálogo IPTV sincronizado e aplicado${seriesText}.`, 'ok');
+      setStatus(`Catálogo oficial atualizado · ${result.count} itens.`, 'ok');
     } catch (error) {
-      setStatus(error?.message || 'Não foi possível sincronizar o catálogo IPTV.', 'error');
+      setStatus(error?.message || 'Não foi possível atualizar o provedor.', 'error');
     } finally {
       syncBusy = false;
       if (button) {
         button.disabled = false;
-        button.textContent = 'Sincronizar catálogo IPTV';
+        button.textContent = 'Atualizar provedor agora';
       }
     }
   };
