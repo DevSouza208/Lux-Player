@@ -1,12 +1,12 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-16';
+  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-17';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
     [/Não foi possível conectar ao Supabase\. Tente novamente\./gi, 'Não foi possível entrar agora. Verifique sua conexão e tente novamente.'],
     [/Erro ao carregar do Supabase\./gi, 'Não foi possível carregar os clientes.'],
-    [/Erro de conexão com Supabase\./gi, 'Não foi possível carregar os clientes. Tente novamente.'],
+    [/Erro de conexão com Supabase/gi, 'Não foi possível carregar os clientes. Tente novamente.'],
     [/Consultando status públicos\.\.\./gi, 'Atualizando informações...'],
     [/Carregando os status públicos\.\.\./gi, 'Preparando informações...'],
     [/Configurando sua experiência\.\.\. O primeiro acesso pode demorar cerca de 1 min\./gi, 'Preparando tudo para você... No primeiro acesso pode levar um pouquinho mais.'],
@@ -101,6 +101,28 @@
     document.head.appendChild(script);
   };
 
+  // [LUX-IPTV-STREAM-001] Carrega a guarda antes de qualquer nova evolução de player.
+  // Ela não substitui o player: apenas envolve as entradas playLiveChannel/openVodPlayer.
+  const loadStreamSessionGuard = () => {
+    if (document.querySelector('script[data-lux-stream-session-guard]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/stream-session-guard.js?v=20260913-stream-guard1';
+    script.async = true;
+    script.dataset.luxStreamSessionGuard = '1';
+    document.head.appendChild(script);
+  };
+
+  // [LUX-AUTH-DATE-001] Formata apenas a apresentação do vencimento e adiciona
+  // o contador de streams no painel Admin sem mudar os dados salvos no banco.
+  const loadAccountUiPolish = () => {
+    if (document.querySelector('script[data-lux-account-ui-polish]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/account-ui-polish.js?v=20260913-account-ui1';
+    script.async = true;
+    script.dataset.luxAccountUiPolish = '1';
+    document.head.appendChild(script);
+  };
+
   const loadGameDuplicateConsoleFix = () => {
     if (document.querySelector('script[data-lux-game-duplicate-console]')) return;
     const script = document.createElement('script');
@@ -169,6 +191,8 @@
   const start = () => {
     applyVersionEverywhere();
     loadRuntimeStabilityFix();
+    loadStreamSessionGuard();
+    loadAccountUiPolish();
     loadGameDuplicateConsoleFix();
     loadSports();
     loadSportsHomeGuard();
