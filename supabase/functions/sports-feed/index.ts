@@ -10,8 +10,8 @@ const CORS = {
 };
 
 const PROGRAM_URL = "https://superplacar.com.br/programacao/";
-const LIVE_URL = "https://superplacar.com.br/agora/";
-const CACHE_KEY = "superplacar-v2";
+const HOME_URL = "https://superplacar.com.br/";
+const CACHE_KEY = "superplacar-v3";
 const CACHE_TTL_MS = 45_000;
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: CORS });
@@ -43,6 +43,11 @@ function saoPauloParts() {
     hourCycle: "h23"
   }).formatToParts(new Date());
   return Object.fromEntries(parts.map(part => [part.type, part.value]));
+}
+
+function todayKey() {
+  const now = saoPauloParts();
+  return `${now.year}-${now.month}-${now.day}`;
 }
 
 function parseDateLabel(label: string) {
@@ -124,12 +129,10 @@ function parseProgramming(html: string) {
       continue;
     }
     if (!date || !/^\d{2}:\d{2}$/.test(lines[i])) continue;
-
     const time = lines[i];
     const segment = lines.slice(i + 1, i + 10);
     const competition = clean(segment[0]);
     if (!competition || /^(Horário|Campeonato|Jogo|Transmissão)$/i.test(competition)) continue;
-
     let home = "", away = "", broadcast = "";
     const xIndex = segment.findIndex((line, index) => index > 0 && /^x$/i.test(line));
     if (xIndex > 1 && segment[xIndex - 1] && segment[xIndex + 1]) {
@@ -152,60 +155,78 @@ function parseProgramming(html: string) {
   return games;
 }
 
-function parseLive(html: string) {
+function parseTodayBoard(html: string) {
   const lines = htmlLines(html);
   const games: any[] = [];
-  let date = "";
+  const seen = new Set<string>();
+  const date = todayKey();
   let competition = "";
 
   for (let i = 0; i < lines.length; i += 1) {
-    const possibleDate = parseDateLabel(lines[i]);
-    if (possibleDate) {
-      date = possibleDate;
-      continue;
-    }
-    if (!date) continue;
-
-    const nextFew = lines.slice(i + 1, i + 4);
-    if (/\s20\d{2}$/.test(lines[i]) && nextFew.some(line => /^Em andamento\s*-\s*\d{2}:\d{2}$/i.test(line))) {
-      competition = clean(lines[i]).replace(/\s+20\d{2}$/i, "");
+    const line = clean(lines[i]);
+    const nearby = lines.slice(i + 1, i + 5);
+    if (/\s20\d{2}(?:\/20\d{2})?$/.test(line) && nearby.some(value => /^(Em andamento|Encerrado|Em breve)\s*-\s*\d{2}:\d{2}$/i.test(value))) {
+      competition = line.replace(/\s+20\d{2}(?:\/20\d{2})?$/i, "").trim();
       continue;
     }
 
-    const status = lines[i].match(/^Em andamento\s*-\s*(\d{2}:\d{2})$/i);
-    if (!status) continue;
-    const time = status[1];
-    const segment = lines.slice(i + 1, i + 9);
-    const scoreIndex = segment.findIndex(line => /^\d+\s*-\s*\d+$/.test(line));
-    if (scoreIndex < 1 || !segment[scoreIndex + 1]) continue;
-    const home = clean(segment[scoreIndex - 1]);
-    const away = clean(segment[scoreIndex + 1]);
-    const score = clean(segment[scoreIndex]).match(/^(\d+)\s*-\s*(\d+)$/)!;
+    const statusMatch = line.match(/^(Em andamento|Encerrado|Em breve)\s*-\s*(\d{2}:\d{2})$/i);
+    if (!statusMatch) continue;
+
+    const label = normalize(statusMatch[1]);
+    const status = label === "encerrado" ? "finished" : label === "em andamento" ? "live" : "scheduled";
+    const time = statusMatch[2];
+    const segment = lines.slice(i + 1, i + 12);
+    const scoreIndex = segment.findIndex(value => /^\d+\s*-\s*\d+$/.test(value));
+    const dashIndex = segment.findIndex(value => /^-$/.test(value));
+    const markerIndex = scoreIndex >= 0 ? scoreIndex : dashIndex;
+    if (markerIndex < 1 || !segment[markerIndex + 1]) continue;
+
+    const home = clean(segment[markerIndex - 1]);
+    const away = clean(segment[markerIndex + 1]);
+    if (!home || !away || /^(Image|Agora|Favoritos|Programação)$/i.test(home + away)) continue;
+
+    const id = gameId(date, home, away);
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    let scoreHome: number | null = null;
+    let scoreAway: number | null = null;
+    if (scoreIndex >= 0) {
+      const score = segment[scoreIndex].match(/^(\d+)\s*-\s*(\d+)$/);
+      if (score) {
+        scoreHome = Number(score[1]);
+        scoreAway = Number(score[2]);
+      }
+    }
+
     games.push({
-      id: gameId(date, home, away), date, time, kickoff: kickoffIso(date, time),
-      competition, home, away, status: "live",
-      score_home: Number(score[1]), score_away: Number(score[2])
+      id, date, time, kickoff: kickoffIso(date, time), competition,
+      home, away, status, score_home: scoreHome, score_away: scoreAway,
+      broadcasters: [], source: "Super Placar"
     });
   }
+
   return games;
 }
 
-function mergeFeeds(programming: any[], live: any[]) {
+function mergeFeeds(programming: any[], board: any[]) {
   const byId = new Map(programming.map(game => [game.id, game]));
-  for (const liveGame of live) {
-    const existing = byId.get(liveGame.id);
+  for (const boardGame of board) {
+    const existing = byId.get(boardGame.id);
     if (existing) {
-      Object.assign(existing, liveGame, {
+      Object.assign(existing, boardGame, {
         broadcasters: existing.broadcasters || [],
-        competition: liveGame.competition || existing.competition
+        competition: boardGame.competition || existing.competition
       });
     } else {
-      byId.set(liveGame.id, { ...liveGame, broadcasters: [], source: "Super Placar" });
+      byId.set(boardGame.id, boardGame);
     }
   }
   return [...byId.values()].sort((a, b) => {
-    if (a.status === "live" && b.status !== "live") return -1;
-    if (b.status === "live" && a.status !== "live") return 1;
+    const rank: Record<string, number> = { live: 0, scheduled: 1, finished: 2 };
+    const diff = (rank[a.status] ?? 3) - (rank[b.status] ?? 3);
+    if (diff) return diff;
     return String(a.kickoff).localeCompare(String(b.kickoff));
   });
 }
@@ -215,7 +236,7 @@ async function fetchHtml(url: string) {
     headers: {
       "Accept": "text/html,application/xhtml+xml",
       "Accept-Language": "pt-BR,pt;q=0.9",
-      "User-Agent": "LuxPlay-Sports/1.0"
+      "User-Agent": "LuxPlay-Sports/1.1"
     },
     redirect: "follow"
   });
@@ -224,14 +245,10 @@ async function fetchHtml(url: string) {
 }
 
 async function assertAdmin(db: any, username: unknown, password: unknown) {
-  if (typeof username !== "string" || !username || typeof password !== "string" || !password) {
-    return { ok: false, status: 401, error: "Login de administrador necessário." };
-  }
+  if (typeof username !== "string" || !username || typeof password !== "string" || !password) return { ok: false, status: 401, error: "Login de administrador necessário." };
   const { data, error } = await db.from("usuarios").select("cargo").eq("usuario", username).eq("senha", password).maybeSingle();
   if (error) throw error;
-  if (!data || String(data.cargo || "").trim().toLowerCase() !== "admin") {
-    return { ok: false, status: 403, error: "Acesso exclusivo de administrador." };
-  }
+  if (!data || String(data.cargo || "").trim().toLowerCase() !== "admin") return { ok: false, status: 403, error: "Acesso exclusivo de administrador." };
   return { ok: true };
 }
 
@@ -249,20 +266,23 @@ async function getFeed(db: any, force = false) {
   if (cacheError) throw cacheError;
 
   const age = cached?.fetched_at ? Date.now() - new Date(cached.fetched_at).getTime() : Infinity;
-  if (!force && cached?.payload && age < CACHE_TTL_MS) {
-    return { ...cached.payload, cached: true, fetched_at: cached.fetched_at };
-  }
+  if (!force && cached?.payload && age < CACHE_TTL_MS) return { ...cached.payload, cached: true, fetched_at: cached.fetched_at };
 
   try {
-    const [programHtml, liveHtml] = await Promise.all([fetchHtml(PROGRAM_URL), fetchHtml(LIVE_URL)]);
+    const [programHtml, homeHtml] = await Promise.all([fetchHtml(PROGRAM_URL), fetchHtml(HOME_URL)]);
     const programming = parseProgramming(programHtml);
-    const live = parseLive(liveHtml);
-    const games = mergeFeeds(programming, live);
+    const board = parseTodayBoard(homeHtml);
+    const games = mergeFeeds(programming, board);
     const payload = {
       games,
-      stats: { programming: programming.length, live: live.length },
+      stats: {
+        programming: programming.length,
+        live: board.filter(game => game.status === "live").length,
+        finished: board.filter(game => game.status === "finished").length,
+        upcoming: games.filter(game => game.status === "scheduled").length
+      },
       source: "Super Placar",
-      source_url: PROGRAM_URL
+      source_url: HOME_URL
     };
     const fetchedAt = new Date().toISOString();
     const { error } = await db.from("sports_feed_cache").upsert({ cache_key: CACHE_KEY, payload, fetched_at: fetchedAt }, { onConflict: "cache_key" });
