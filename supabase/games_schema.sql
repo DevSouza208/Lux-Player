@@ -52,19 +52,30 @@ create unique index if not exists games_id_unique_idx on public.games (id);
 create unique index if not exists games_rom_path_unique_idx on public.games (rom_path);
 create unique index if not exists games_rom_sha256_unique_idx on public.games (rom_sha256) where rom_sha256 is not null;
 
+-- O mesmo jogo pode existir em plataformas diferentes. Só bloqueamos título
+-- repetido quando título normalizado E console normalizado são iguais.
 create or replace function public.prevent_duplicate_game_title()
 returns trigger language plpgsql set search_path='' as $$
-declare normalized text;
+declare
+ normalized text;
+ normalized_console text;
 begin
  normalized:=lower(regexp_replace(regexp_replace(trim(new.title),'[^[:alnum:]]+',' ','g'),'\s+',' ','g'));
+ normalized_console:=lower(regexp_replace(regexp_replace(trim(coalesce(new.console,'')),'[^[:alnum:]]+',' ','g'),'\s+',' ','g'));
  new.normalized_title:=normalized;
- if exists(select 1 from public.games game where game.id is distinct from new.id and lower(regexp_replace(regexp_replace(trim(game.title),'[^[:alnum:]]+',' ','g'),'\s+',' ','g'))=normalized) then
-  raise exception 'Já existe um jogo com este título no catálogo.' using errcode='23505';
+ if exists(
+   select 1
+   from public.games game
+   where game.id is distinct from new.id
+     and lower(regexp_replace(regexp_replace(trim(game.title),'[^[:alnum:]]+',' ','g'),'\s+',' ','g'))=normalized
+     and lower(regexp_replace(regexp_replace(trim(coalesce(game.console,'')),'[^[:alnum:]]+',' ','g'),'\s+',' ','g'))=normalized_console
+ ) then
+  raise exception 'Já existe um jogo com este título neste console.' using errcode='23505';
  end if;
  return new;
 end;$$;
 drop trigger if exists games_prevent_duplicate_title on public.games;
-create trigger games_prevent_duplicate_title before insert or update of title on public.games for each row execute function public.prevent_duplicate_game_title();
+create trigger games_prevent_duplicate_title before insert or update of title, console on public.games for each row execute function public.prevent_duplicate_game_title();
 
 -- Configure o bucket Storage `games` como público apenas se quiser que o EmulatorJS
 -- baixe as ROMs por URL pública. Para produção, use Supabase Auth + RLS ou uma Edge
