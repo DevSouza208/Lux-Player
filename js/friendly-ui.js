@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-10';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-11';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -45,7 +45,6 @@
   function friendlyText(value) {
     let text = String(value ?? '');
     if (!text) return text;
-
     text = text.replace(/versão\s+\d+(?:\.\d+){1,3}/gi, `versão ${APP_VERSION}`);
     for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement);
     return text;
@@ -60,18 +59,15 @@
 
   function updateElement(element) {
     if (!(element instanceof Element)) return;
-
     for (const attr of ['title', 'aria-label', 'placeholder']) {
       if (!element.hasAttribute(attr)) continue;
       const current = element.getAttribute(attr) || '';
       const next = friendlyText(current);
       if (next !== current) element.setAttribute(attr, next);
     }
-
     for (const child of element.childNodes) {
       if (child.nodeType === Node.TEXT_NODE) updateTextNode(child);
     }
-
     element.querySelectorAll('*').forEach(child => {
       for (const attr of ['title', 'aria-label', 'placeholder']) {
         if (!child.hasAttribute(attr)) continue;
@@ -123,6 +119,15 @@
     document.head.appendChild(script);
   };
 
+  const loadSportsHomeGuard = () => {
+    if (document.querySelector('script[data-lux-sports-home-guard]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/sports-home-guard.js?v=20260912-sports-home-guard1';
+    script.async = true;
+    script.dataset.luxSportsHomeGuard = '1';
+    document.head.appendChild(script);
+  };
+
   const loadMobileControlOpacity = () => {
     if (!mobileMedia() || document.querySelector('script[data-lux-mobile-control-opacity]')) return;
     const script = document.createElement('script');
@@ -142,9 +147,7 @@
   };
 
   const originalAlert = window.alert?.bind(window);
-  if (originalAlert) {
-    window.alert = message => originalAlert(friendlyText(message));
-  }
+  if (originalAlert) window.alert = message => originalAlert(friendlyText(message));
 
   const observer = new MutationObserver(mutations => {
     for (const mutation of mutations) {
@@ -152,12 +155,10 @@
         updateTextNode(mutation.target);
         continue;
       }
-
       if (mutation.type === 'attributes') {
         updateElement(mutation.target);
         continue;
       }
-
       mutation.addedNodes.forEach(node => {
         if (node.nodeType === Node.TEXT_NODE) updateTextNode(node);
         else if (node.nodeType === Node.ELEMENT_NODE) updateElement(node);
@@ -170,6 +171,7 @@
     loadRuntimeStabilityFix();
     loadGameDuplicateConsoleFix();
     loadSports();
+    loadSportsHomeGuard();
     loadMobileControlOpacity();
     loadMobileCustomControls();
     observer.observe(document.documentElement, {
