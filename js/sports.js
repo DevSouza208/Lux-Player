@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsInstalled === '20260913-guide-fast2') return;
-  window.__luxSportsInstalled = '20260913-guide-fast2';
+  if (window.__luxSportsInstalled === '20260913-guide-category1') return;
+  window.__luxSportsInstalled = '20260913-guide-category1';
 
   const LEAD = 20 * 60 * 1000;
   const GROUP_RE = /(guia\s+de\s+jogos|jogos\s+do\s+dia)/i;
@@ -14,8 +14,6 @@
     signature: '',
     observer: null
   };
-  let lastMediaRef = null;
-  let lastMediaLength = -1;
   let scanTimer = null;
   let clockTimer = null;
 
@@ -27,8 +25,14 @@
     catch (_) { return []; }
   }
 
+  function categoryText(item) {
+    return [item?.group, item?.category, item?.group_title, item?.groupTitle, item?.categoria]
+      .filter(Boolean)
+      .join(' ');
+  }
+
   function items(source = media()) {
-    return source.filter(x => x?.type === 'live' && x?.url && GROUP_RE.test(String(x?.group || '')));
+    return source.filter(item => item?.url && GROUP_RE.test(categoryText(item)));
   }
 
   function parse(name) {
@@ -145,7 +149,7 @@
     let bar = section.querySelector('[data-lux-sports-tabs]');
     if (!bar) {
       bar = document.createElement('div');
-      bar.dataset.luxSportsTabs = 'guide-fast2';
+      bar.dataset.luxSportsTabs = 'guide-category1';
       bar.className = 'flex flex-wrap gap-2';
       const h = section.querySelector('h3');
       section.insertBefore(bar, h?.nextSibling || box);
@@ -184,8 +188,13 @@
 
     tabs();
 
-    if (state.loading || state.games.length === 0) {
+    if (state.loading) {
       box.innerHTML = '<p data-lux-sports-empty class="text-xs text-purple-400/70">Carregando partidas...</p>';
+      return;
+    }
+
+    if (!state.games.length) {
+      box.innerHTML = '<p data-lux-sports-empty class="text-xs text-purple-400/70">Nenhuma partida encontrada no Guia de Jogos.</p>';
       return;
     }
 
@@ -224,12 +233,8 @@
 
   function scan(force=false) {
     const source = media();
-    if (!force && source === lastMediaRef && source.length === lastMediaLength) return false;
-    lastMediaRef = source;
-    lastMediaLength = source.length;
-
     const src = items(source);
-    const sig = src.map(x => `${x.name}|${x.url}|${x.logo||''}`).join('\n');
+    const sig = src.map(x => `${categoryText(x)}|${x.name}|${x.url}|${x.logo||''}`).join('\n');
     if (!force && sig === state.signature) return false;
 
     state.signature = sig;
@@ -262,7 +267,7 @@
 
     scanTimer = setInterval(() => {
       if (!document.hidden) scan(false);
-    }, 12000);
+    }, 2000);
 
     clockTimer = setInterval(() => {
       if (homeVisible()) render();
@@ -270,14 +275,17 @@
 
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
-        scan(false);
+        scan(true);
         if (homeVisible()) render();
       }
     });
 
     document.getElementById('navHome')?.addEventListener('click', () => {
-      setTimeout(() => { scan(false); render(); }, 0);
+      setTimeout(() => { scan(true); render(); }, 0);
     });
+
+    window.addEventListener('lux:media-updated', () => scan(true));
+    window.addEventListener('lux:playlist-updated', () => scan(true));
 
     window.LuxSports = {
       state,
