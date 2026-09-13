@@ -1,12 +1,12 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-8';
+  const FRIENDLY_UI_VERSION = '20260913-v163-clean-core-1';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
     [/Não foi possível conectar ao Supabase\. Tente novamente\./gi, 'Não foi possível entrar agora. Verifique sua conexão e tente novamente.'],
     [/Erro ao carregar do Supabase\./gi, 'Não foi possível carregar os clientes.'],
-    [/Erro de conexão com Supabase\./gi, 'Não foi possível carregar os clientes. Tente novamente.'],
+    [/Erro de conexão com Supabase/gi, 'Não foi possível carregar os clientes. Tente novamente.'],
     [/Consultando status públicos\.\.\./gi, 'Atualizando informações...'],
     [/Carregando os status públicos\.\.\./gi, 'Preparando informações...'],
     [/Configurando sua experiência\.\.\. O primeiro acesso pode demorar cerca de 1 min\./gi, 'Preparando tudo para você... No primeiro acesso pode levar um pouquinho mais.'],
@@ -14,7 +14,6 @@
     [/Carregando perfis\.\.\./gi, 'Preparando seus perfis...'],
     [/Carregando catálogo de jogos/gi, 'Preparando seus jogos'],
     [/Buscando dados do jogo\.\.\./gi, 'Procurando informações do jogo...'],
-    [/Carregando guia de programação\.\.\./gi, 'Preparando a programação...'],
     [/Baixando categorias e canais\.\.\./gi, 'Preparando seus canais...'],
     [/Baixando catálogo e categorias\.\.\./gi, 'Organizando seu catálogo...'],
     [/Baixando catálogo HTTPS sincronizado\.\.\./gi, 'Preparando seu catálogo...'],
@@ -96,15 +95,6 @@
 
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
 
-  const loadRuntimeStabilityFix = () => {
-    if (document.querySelector('script[data-lux-runtime-stability]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/runtime-stability-fix.js?v=20260912-stability2';
-    script.async = true;
-    script.dataset.luxRuntimeStability = '1';
-    document.head.appendChild(script);
-  };
-
   const loadGameDuplicateConsoleFix = () => {
     if (document.querySelector('script[data-lux-game-duplicate-console]')) return;
     const script = document.createElement('script');
@@ -158,7 +148,6 @@
 
   const start = () => {
     applyVersionEverywhere();
-    loadRuntimeStabilityFix();
     loadGameDuplicateConsoleFix();
     loadMobileControlOpacity();
     loadMobileCustomControls();
