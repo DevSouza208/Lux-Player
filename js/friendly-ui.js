@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-23';
+  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-24';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -152,7 +152,7 @@
   const loadUserAccessControl = () => {
     if (document.querySelector('script[data-lux-user-access-control]')) return;
     const script = document.createElement('script');
-    script.src = 'js/user-access-control.js?v=20260913-access1';
+    script.src = 'js/user-access-control.js?v=20260913-access2';
     script.async = true;
     script.dataset.luxUserAccessControl = '1';
     document.head.appendChild(script);
