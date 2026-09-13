@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-17';
+  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-18';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -128,6 +128,15 @@
     document.head.appendChild(script);
   };
 
+  const loadPlaylistFreshness = () => {
+    if (document.querySelector('script[data-lux-playlist-freshness]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/playlist-freshness.js?v=20260913-fresh1';
+    script.async = true;
+    script.dataset.luxPlaylistFreshness = '1';
+    document.head.appendChild(script);
+  };
+
   const loadMobileControlOpacity = () => {
     if (!mobileMedia() || document.querySelector('script[data-lux-mobile-control-opacity]')) return;
     const script = document.createElement('script');
@@ -172,6 +181,7 @@
     loadGameDuplicateConsoleFix();
     loadSports();
     loadSportsHomeGuard();
+    loadPlaylistFreshness();
     loadMobileControlOpacity();
     loadMobileCustomControls();
     observer.observe(document.documentElement, {
