@@ -1,10 +1,9 @@
 (() => {
   'use strict';
-  if (window.__luxSportsInstalled === '20260913-guide-category1') return;
-  window.__luxSportsInstalled = '20260913-guide-category1';
+  if (window.__luxSportsInstalled === '20260913-guide-category2') return;
+  window.__luxSportsInstalled = '20260913-guide-category2';
 
   const LEAD = 20 * 60 * 1000;
-  const GROUP_RE = /(guia\s+de\s+jogos|jogos\s+do\s+dia)/i;
   const state = {
     games: [],
     tab: 'live',
@@ -12,12 +11,13 @@
     loading: true,
     userSelectedTab: false,
     signature: '',
+    guideGroup: '',
     observer: null
   };
   let scanTimer = null;
   let clockTimer = null;
 
-  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   const norm = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&/g,' e ').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
 
   function media() {
@@ -25,14 +25,27 @@
     catch (_) { return []; }
   }
 
-  function categoryText(item) {
-    return [item?.group, item?.category, item?.group_title, item?.groupTitle, item?.categoria]
-      .filter(Boolean)
-      .join(' ');
+  function allowed(item) {
+    try {
+      return typeof profileAllowsMedia !== 'function' || profileAllowsMedia(item);
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function liveItems(source = media()) {
+    return source.filter(item => String(item?.type || '').toLowerCase() === 'live' && allowed(item));
+  }
+
+  function guideGroup(source = media()) {
+    const groups = [...new Set(liveItems(source).map(item => String(item?.group || '')).filter(Boolean))];
+    return groups.find(group => group.toLowerCase().includes('guia de jogos')) || '';
   }
 
   function items(source = media()) {
-    return source.filter(item => item?.url && GROUP_RE.test(categoryText(item)));
+    const guide = guideGroup(source);
+    if (!guide) return [];
+    return liveItems(source).filter(item => item?.url && String(item.group || '') === guide);
   }
 
   function parse(name) {
@@ -149,7 +162,7 @@
     let bar = section.querySelector('[data-lux-sports-tabs]');
     if (!bar) {
       bar = document.createElement('div');
-      bar.dataset.luxSportsTabs = 'guide-category1';
+      bar.dataset.luxSportsTabs = 'guide-category2';
       bar.className = 'flex flex-wrap gap-2';
       const h = section.querySelector('h3');
       section.insertBefore(bar, h?.nextSibling || box);
@@ -193,8 +206,13 @@
       return;
     }
 
+    if (!state.guideGroup) {
+      box.innerHTML = '<p data-lux-sports-empty class="text-xs text-purple-400/70">Nenhuma categoria Guia de Jogos encontrada na lista atual.</p>';
+      return;
+    }
+
     if (!state.games.length) {
-      box.innerHTML = '<p data-lux-sports-empty class="text-xs text-purple-400/70">Nenhuma partida encontrada no Guia de Jogos.</p>';
+      box.innerHTML = '<p data-lux-sports-empty class="text-xs text-purple-400/70">Nenhuma partida válida encontrada no Guia de Jogos.</p>';
       return;
     }
 
@@ -211,7 +229,7 @@
       const border = live ? 'border-emerald-500/60' : 'border-purple-900/60';
       const tag = live ? 'bg-emerald-500/20 text-emerald-300' : 'bg-purple-950 text-purple-300';
       const streams = `<div class="mt-3 flex h-[118px] content-start flex-wrap gap-2 overflow-y-auto rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2">${g.channels.map((c,i)=>chip(g,c,i,ok)).join('')}</div><div class="mt-2 h-5 text-center text-[10px] text-purple-400">${!ok&&g.status==='scheduled'?esc(unlock(g)):''}</div>`;
-      return `<article data-sports-guide-card class="flex h-[400px] w-[290px] shrink-0 flex-col rounded-2xl border ${border} bg-[#120c1f] p-4"><div class="flex h-7 items-center justify-between gap-2"><span class="truncate text-[10px] font-bold uppercase text-purple-300">${esc(g.competition||'Futebol')}</span><span class="rounded-full px-2 py-1 text-[9px] font-black ${tag}">${esc(badge(g))}</span></div><div class="mt-4 grid min-h-[104px] grid-cols-[1fr_auto_1fr] items-center gap-2">${team(g.home,g.home_logo)}<strong class="text-sm text-emerald-300">${esc(score)}</strong>${team(g.away,g.away_logo)}</div>${streams}<div class="mt-auto pt-2 text-right text-[9px] text-purple-500">Canais: Guia de Jogos</div></article>`;
+      return `<article data-sports-guide-card class="flex h-[400px] w-[290px] shrink-0 flex-col rounded-2xl border ${border} bg-[#120c1f] p-4"><div class="flex h-7 items-center justify-between gap-2"><span class="truncate text-[10px] font-bold uppercase text-purple-300">${esc(g.competition||'Futebol')}</span><span class="rounded-full px-2 py-1 text-[9px] font-black ${tag}">${esc(badge(g))}</span></div><div class="mt-4 grid min-h-[104px] grid-cols-[1fr_auto_1fr] items-center gap-2">${team(g.home,g.home_logo)}<strong class="text-sm text-emerald-300">${esc(score)}</strong>${team(g.away,g.away_logo)}</div>${streams}<div class="mt-auto pt-2 text-right text-[9px] text-purple-500">Canais: ${esc(state.guideGroup)}</div></article>`;
     }).join('');
 
     box.querySelectorAll('[data-team-logo]').forEach(img => {
@@ -233,11 +251,13 @@
 
   function scan(force=false) {
     const source = media();
-    const src = items(source);
-    const sig = src.map(x => `${categoryText(x)}|${x.name}|${x.url}|${x.logo||''}`).join('\n');
+    const guide = guideGroup(source);
+    const src = guide ? items(source) : [];
+    const sig = `${guide}\n${src.map(x => `${x.name}|${x.url}|${x.logo||''}`).join('\n')}`;
     if (!force && sig === state.signature) return false;
 
     state.signature = sig;
+    state.guideGroup = guide;
     state.games = group(src);
     state.loaded = true;
     state.loading = source.length === 0;
@@ -267,7 +287,7 @@
 
     scanTimer = setInterval(() => {
       if (!document.hidden) scan(false);
-    }, 2000);
+    }, 1000);
 
     clockTimer = setInterval(() => {
       if (homeVisible()) render();
@@ -292,6 +312,7 @@
       render,
       refresh:() => scan(true),
       guideItems:() => items(media()),
+      guideGroup:() => guideGroup(media()),
       parseGuideTitle:parse,
       destroy:() => {
         if (scanTimer) clearInterval(scanTimer);
