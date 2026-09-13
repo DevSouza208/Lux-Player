@@ -10,7 +10,7 @@ const CORS = {
 };
 
 const PROGRAM_URL = "https://superplacar.com.br/programacao/";
-const CACHE_KEY = "superplacar-logos-v1";
+const CACHE_KEY = "superplacar-logos-v2";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36";
 
@@ -88,6 +88,7 @@ function parseLogos(html: string) {
       const cells = $(row).find("td");
       if (cells.length < 3) return;
       const gameCell = cells.eq(2);
+      const images = gameCell.find("img").toArray();
 
       const entries: Array<{ name: string; logo: string }> = [];
       gameCell.find("a").each((___, link) => {
@@ -97,9 +98,14 @@ function parseLogos(html: string) {
         if (!entries.some(entry => normalize(entry.name) === normalize(name))) entries.push({ name, logo });
       });
 
+      if (entries.length >= 2) {
+        if (!entries[0].logo && images[0]) entries[0].logo = imageFrom($, images[0]);
+        if (!entries[1].logo && images[1]) entries[1].logo = imageFrom($, images[1]);
+      }
+
       if (entries.length < 2) {
-        const images = gameCell.find("img").toArray();
-        const names = gameCell.text().split(/\s+[xX]\s+/).map(clean).filter(Boolean);
+        const rawText = clean(gameCell.text()).replace(/\s+[xX]\s+/, " | ");
+        const names = rawText.split("|").map(clean).filter(Boolean);
         if (names.length >= 2) {
           entries.length = 0;
           entries.push({ name: names[0], logo: images[0] ? imageFrom($, images[0]) : "" });
