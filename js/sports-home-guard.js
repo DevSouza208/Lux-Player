@@ -1,14 +1,14 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260912-guide6') return;
-  window.__luxSportsHomeGuardInstalled = '20260912-guide6';
+  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-clean1') return;
+  window.__luxSportsHomeGuardInstalled = '20260913-guide-clean1';
 
   let observer = null;
   let attempts = 0;
 
   function loadExtras() {
     const extras = [
-      ['lux-sports-global-mapping','js/sports-global-mapping.js?v=20260912-map1'],
+      ['lux-sports-global-mapping','js/sports-global-mapping.js?v=20260913-map3'],
       ['lux-sports-admin','js/sports-admin.js?v=20260912-sportsadmin1']
     ];
     extras.forEach(([name,src])=>{
@@ -41,5 +41,10 @@
     attempts += 1;
     if (ensureOwner() || attempts >= 240) clearInterval(timer);
   }, 50);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { ensureOwner(); window.LuxSportsMapping?.refresh?.(); } });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      ensureOwner();
+      window.LuxSportsMapping?.refresh?.();
+    }
+  });
 })();
