@@ -1,10 +1,11 @@
 (() => {
   'use strict';
-  if (window.__luxSportsLogoDecoratorInstalled === '20260913-global-cache1') return;
-  window.__luxSportsLogoDecoratorInstalled = '20260913-global-cache1';
+  if (window.__luxSportsLogoDecoratorInstalled === '20260913-global-cache2') return;
+  window.__luxSportsLogoDecoratorInstalled = '20260913-global-cache2';
 
   const MAX_ACTIVE_LOGOS = 6;
   const LOCAL_KEY = 'lux-play:team-logo-url-cache:v1';
+  const VERSION_KEY = 'lux-play:team-logo-cache-version:v1';
   const LOCAL_MAX = 500;
   const LOCAL_TTL = 90 * 86400000;
 
@@ -20,6 +21,7 @@
   const markedMissing = new Set();
   let active = 0;
   let scheduled = false;
+  let controlSync = null;
 
   const norm = v => String(v || '')
     .normalize('NFD')
@@ -47,7 +49,8 @@
     'racing santander':'racing-santander','alaves':'deportivo-alaves','deportivo alaves':'deportivo-alaves',
     'genoa':'genoa','frosinone':'frosinone-calcio','frosinone calcio':'frosinone-calcio',
     'borussia dortmund':'borussia-dortmund','dortmund':'borussia-dortmund','augsburg':'fc-augsburg',
-    'fc augsburg':'fc-augsburg','bayer leverkusen':'bayer-leverkusen'
+    'fc augsburg':'fc-augsburg','bayer leverkusen':'bayer-leverkusen',
+    'elche':'elche-cf','elche cf':'elche-cf','estudiantes de la plata':'estudiantes-de-la-plata','estudiantes':'estudiantes-de-la-plata'
   }));
 
   const LOGODETIMES = new Map(Object.entries({
@@ -105,6 +108,39 @@
     if (url && localCache[key].url !== url) return;
     delete localCache[key];
     persistLocalCache();
+  }
+
+  function clearOnlyLogoCache(version = null) {
+    localCache = {};
+    globalRows.clear();
+    lookedUpKeys.clear();
+    lookupPendingKeys.clear();
+    resolvingTeams.clear();
+    reportedTeams.clear();
+    markedMissing.clear();
+    failedUrls.clear();
+    readyUrls.clear();
+    queue.length = 0;
+    try {
+      localStorage.removeItem(LOCAL_KEY);
+      if (version !== null && version !== undefined) localStorage.setItem(VERSION_KEY, String(version));
+    } catch (_) {}
+    document.querySelectorAll('[data-lux-team-logo]').forEach(img => {
+      const holder = img.parentElement;
+      img.remove();
+      holder?.querySelector('[data-shield-fallback]')?.classList.remove('hidden');
+    });
+  }
+
+  function applyControl(control) {
+    const version = Number(control?.version || 0);
+    if (!version) return false;
+    let localVersion = 0;
+    try { localVersion = Number(localStorage.getItem(VERSION_KEY) || 0); } catch (_) {}
+    if (localVersion === version) return false;
+    clearOnlyLogoCache(version);
+    console.info('[Lux Sports Logos] Cache de escudos atualizado para versão global', version);
+    return true;
   }
 
   function ensureConnectionHints() {
@@ -225,6 +261,16 @@
     }
   }
 
+  async function syncControl(force = false) {
+    if (controlSync && !force) return controlSync;
+    controlSync = invokeCache({ action: 'control' }).then(data => {
+      const changed = applyControl(data?.control);
+      if (changed) scheduleDecorate();
+      return data?.control || null;
+    }).finally(() => { controlSync = null; });
+    return controlSync;
+  }
+
   async function primeGlobalCache(names) {
     const unique = [...new Set((names || []).map(name => String(name || '').trim()).filter(Boolean))];
     const wanted = unique.filter(name => {
@@ -235,6 +281,7 @@
 
     wanted.forEach(name => lookupPendingKeys.add(norm(name)));
     const data = await invokeCache({ action: 'lookup', teams: wanted });
+    applyControl(data?.control);
 
     if (data?.logos && typeof data.logos === 'object') {
       Object.entries(data.logos).forEach(([key, row]) => {
@@ -308,13 +355,6 @@
     if (resolvingTeams.has(key)) return resolvingTeams.get(key);
 
     const task = (async () => {
-      const local = localCache[key];
-      if (local?.url) {
-        const ok = await requestLogo(local.url);
-        if (ok) return { url: local.url, source: local.source || 'local', cached: true };
-        await invalidateGlobal(teamName, local.url);
-      }
-
       const global = globalRows.get(key);
       if (global?.url) {
         const ok = await requestLogo(global.url);
@@ -323,6 +363,13 @@
           return { url: global.url, source: global.source || 'global', cached: true };
         }
         await invalidateGlobal(teamName, global.url);
+      }
+
+      const local = localCache[key];
+      if (local?.url) {
+        const ok = await requestLogo(local.url);
+        if (ok) return { url: local.url, source: local.source || 'local', cached: true };
+        await invalidateGlobal(teamName, local.url);
       }
 
       if (!lookedUpKeys.has(key) && lookupPendingKeys.has(key)) return null;
@@ -398,7 +445,7 @@
 
   function boot() {
     ensureConnectionHints();
-    decorate();
+    syncControl().finally(decorate);
     const home = document.getElementById('homeJogosContainer');
     if (home) {
       const observer = new MutationObserver(scheduleDecorate);
@@ -409,10 +456,8 @@
       localCache: () => ({ ...localCache }),
       queueStatus: () => ({ active, queued: queue.length, ready: readyUrls.size, failed: failedUrls.size, max: MAX_ACTIVE_LOGOS }),
       sources: ['footylogos', 'logodetimes', 'escudosfc'],
-      clearLocal: () => {
-        localCache = {};
-        try { localStorage.removeItem(LOCAL_KEY); } catch (_) {}
-      }
+      syncControl: () => syncControl(true),
+      clearLocal: () => clearOnlyLogoCache(null)
     };
   }
 
