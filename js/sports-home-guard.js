@@ -2,10 +2,19 @@
   'use strict';
 
   if (window.__luxSportsHomeGuardInstalled) return;
-  window.__luxSportsHomeGuardInstalled = '20260912-sports-home-guard1';
+  window.__luxSportsHomeGuardInstalled = '20260912-sports-home-guard2';
 
   let containerObserver = null;
   let attempts = 0;
+
+  function loadSofascoreEnhancer() {
+    if (document.querySelector('script[data-lux-sports-sofascore]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/sports-sofascore.js?v=20260912-sofascore1';
+    script.async = true;
+    script.dataset.luxSportsSofascore = '1';
+    document.head.appendChild(script);
+  }
 
   function hasSportsRender(container) {
     return Boolean(container?.querySelector('[data-lux-sports-card], [data-lux-sports-empty]'));
@@ -36,6 +45,8 @@
 
     return true;
   }
+
+  loadSofascoreEnhancer();
 
   const timer = setInterval(() => {
     attempts += 1;
