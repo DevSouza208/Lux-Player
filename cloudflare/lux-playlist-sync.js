@@ -5,9 +5,10 @@ const corsHeaders = {
   "Cache-Control": "no-store"
 };
 
-const PROVIDER_ROOT = "provider";
-const PROVIDER_MIN_SYNC_MS = 2.75 * 60 * 60 * 1000;
-const WORKER_VERSION = "1.6.3-provider-metadata2";
+const WORKER_VERSION = "1.6.3-user-snapshot1";
+const USER_SNAPSHOT_SCHEMA = 5;
+const SYNC_BATCH_SIZE = 5;
+const SYNC_CURSOR_KEY = "_system/user-snapshot-cursor.json";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -34,17 +35,18 @@ async function supabaseFetch(env, path, options = {}) {
 }
 
 async function updateUser(env, username, data) {
-  return supabaseFetch(env, `usuarios?usuario=eq.${encodeURIComponent(username)}`, {
+  const response = await supabaseFetch(env, `usuarios?usuario=eq.${encodeURIComponent(username)}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify(data)
   });
+  if (!response.ok) throw new Error(`Erro ao atualizar usuário: HTTP ${response.status}`);
 }
 
 async function getUserByUsername(env, username) {
   const response = await supabaseFetch(
     env,
-    `usuarios?select=usuario,senha,cargo,lista_m3u,userxc,senhaxc,urlxc&usuario=eq.${encodeURIComponent(username)}&limit=1`
+    `usuarios?select=usuario,senha,cargo,lista_m3u,lista_m3u_https,userxc,senhaxc,urlxc&usuario=eq.${encodeURIComponent(username)}&limit=1`
   );
   if (!response.ok) throw new Error(`Erro ao consultar usuário: HTTP ${response.status}`);
   const rows = await response.json();
@@ -120,7 +122,7 @@ const catalogParts = [
   ["series", "get_series", "series.json"]
 ];
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 120000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -136,6 +138,7 @@ function r2HttpMetadata(contentType, cacheControl = "no-cache, no-store, max-age
 
 async function saveRemoteResponseToR2(env, key, response, contentType, cacheControl) {
   if (!response.body) throw new Error("Fornecedor retornou resposta sem conteúdo.");
+
   const rawLength = response.headers.get("content-length");
   const contentLength = /^\d+$/.test(String(rawLength || "")) ? Number(rawLength) : 0;
   const options = { httpMetadata: r2HttpMetadata(contentType, cacheControl) };
@@ -164,11 +167,31 @@ async function readR2Json(env, key) {
   }
 }
 
+function userRoot(username) {
+  return `catalogos/${encodeURIComponent(String(username || "").trim())}`;
+}
+
+async function readUserManifest(env, username) {
+  return readR2Json(env, `${userRoot(username)}/manifest.json`);
+}
+
+async function deleteUserSnapshotVersion(env, username, version) {
+  const clean = String(version || "").trim();
+  if (!clean) return;
+  const prefix = `${userRoot(username)}/${clean}`;
+  await Promise.allSettled([
+    env.LISTS_BUCKET.delete(`${prefix}/playlist.m3u`),
+    env.LISTS_BUCKET.delete(`${prefix}/manifest.json`),
+    ...catalogParts.map(([, , filename]) => env.LISTS_BUCKET.delete(`${prefix}/${filename}`))
+  ]);
+}
+
 async function syncCatalogPart(env, source, versionPrefix, part) {
   const [name, action, filename] = part;
   const response = await fetchWithTimeout(
     xtreamUrl(source, action),
-    { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } }
+    { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } },
+    120000
   );
   if (!response.ok) throw new Error(`${action}: fornecedor respondeu HTTP ${response.status}`);
 
@@ -183,115 +206,24 @@ async function syncCatalogPart(env, source, versionPrefix, part) {
   return { name, filename, bytes };
 }
 
-async function deleteProviderVersion(env, version) {
-  const clean = String(version || "").trim();
-  if (!clean) return;
-  const prefix = `${PROVIDER_ROOT}/${clean}`;
-  await Promise.allSettled([
-    env.LISTS_BUCKET.delete(`${prefix}/playlist.m3u`),
-    ...catalogParts.map(([, , filename]) => env.LISTS_BUCKET.delete(`${prefix}/${filename}`))
-  ]);
-}
-
-async function getProviderUser(env) {
-  if (env.PROVIDER_USERNAME) {
-    const configured = await getUserByUsername(env, String(env.PROVIDER_USERNAME));
-    if (configured?.lista_m3u) return configured;
-  }
-
-  const adminResponse = await supabaseFetch(
-    env,
-    "usuarios?select=usuario,senha,cargo,lista_m3u,userxc,senhaxc,urlxc&cargo=eq.admin&lista_m3u=not.is.null&limit=1"
-  );
-  if (adminResponse.ok) {
-    const rows = await adminResponse.json();
-    if (rows?.[0]?.lista_m3u) return rows[0];
-  }
-
-  const anyResponse = await supabaseFetch(
-    env,
-    "usuarios?select=usuario,senha,cargo,lista_m3u,userxc,senhaxc,urlxc&lista_m3u=not.is.null&limit=1"
-  );
-  if (!anyResponse.ok) throw new Error(`Erro ao localizar provedor: HTTP ${anyResponse.status}`);
-  const rows = await anyResponse.json();
-  if (!rows?.[0]?.lista_m3u) throw new Error("Nenhuma lista de provedor foi encontrada.");
-  return rows[0];
-}
-
-async function getProviderManifest(env) {
-  return readR2Json(env, `${PROVIDER_ROOT}/manifest.json`);
-}
-
-function providerManifestIsFresh(manifest) {
-  const time = Date.parse(manifest?.syncedAt || "");
-  return Number.isFinite(time) && Date.now() - time < PROVIDER_MIN_SYNC_MS;
-}
-
-async function syncSharedProviderMetadata(env, { force = false } = {}) {
-  const previousManifest = await getProviderManifest(env);
-  if (!force && providerManifestIsFresh(previousManifest) && Number(previousManifest?.schemaVersion) >= 4) {
-    return { status: "current", ...previousManifest };
-  }
-
-  const provider = await getProviderUser(env);
-  const xtreamSource = getXtreamSourceFromUser(provider);
-  if (!xtreamSource) throw new Error("Não foi possível obter as credenciais Xtream do provedor.");
-
-  const version = String(Date.now());
-  const versionPrefix = `${PROVIDER_ROOT}/${version}`;
-  const saved = [];
-
-  try {
-    for (const part of catalogParts) {
-      saved.push(await syncCatalogPart(env, xtreamSource, versionPrefix, part));
-    }
-  } catch (error) {
-    await deleteProviderVersion(env, version);
-    throw error;
-  }
-
-  const files = {};
-  const bytes = {};
-  saved.forEach(part => {
-    files[part.name] = `${baseUrl(env)}/${versionPrefix}/${part.filename}`;
-    bytes[part.name] = part.bytes;
-  });
-
-  const manifest = {
-    schemaVersion: 4,
-    scope: "provider-metadata",
-    version,
-    previousVersion: String(previousManifest?.version || ""),
-    syncedAt: new Date().toISOString(),
-    files,
-    bytes
-  };
-
-  // Só publica depois dos 6 JSONs estarem completos. Nenhuma M3U/credencial é compartilhada aqui.
-  await env.LISTS_BUCKET.put(`${PROVIDER_ROOT}/manifest.json`, JSON.stringify(manifest), {
-    httpMetadata: r2HttpMetadata("application/json; charset=utf-8", "no-cache, no-store, max-age=0")
-  });
-
-  // Remove a playlist compartilhada criada pela versão anterior, se existir.
-  if (previousManifest?.version) {
-    await env.LISTS_BUCKET.delete(`${PROVIDER_ROOT}/${previousManifest.version}/playlist.m3u`).catch(() => null);
-  }
-  if (previousManifest?.previousVersion) {
-    await deleteProviderVersion(env, previousManifest.previousVersion);
-  }
-
-  return { status: "success", ...manifest };
-}
-
-async function syncPlaylistOnly(env, user) {
+async function syncUserSnapshot(env, user) {
   const username = String(user?.usuario || "").trim();
   const sourceUrl = String(user?.lista_m3u || "").trim();
+
   if (!username || !/^https?:\/\//i.test(sourceUrl)) {
-    return { usuario: username, status: "skipped", message: "Sem URL HTTP/HTTPS válida", mode: "playlist-only" };
+    return { usuario: username, status: "skipped", message: "Sem URL HTTP/HTTPS válida", mode: "user-snapshot" };
   }
 
-  const encodedUser = encodeURIComponent(username);
-  const objectKey = `listas/${encodedUser}.m3u`;
+  const previousManifest = await readUserManifest(env, username);
+  const version = String(Date.now());
+  const root = userRoot(username);
+  const versionPrefix = `${root}/${version}`;
+  const playlistKey = `${versionPrefix}/playlist.m3u`;
+  const playlistUrl = `${baseUrl(env)}/${playlistKey}`;
+  const versionManifestKey = `${versionPrefix}/manifest.json`;
+  const stableManifestKey = `${root}/manifest.json`;
+  const xtreamSource = getXtreamSourceFromUser(user);
+  const savedParts = [];
 
   try {
     const playlistResponse = await fetchWithTimeout(
@@ -299,53 +231,167 @@ async function syncPlaylistOnly(env, user) {
       { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } },
       120000
     );
-
-    if (!playlistResponse.ok) {
-      if (playlistResponse.status === 401 || playlistResponse.status === 403) {
-        await env.LISTS_BUCKET.delete(objectKey).catch(() => null);
-      }
-      throw new Error(`Fornecedor respondeu HTTP ${playlistResponse.status}`);
-    }
+    if (!playlistResponse.ok) throw new Error(`Playlist: fornecedor respondeu HTTP ${playlistResponse.status}`);
 
     const playlistBytes = await saveRemoteResponseToR2(
       env,
-      objectKey,
+      playlistKey,
       playlistResponse,
       "audio/x-mpegurl; charset=utf-8",
-      "no-cache, no-store, max-age=0"
+      "public, max-age=31536000, immutable"
     );
 
-    const httpsUrl = `${baseUrl(env)}/${objectKey}`;
+    if (xtreamSource) {
+      // Intencionalmente sequencial: o servidor trabalha em silêncio sem martelar o provedor.
+      for (const part of catalogParts) {
+        savedParts.push(await syncCatalogPart(env, xtreamSource, versionPrefix, part));
+      }
+    }
+
+    const files = {};
+    const bytes = { playlist: playlistBytes };
+    savedParts.forEach(part => {
+      files[part.name] = `${baseUrl(env)}/${versionPrefix}/${part.filename}`;
+      bytes[part.name] = part.bytes;
+    });
+
     const syncedAt = new Date().toISOString();
+    const manifest = {
+      schemaVersion: USER_SNAPSHOT_SCHEMA,
+      scope: xtreamSource ? "user-full-snapshot" : "user-playlist-snapshot",
+      username,
+      version,
+      previousVersion: String(previousManifest?.version || ""),
+      syncedAt,
+      playlist: playlistUrl,
+      files,
+      bytes
+    };
+
+    // 1) grava um manifesto imutável dentro da própria versão;
+    // 2) só então troca o ponteiro do usuário no banco;
+    // 3) por último publica o alias estável.
+    // Assim ninguém vê uma versão pela metade.
+    await env.LISTS_BUCKET.put(versionManifestKey, JSON.stringify(manifest), {
+      httpMetadata: r2HttpMetadata("application/json; charset=utf-8", "public, max-age=31536000, immutable")
+    });
+
     await updateUser(env, username, {
-      lista_m3u_https: httpsUrl,
+      lista_m3u_https: playlistUrl,
       lista_m3u_sync_at: syncedAt,
       lista_m3u_sync_status: "success",
       lista_m3u_sync_error: null
     });
 
-    return { usuario: username, status: "success", url: httpsUrl, playlistBytes, syncedAt, mode: "playlist-only" };
-  } catch (error) {
-    await updateUser(env, username, {
-      lista_m3u_sync_at: new Date().toISOString(),
-      lista_m3u_sync_status: "error",
-      lista_m3u_sync_error: error?.message || "Erro desconhecido"
+    await env.LISTS_BUCKET.put(stableManifestKey, JSON.stringify(manifest), {
+      httpMetadata: r2HttpMetadata("application/json; charset=utf-8", "no-cache, no-store, max-age=0")
     });
-    return { usuario: username, status: "error", message: error?.message || "Erro desconhecido", mode: "playlist-only" };
+
+    // Mantém uma geração anterior como margem para sessões que já estavam abertas.
+    // A geração "avó" some apenas depois da troca estar concluída.
+    if (previousManifest?.previousVersion) {
+      await deleteUserSnapshotVersion(env, username, previousManifest.previousVersion);
+    }
+
+    // O arquivo legado só some depois que já existia um snapshot anterior completo.
+    if (Number(previousManifest?.schemaVersion || 0) >= USER_SNAPSHOT_SCHEMA) {
+      await env.LISTS_BUCKET.delete(`listas/${encodeURIComponent(username)}.m3u`).catch(() => null);
+    }
+
+    return {
+      usuario: username,
+      status: "success",
+      mode: manifest.scope,
+      url: playlistUrl,
+      manifest: `${baseUrl(env)}/${versionManifestKey}`,
+      version,
+      previousVersion: manifest.previousVersion,
+      syncedAt,
+      files: Object.keys(files),
+      bytes
+    };
+  } catch (error) {
+    await deleteUserSnapshotVersion(env, username, version);
+    try {
+      await updateUser(env, username, {
+        lista_m3u_sync_at: new Date().toISOString(),
+        lista_m3u_sync_status: "error",
+        lista_m3u_sync_error: error?.message || "Erro desconhecido"
+      });
+    } catch (_) {}
+
+    return {
+      usuario: username,
+      status: "error",
+      mode: "user-snapshot",
+      message: error?.message || "Erro desconhecido"
+    };
   }
 }
 
 async function getUsersWithPlaylists(env) {
-  const response = await supabaseFetch(env, "usuarios?select=usuario,lista_m3u,userxc,senhaxc,urlxc&lista_m3u=not.is.null");
+  const response = await supabaseFetch(
+    env,
+    "usuarios?select=usuario,lista_m3u,lista_m3u_https,userxc,senhaxc,urlxc&lista_m3u=not.is.null"
+  );
   if (!response.ok) throw new Error(`Erro ao consultar usuários: HTTP ${response.status}`);
   return response.json();
 }
 
-async function syncAllPlaylists(env) {
+async function syncAllUserSnapshots(env) {
   const users = await getUsersWithPlaylists(env);
   const results = [];
-  for (const user of users) results.push(await syncPlaylistOnly(env, user));
+
+  // Sequencial de propósito: pode levar mais tempo, mas evita picos no provedor
+  // e só troca cada usuário depois do snapshot completo.
+  for (const user of users) {
+    results.push(await syncUserSnapshot(env, user));
+  }
+
   return results;
+}
+
+async function syncNextUserBatch(env, limit = SYNC_BATCH_SIZE) {
+  const users = (await getUsersWithPlaylists(env))
+    .slice()
+    .sort((a, b) => String(a?.usuario || "").localeCompare(String(b?.usuario || ""), "pt-BR"));
+
+  if (!users.length) {
+    return { results: [], batchSize: 0, total: 0, nextIndex: 0, completedCycle: true };
+  }
+
+  const cursor = await readR2Json(env, SYNC_CURSOR_KEY);
+  let startIndex = Number(cursor?.nextIndex || 0);
+  if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= users.length) startIndex = 0;
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || SYNC_BATCH_SIZE, SYNC_BATCH_SIZE));
+  const selected = users.slice(startIndex, startIndex + safeLimit);
+  const results = [];
+
+  for (const user of selected) {
+    results.push(await syncUserSnapshot(env, user));
+  }
+
+  const rawNext = startIndex + selected.length;
+  const completedCycle = rawNext >= users.length;
+  const nextIndex = completedCycle ? 0 : rawNext;
+
+  await env.LISTS_BUCKET.put(SYNC_CURSOR_KEY, JSON.stringify({
+    nextIndex,
+    total: users.length,
+    updatedAt: new Date().toISOString()
+  }), {
+    httpMetadata: r2HttpMetadata("application/json; charset=utf-8", "no-cache, no-store, max-age=0")
+  });
+
+  return {
+    results,
+    batchSize: selected.length,
+    total: users.length,
+    startIndex,
+    nextIndex,
+    completedCycle
+  };
 }
 
 async function serveR2Object(request, env) {
@@ -357,8 +403,14 @@ async function serveR2Object(request, env) {
   const headers = new Headers(corsHeaders);
   const isJson = url.pathname.endsWith(".json");
   headers.set("Content-Type", isJson ? "application/json; charset=utf-8" : "audio/x-mpegurl; charset=utf-8");
-  const isProviderVersioned = /^\/provider\/\d+\//.test(url.pathname);
-  headers.set("Cache-Control", isProviderVersioned ? "public, max-age=31536000, immutable" : "no-cache, no-store, max-age=0");
+
+  const immutableVersion =
+    /^\/catalogos\/[^/]+\/\d+\//.test(url.pathname) ||
+    /^\/provider\/\d+\//.test(url.pathname);
+  headers.set("Cache-Control", immutableVersion
+    ? "public, max-age=31536000, immutable"
+    : "no-cache, no-store, max-age=0"
+  );
   headers.set("ETag", object.httpEtag);
   return new Response(object.body, { headers });
 }
@@ -374,18 +426,21 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      const manifest = await getProviderManifest(env);
       return json({
         ok: true,
         worker: "lux-playlist-sync",
         version: WORKER_VERSION,
-        provider: manifest ? { version: manifest.version, syncedAt: manifest.syncedAt, scope: manifest.scope } : null
+        mode: "per-user-atomic-https-snapshots"
       });
     }
 
     if (
       request.method === "GET" &&
-      (url.pathname.startsWith("/listas/") || url.pathname.startsWith("/catalogos/") || url.pathname.startsWith("/provider/"))
+      (
+        url.pathname.startsWith("/listas/") ||
+        url.pathname.startsWith("/catalogos/") ||
+        url.pathname.startsWith("/provider/")
+      )
     ) {
       return serveR2Object(request, env);
     }
@@ -394,27 +449,11 @@ export default {
       const body = await readJsonBody(request);
       try {
         const account = await authenticateUser(env, body.username, body.password);
-        const [playlist, provider] = await Promise.all([
-          syncPlaylistOnly(env, account),
-          syncSharedProviderMetadata(env, { force: false })
-        ]);
-        const ok = playlist.status !== "error";
-        return json({ ok, result: { playlist, provider } }, ok ? 200 : 502);
+        const result = await syncUserSnapshot(env, account);
+        return json({ ok: result.status !== "error", result }, result.status === "error" ? 502 : 200);
       } catch (error) {
         const message = error?.message || "Falha ao atualizar a conta.";
         return json({ ok: false, error: message }, /Credenciais/i.test(message) ? 401 : 500);
-      }
-    }
-
-    if (request.method === "POST" && url.pathname === "/sync-provider") {
-      const body = await readJsonBody(request);
-      try {
-        await authenticateAdmin(env, body.username, body.password);
-        const result = await syncSharedProviderMetadata(env, { force: true });
-        return json({ ok: true, result });
-      } catch (error) {
-        const message = error?.message || "Falha ao sincronizar os metadados do provedor.";
-        return json({ ok: false, error: message }, /Credenciais|administradores/i.test(message) ? 401 : 500);
       }
     }
 
@@ -425,53 +464,89 @@ export default {
         const targetUsername = String(body.targetUsername || admin.usuario || "").trim();
         const target = await getUserByUsername(env, targetUsername);
         if (!target) throw new Error("Usuário a sincronizar não encontrado.");
-        const [playlist, provider] = await Promise.all([
-          syncPlaylistOnly(env, target),
-          syncSharedProviderMetadata(env, { force: false })
-        ]);
-        const ok = playlist.status !== "error";
-        return json({ ok, result: { playlist, provider } }, ok ? 200 : 502);
+        const result = await syncUserSnapshot(env, target);
+        return json({ ok: result.status !== "error", result }, result.status === "error" ? 502 : 200);
       } catch (error) {
         const message = error?.message || "Falha ao sincronizar conta.";
         return json({ ok: false, error: message }, /Credenciais|administradores/i.test(message) ? 401 : 500);
       }
     }
 
+    // Mantém a rota usada pelo painel antigo, mas agora ela processa um lote pequeno.
+    if (request.method === "POST" && url.pathname === "/sync-provider") {
+      const body = await readJsonBody(request);
+      try {
+        await authenticateAdmin(env, body.username, body.password);
+        const batch = await syncNextUserBatch(env);
+        return json({
+          ok: !batch.results.some(row => row.status === "error"),
+          mode: "user-snapshot-batch",
+          ...batch
+        });
+      } catch (error) {
+        const message = error?.message || "Falha ao sincronizar as listas.";
+        return json({ ok: false, error: message }, /Credenciais|administradores/i.test(message) ? 401 : 500);
+      }
+    }
+
     if (request.method === "POST" && url.pathname === "/sync") {
-      if (request.headers.get("X-Sync-Token") !== env.SYNC_TOKEN) return json({ error: "Não autorizado" }, 401);
+      if (request.headers.get("X-Sync-Token") !== env.SYNC_TOKEN) {
+        return json({ error: "Não autorizado" }, 401);
+      }
+
       try {
         const body = await readJsonBody(request);
-        if (body.provider === true) {
-          const provider = await syncSharedProviderMetadata(env, { force: true });
-          return json({ ok: true, provider });
-        }
         if (body.username) {
           const user = await getUserByUsername(env, String(body.username));
           if (!user) throw new Error("Usuário não encontrado.");
-          const playlist = await syncPlaylistOnly(env, user);
-          return json({ ok: playlist.status !== "error", playlist }, playlist.status === "error" ? 502 : 200);
+          const result = await syncUserSnapshot(env, user);
+          return json({ ok: result.status !== "error", result }, result.status === "error" ? 502 : 200);
         }
-        const [provider, playlists] = await Promise.all([
-          syncSharedProviderMetadata(env, { force: true }),
-          syncAllPlaylists(env)
-        ]);
-        return json({ ok: true, provider, playlists });
+
+        if (body.all === true) {
+          const results = await syncAllUserSnapshots(env);
+          return json({
+            ok: !results.some(row => row.status === "error"),
+            mode: "all-user-snapshots",
+            results
+          });
+        }
+
+        const batch = await syncNextUserBatch(env, body.limit);
+        return json({
+          ok: !batch.results.some(row => row.status === "error"),
+          mode: "user-snapshot-batch",
+          ...batch
+        });
       } catch (error) {
         return json({ ok: false, error: error?.message || "Erro desconhecido" }, 500);
       }
     }
 
-    return json({ ok: true, message: "Lux Playlist Sync ativo", version: WORKER_VERSION });
+    return json({
+      ok: true,
+      message: "Lux Playlist Sync ativo",
+      version: WORKER_VERSION,
+      mode: "per-user-atomic-https-snapshots"
+    });
   },
 
   async scheduled(controller, env, ctx) {
     ctx.waitUntil((async () => {
-      const [provider, playlists] = await Promise.allSettled([
-        syncSharedProviderMetadata(env, { force: true }),
-        syncAllPlaylists(env)
-      ]);
-      if (provider.status === "rejected") console.error("[Lux Sync] Metadados globais:", provider.reason);
-      if (playlists.status === "rejected") console.error("[Lux Sync] Playlists individuais:", playlists.reason);
+      const batch = await syncNextUserBatch(env);
+      const failed = batch.results.filter(row => row.status === "error");
+      if (failed.length) {
+        console.error("[Lux Sync] Algumas contas do lote falharam:", failed.map(row => ({
+          usuario: row.usuario,
+          message: row.message
+        })));
+      }
+      console.info("[Lux Sync] Lote concluído.", {
+        batchSize: batch.batchSize,
+        total: batch.total,
+        nextIndex: batch.nextIndex,
+        completedCycle: batch.completedCycle
+      });
     })());
   }
 };
