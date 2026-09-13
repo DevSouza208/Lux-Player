@@ -15,18 +15,18 @@
   // 1. Antes de playLiveChannel/openVodPlayer, pedimos um slot à Edge Function.
   // 2. Se houver vaga, a reprodução normal do Lux continua sem alterações.
   // 3. Enquanto o <video> estiver realmente tocando, enviamos heartbeat.
-  // 4. Pause/fim libera o slot; crash/fechamento sem release expira no backend.
-  // 5. Se o backend de controle estiver indisponível, falhamos ABERTO para não
+  // 4. Pause libera o slot; ao dar play de novo, o vídeo precisa adquirir vaga outra vez.
+  // 5. Fim/erro libera tudo; crash/fechamento sem release expira no backend em 90 s.
+  // 6. Se o backend de controle estiver indisponível, falhamos ABERTO para não
   //    transformar uma falha de telemetria em indisponibilidade do player.
   //
   // PROTEGIDO:
   // Este arquivo é uma camada de guarda. Ele NÃO monta catálogo, NÃO altera URL,
-  // NÃO troca categorias e NÃO modifica o player original. Só decide se a chamada
-  // original pode começar naquele momento.
+  // NÃO troca categorias e NÃO modifica a lógica interna dos players originais.
   // ============================================================
 
   if (window.__luxStreamSessionGuardInstalled) return;
-  window.__luxStreamSessionGuardInstalled = '20260913-stream-guard1';
+  window.__luxStreamSessionGuardInstalled = '20260913-stream-guard2';
 
   const HEARTBEAT_MS = 25_000;
   const RELEASE_DELAY_MS = 900;
@@ -40,6 +40,7 @@
   let releaseTimer = null;
   let pendingPlayTimer = null;
   let wrappersInstalled = false;
+  let resumeAcquireInProgress = false;
   let attempts = 0;
 
   const getClient = () => {
@@ -167,21 +168,28 @@
     );
   };
 
-  const resetLocalState = () => {
+  const clearSlotState = ({ preserveMedia = false } = {}) => {
     slotAcquired = false;
-    currentMediaKey = '';
-    currentItem = null;
     playbackStarted = false;
     stopTimers();
+    if (!preserveMedia) {
+      currentMediaKey = '';
+      currentItem = null;
+    }
   };
 
-  // Libera o slot no servidor. A chamada é best-effort: caso falhe, o backend
-  // expira a sessão automaticamente após ficar sem heartbeat.
-  const releaseSlot = async () => {
-    if (!slotAcquired) return;
+  // Libera o slot no servidor. Em pausa preservamos currentItem para que o botão
+  // Play nativo consiga pedir um novo slot antes de retomar o mesmo conteúdo.
+  const releaseSlot = async ({ preserveMedia = false } = {}) => {
+    if (!slotAcquired) {
+      clearSlotState({ preserveMedia });
+      return;
+    }
+
     const user = getUser();
     const sessionId = user ? getSessionId(user) : '';
-    resetLocalState();
+    clearSlotState({ preserveMedia });
+
     try {
       const client = getClient();
       if (!client || !user?.user || !user?.pass || !sessionId) return;
@@ -211,7 +219,7 @@
 
         video.pause();
         showLimitMessage(result);
-        resetLocalState();
+        clearSlotState();
       } catch (error) {
         console.warn('[Lux Play] Heartbeat de reprodução indisponível.', error);
       }
@@ -239,7 +247,7 @@
       // Resposta explícita allowed:false sempre bloqueia a nova reprodução.
       if (result?.unavailable) return true;
       if (result?.allowed === false) {
-        resetLocalState();
+        clearSlotState();
         showLimitMessage(result);
         return false;
       }
@@ -259,9 +267,30 @@
     }
   };
 
+  // Quando o usuário usa o controle nativo do <video> para retomar uma mídia que
+  // estava pausada, não passa por openVodPlayer/playLiveChannel. Por isso o evento
+  // play interrompe a retomada por milissegundos, readquire o slot e só então dá play.
+  const reacquireOnNativeResume = async video => {
+    if (slotAcquired || resumeAcquireInProgress || !currentItem || !shouldManageItem(currentItem)) return;
+    resumeAcquireInProgress = true;
+    try {
+      video.pause();
+      const allowed = await acquireSlot(currentItem);
+      if (allowed) {
+        try { await video.play(); } catch (_) {}
+      }
+    } finally {
+      resumeAcquireInProgress = false;
+    }
+  };
+
   const bindVideoLifecycle = video => {
     if (!video || video.dataset.luxStreamLifecycle === '1') return;
     video.dataset.luxStreamLifecycle = '1';
+
+    video.addEventListener('play', () => {
+      if (!slotAcquired && currentItem && shouldManageItem(currentItem)) reacquireOnNativeResume(video);
+    });
 
     video.addEventListener('playing', () => {
       clearTimer(releaseTimer);
@@ -278,13 +307,13 @@
       clearTimer(releaseTimer);
       // Pequeno atraso evita liberar/reocupar por pausas internas muito rápidas.
       releaseTimer = setTimeout(() => {
-        if (video.paused && !video.ended) releaseSlot();
+        if (video.paused && !video.ended) releaseSlot({ preserveMedia: true });
       }, RELEASE_DELAY_MS);
     });
 
     video.addEventListener('ended', () => releaseSlot());
     video.addEventListener('error', () => {
-      if (slotAcquired && !playbackStarted) releaseSlot();
+      if (slotAcquired) releaseSlot();
     });
   };
 
