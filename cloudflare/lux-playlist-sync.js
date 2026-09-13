@@ -5,15 +5,13 @@ const corsHeaders = {
   "Cache-Control": "no-store"
 };
 
-const WORKER_VERSION = "1.6.3-user-snapshot1";
-const USER_SNAPSHOT_SCHEMA = 5;
-const SYNC_BATCH_SIZE = 5;
-const SYNC_CURSOR_KEY = "_system/user-snapshot-cursor.json";
-
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" }
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json; charset=utf-8"
+    }
   });
 }
 
@@ -35,58 +33,44 @@ async function supabaseFetch(env, path, options = {}) {
 }
 
 async function updateUser(env, username, data) {
-  const response = await supabaseFetch(env, `usuarios?usuario=eq.${encodeURIComponent(username)}`, {
+  return supabaseFetch(env, `usuarios?usuario=eq.${encodeURIComponent(username)}`, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify(data)
   });
-  if (!response.ok) throw new Error(`Erro ao atualizar usuário: HTTP ${response.status}`);
 }
 
 async function getUserByUsername(env, username) {
   const response = await supabaseFetch(
     env,
-    `usuarios?select=usuario,senha,cargo,lista_m3u,lista_m3u_https,userxc,senhaxc,urlxc&usuario=eq.${encodeURIComponent(username)}&limit=1`
+    `usuarios?select=usuario,senha,cargo,lista_m3u&usuario=eq.${encodeURIComponent(username)}&limit=1`
   );
   if (!response.ok) throw new Error(`Erro ao consultar usuário: HTTP ${response.status}`);
   const rows = await response.json();
   return rows?.[0] || null;
 }
 
-async function authenticateUser(env, username, password) {
+async function authenticateAdmin(env, username, password) {
   const account = await getUserByUsername(env, username);
   if (!account || String(account.senha || "") !== String(password || "")) {
     throw new Error("Credenciais inválidas.");
   }
-  return account;
-}
-
-async function authenticateAdmin(env, username, password) {
-  const account = await authenticateUser(env, username, password);
   if (String(account.cargo || "").trim().toLowerCase() !== "admin") {
     throw new Error("Apenas administradores podem iniciar a sincronização manual.");
   }
   return account;
 }
 
-function normalizeXtreamServer(value) {
-  try {
-    const url = new URL(String(value || "").trim());
-    const pathname = url.pathname.replace(/\/(?:get|player_api)\.php$/i, "").replace(/\/+$/, "");
-    return `${url.origin}${pathname}`.replace(/\/+$/, "");
-  } catch {
-    return "";
-  }
-}
-
 function getXtreamSource(sourceUrl) {
   try {
-    const url = new URL(String(sourceUrl || "").trim());
+    const url = new URL(sourceUrl);
     const username = url.searchParams.get("username") || url.searchParams.get("user");
     const password = url.searchParams.get("password") || url.searchParams.get("pass");
     if (!username || !password) return null;
+
     const match = url.pathname.match(/^(.*)\/(?:get|player_api)\.php$/i);
     if (!match) return null;
+
     return {
       server: `${url.origin}${match[1] || ""}`.replace(/\/+$/, ""),
       username,
@@ -95,16 +79,6 @@ function getXtreamSource(sourceUrl) {
   } catch {
     return null;
   }
-}
-
-function getXtreamSourceFromUser(user) {
-  const explicitServer = normalizeXtreamServer(user?.urlxc);
-  const explicitUser = String(user?.userxc || "").trim();
-  const explicitPass = String(user?.senhaxc || "").trim();
-  if (explicitServer && explicitUser && explicitPass) {
-    return { server: explicitServer, username: explicitUser, password: explicitPass };
-  }
-  return getXtreamSource(user?.lista_m3u);
 }
 
 function xtreamUrl(source, action) {
@@ -122,7 +96,7 @@ const catalogParts = [
   ["series", "get_series", "series.json"]
 ];
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 120000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -132,17 +106,32 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 120000) {
   }
 }
 
-function r2HttpMetadata(contentType, cacheControl = "no-cache, no-store, max-age=0") {
-  return { contentType, cacheControl };
+async function readPreviousCatalogManifest(env, username) {
+  try {
+    const key = `catalogos/${encodeURIComponent(username)}/manifest.json`;
+    const object = await env.LISTS_BUCKET.get(key);
+    if (!object) return null;
+    return JSON.parse(await object.text());
+  } catch {
+    return null;
+  }
 }
 
-async function saveRemoteResponseToR2(env, key, response, contentType, cacheControl) {
+function r2HttpMetadata(contentType) {
+  return {
+    contentType,
+    cacheControl: "no-cache, no-store, max-age=0"
+  };
+}
+
+async function saveRemoteResponseToR2(env, key, response, contentType) {
   if (!response.body) throw new Error("Fornecedor retornou resposta sem conteúdo.");
 
   const rawLength = response.headers.get("content-length");
   const contentLength = /^\d+$/.test(String(rawLength || "")) ? Number(rawLength) : 0;
-  const options = { httpMetadata: r2HttpMetadata(contentType, cacheControl) };
+  const options = { httpMetadata: r2HttpMetadata(contentType) };
 
+  // Quando o fornecedor informa o tamanho, mantemos streaming real sem bufferizar.
   if (Number.isSafeInteger(contentLength) && contentLength > 0) {
     const fixed = new FixedLengthStream(contentLength);
     await Promise.all([
@@ -152,78 +141,97 @@ async function saveRemoteResponseToR2(env, key, response, contentType, cacheCont
     return contentLength;
   }
 
+  // Alguns servidores Xtream respondem em chunked transfer e não enviam
+  // Content-Length. R2 não aceita um ReadableStream de tamanho desconhecido
+  // em put(), então neste caso usamos um valor de tamanho fixo (ArrayBuffer).
   const buffer = await response.arrayBuffer();
   await env.LISTS_BUCKET.put(key, buffer, options);
   return buffer.byteLength;
-}
-
-async function readR2Json(env, key) {
-  try {
-    const object = await env.LISTS_BUCKET.get(key);
-    if (!object) return null;
-    return JSON.parse(await object.text());
-  } catch {
-    return null;
-  }
-}
-
-function userRoot(username) {
-  return `catalogos/${encodeURIComponent(String(username || "").trim())}`;
-}
-
-async function readUserManifest(env, username) {
-  return readR2Json(env, `${userRoot(username)}/manifest.json`);
-}
-
-async function deleteUserSnapshotVersion(env, username, version) {
-  const clean = String(version || "").trim();
-  if (!clean) return;
-  const prefix = `${userRoot(username)}/${clean}`;
-  await Promise.allSettled([
-    env.LISTS_BUCKET.delete(`${prefix}/playlist.m3u`),
-    env.LISTS_BUCKET.delete(`${prefix}/manifest.json`),
-    ...catalogParts.map(([, , filename]) => env.LISTS_BUCKET.delete(`${prefix}/${filename}`))
-  ]);
 }
 
 async function syncCatalogPart(env, source, versionPrefix, part) {
   const [name, action, filename] = part;
   const response = await fetchWithTimeout(
     xtreamUrl(source, action),
-    { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } },
-    120000
+    { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } }
   );
-  if (!response.ok) throw new Error(`${action}: fornecedor respondeu HTTP ${response.status}`);
+
+  if (!response.ok) {
+    throw new Error(`${action}: fornecedor respondeu HTTP ${response.status}`);
+  }
 
   const key = `${versionPrefix}/${filename}`;
   const bytes = await saveRemoteResponseToR2(
     env,
     key,
     response,
-    "application/json; charset=utf-8",
-    "public, max-age=31536000, immutable"
+    "application/json; charset=utf-8"
   );
+
   return { name, filename, bytes };
 }
 
-async function syncUserSnapshot(env, user) {
-  const username = String(user?.usuario || "").trim();
-  const sourceUrl = String(user?.lista_m3u || "").trim();
+async function cleanupOldCatalog(env, username, previousManifest, currentVersion) {
+  const oldVersion = String(previousManifest?.version || "");
+  if (!oldVersion || oldVersion === currentVersion) return;
 
-  if (!username || !/^https?:\/\//i.test(sourceUrl)) {
-    return { usuario: username, status: "skipped", message: "Sem URL HTTP/HTTPS válida", mode: "user-snapshot" };
+  const prefix = `catalogos/${encodeURIComponent(username)}/${oldVersion}`;
+  await Promise.allSettled(
+    catalogParts.map(([, , filename]) => env.LISTS_BUCKET.delete(`${prefix}/${filename}`))
+  );
+}
+
+async function syncXtreamCatalog(env, username, source, playlistUrl) {
+  const version = String(Date.now());
+  const encodedUser = encodeURIComponent(username);
+  const versionPrefix = `catalogos/${encodedUser}/${version}`;
+  const previousManifest = await readPreviousCatalogManifest(env, username);
+  const saved = [];
+
+  // Um endpoint grande por vez. Se o fornecedor vier sem Content-Length,
+  // o fallback precisa bufferizar somente aquele arquivo, nunca vários juntos.
+  for (const part of catalogParts) {
+    saved.push(await syncCatalogPart(env, source, versionPrefix, part));
   }
 
-  const previousManifest = await readUserManifest(env, username);
-  const version = String(Date.now());
-  const root = userRoot(username);
-  const versionPrefix = `${root}/${version}`;
-  const playlistKey = `${versionPrefix}/playlist.m3u`;
-  const playlistUrl = `${baseUrl(env)}/${playlistKey}`;
-  const versionManifestKey = `${versionPrefix}/manifest.json`;
-  const stableManifestKey = `${root}/manifest.json`;
-  const xtreamSource = getXtreamSourceFromUser(user);
-  const savedParts = [];
+  const files = {};
+  const bytes = {};
+  saved.forEach(part => {
+    files[part.name] = `${baseUrl(env)}/${versionPrefix}/${part.filename}`;
+    bytes[part.name] = part.bytes;
+  });
+
+  const manifest = {
+    schemaVersion: 2,
+    version,
+    syncedAt: new Date().toISOString(),
+    playlist: playlistUrl,
+    files,
+    bytes
+  };
+
+  const manifestKey = `catalogos/${encodedUser}/manifest.json`;
+  await env.LISTS_BUCKET.put(manifestKey, JSON.stringify(manifest), {
+    httpMetadata: r2HttpMetadata("application/json; charset=utf-8")
+  });
+
+  await cleanupOldCatalog(env, username, previousManifest, version);
+
+  return {
+    url: `${baseUrl(env)}/${manifestKey}`,
+    version,
+    files: Object.keys(files),
+    bytes
+  };
+}
+
+async function syncUser(env, user) {
+  const username = String(user.usuario || "").trim();
+  const sourceUrl = String(user.lista_m3u || "").trim();
+
+  if (!username || !/^https?:\/\//i.test(sourceUrl)) {
+    return { usuario: username, status: "skipped", message: "Sem URL HTTP/HTTPS válida" };
+  }
 
   try {
     const playlistResponse = await fetchWithTimeout(
@@ -231,232 +239,146 @@ async function syncUserSnapshot(env, user) {
       { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } },
       120000
     );
-    if (!playlistResponse.ok) throw new Error(`Playlist: fornecedor respondeu HTTP ${playlistResponse.status}`);
 
+    if (!playlistResponse.ok) {
+      throw new Error(`Fornecedor respondeu HTTP ${playlistResponse.status}`);
+    }
+
+    const encodedUser = encodeURIComponent(username);
+    const objectKey = `listas/${encodedUser}.m3u`;
     const playlistBytes = await saveRemoteResponseToR2(
       env,
-      playlistKey,
+      objectKey,
       playlistResponse,
-      "audio/x-mpegurl; charset=utf-8",
-      "public, max-age=31536000, immutable"
+      "audio/x-mpegurl; charset=utf-8"
     );
 
+    const httpsUrl = `${baseUrl(env)}/${objectKey}`;
+    const xtreamSource = getXtreamSource(sourceUrl);
+
+    let catalog = null;
+    let catalogError = null;
+
     if (xtreamSource) {
-      // Intencionalmente sequencial: o servidor trabalha em silêncio sem martelar o provedor.
-      for (const part of catalogParts) {
-        savedParts.push(await syncCatalogPart(env, xtreamSource, versionPrefix, part));
+      try {
+        catalog = await syncXtreamCatalog(env, username, xtreamSource, httpsUrl);
+      } catch (error) {
+        catalogError = error?.message || "Falha ao sincronizar catálogo Xtream";
+        console.warn(`[Lux Playlist Sync] Catálogo de ${username}:`, error);
       }
     }
 
-    const files = {};
-    const bytes = { playlist: playlistBytes };
-    savedParts.forEach(part => {
-      files[part.name] = `${baseUrl(env)}/${versionPrefix}/${part.filename}`;
-      bytes[part.name] = part.bytes;
-    });
-
-    const syncedAt = new Date().toISOString();
-    const manifest = {
-      schemaVersion: USER_SNAPSHOT_SCHEMA,
-      scope: xtreamSource ? "user-full-snapshot" : "user-playlist-snapshot",
-      username,
-      version,
-      previousVersion: String(previousManifest?.version || ""),
-      syncedAt,
-      playlist: playlistUrl,
-      files,
-      bytes
-    };
-
-    // 1) grava um manifesto imutável dentro da própria versão;
-    // 2) só então troca o ponteiro do usuário no banco;
-    // 3) por último publica o alias estável.
-    // Assim ninguém vê uma versão pela metade.
-    await env.LISTS_BUCKET.put(versionManifestKey, JSON.stringify(manifest), {
-      httpMetadata: r2HttpMetadata("application/json; charset=utf-8", "public, max-age=31536000, immutable")
-    });
-
     await updateUser(env, username, {
-      lista_m3u_https: playlistUrl,
-      lista_m3u_sync_at: syncedAt,
-      lista_m3u_sync_status: "success",
-      lista_m3u_sync_error: null
+      lista_m3u_https: httpsUrl,
+      lista_m3u_sync_at: new Date().toISOString(),
+      lista_m3u_sync_status: catalogError ? "partial" : "success",
+      lista_m3u_sync_error: catalogError
     });
-
-    await env.LISTS_BUCKET.put(stableManifestKey, JSON.stringify(manifest), {
-      httpMetadata: r2HttpMetadata("application/json; charset=utf-8", "no-cache, no-store, max-age=0")
-    });
-
-    // Mantém uma geração anterior como margem para sessões que já estavam abertas.
-    // A geração "avó" some apenas depois da troca estar concluída.
-    if (previousManifest?.previousVersion) {
-      await deleteUserSnapshotVersion(env, username, previousManifest.previousVersion);
-    }
-
-    // O arquivo legado só some depois que já existia um snapshot anterior completo.
-    if (Number(previousManifest?.schemaVersion || 0) >= USER_SNAPSHOT_SCHEMA) {
-      await env.LISTS_BUCKET.delete(`listas/${encodeURIComponent(username)}.m3u`).catch(() => null);
-    }
 
     return {
       usuario: username,
-      status: "success",
-      mode: manifest.scope,
-      url: playlistUrl,
-      manifest: `${baseUrl(env)}/${versionManifestKey}`,
-      version,
-      previousVersion: manifest.previousVersion,
-      syncedAt,
-      files: Object.keys(files),
-      bytes
+      status: catalogError ? "partial" : "success",
+      url: httpsUrl,
+      playlistBytes,
+      catalog: catalog
+        ? { status: "success", ...catalog }
+        : xtreamSource
+          ? { status: "error", message: catalogError }
+          : { status: "skipped", message: "A URL não contém credenciais Xtream reconhecíveis" }
     };
   } catch (error) {
-    await deleteUserSnapshotVersion(env, username, version);
-    try {
-      await updateUser(env, username, {
-        lista_m3u_sync_at: new Date().toISOString(),
-        lista_m3u_sync_status: "error",
-        lista_m3u_sync_error: error?.message || "Erro desconhecido"
-      });
-    } catch (_) {}
+    await updateUser(env, username, {
+      lista_m3u_sync_at: new Date().toISOString(),
+      lista_m3u_sync_status: "error",
+      lista_m3u_sync_error: error?.message || "Erro desconhecido"
+    });
 
     return {
       usuario: username,
       status: "error",
-      mode: "user-snapshot",
       message: error?.message || "Erro desconhecido"
     };
   }
 }
 
-async function getUsersWithPlaylists(env) {
-  const response = await supabaseFetch(
-    env,
-    "usuarios?select=usuario,lista_m3u,lista_m3u_https,userxc,senhaxc,urlxc&lista_m3u=not.is.null"
-  );
-  if (!response.ok) throw new Error(`Erro ao consultar usuários: HTTP ${response.status}`);
-  return response.json();
+async function syncOneByUsername(env, username) {
+  const user = await getUserByUsername(env, username);
+  if (!user) throw new Error("Usuário não encontrado.");
+  return syncUser(env, user);
 }
 
-async function syncAllUserSnapshots(env) {
-  const users = await getUsersWithPlaylists(env);
+async function syncAll(env) {
+  const response = await supabaseFetch(
+    env,
+    "usuarios?select=usuario,lista_m3u&lista_m3u=not.is.null"
+  );
+
+  if (!response.ok) {
+    throw new Error(`Erro ao consultar usuários: HTTP ${response.status}`);
+  }
+
+  const users = await response.json();
   const results = [];
 
-  // Sequencial de propósito: pode levar mais tempo, mas evita picos no provedor
-  // e só troca cada usuário depois do snapshot completo.
+  // Cron conservador: uma conta por vez. O catálogo de cada conta já faz
+  // bastante I/O e isso evita picos de memória/subrequests no Worker.
   for (const user of users) {
-    results.push(await syncUserSnapshot(env, user));
+    results.push(await syncUser(env, user));
   }
 
   return results;
-}
-
-async function syncNextUserBatch(env, limit = SYNC_BATCH_SIZE) {
-  const users = (await getUsersWithPlaylists(env))
-    .slice()
-    .sort((a, b) => String(a?.usuario || "").localeCompare(String(b?.usuario || ""), "pt-BR"));
-
-  if (!users.length) {
-    return { results: [], batchSize: 0, total: 0, nextIndex: 0, completedCycle: true };
-  }
-
-  const cursor = await readR2Json(env, SYNC_CURSOR_KEY);
-  let startIndex = Number(cursor?.nextIndex || 0);
-  if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= users.length) startIndex = 0;
-
-  const safeLimit = Math.max(1, Math.min(Number(limit) || SYNC_BATCH_SIZE, SYNC_BATCH_SIZE));
-  const selected = users.slice(startIndex, startIndex + safeLimit);
-  const results = [];
-
-  for (const user of selected) {
-    results.push(await syncUserSnapshot(env, user));
-  }
-
-  const rawNext = startIndex + selected.length;
-  const completedCycle = rawNext >= users.length;
-  const nextIndex = completedCycle ? 0 : rawNext;
-
-  await env.LISTS_BUCKET.put(SYNC_CURSOR_KEY, JSON.stringify({
-    nextIndex,
-    total: users.length,
-    updatedAt: new Date().toISOString()
-  }), {
-    httpMetadata: r2HttpMetadata("application/json; charset=utf-8", "no-cache, no-store, max-age=0")
-  });
-
-  return {
-    results,
-    batchSize: selected.length,
-    total: users.length,
-    startIndex,
-    nextIndex,
-    completedCycle
-  };
 }
 
 async function serveR2Object(request, env) {
   const url = new URL(request.url);
   const objectKey = url.pathname.slice(1);
   const object = await env.LISTS_BUCKET.get(objectKey);
-  if (!object) return new Response("Arquivo não encontrado", { status: 404, headers: corsHeaders });
+
+  if (!object) {
+    return new Response("Arquivo não encontrado", { status: 404, headers: corsHeaders });
+  }
 
   const headers = new Headers(corsHeaders);
-  const isJson = url.pathname.endsWith(".json");
-  headers.set("Content-Type", isJson ? "application/json; charset=utf-8" : "audio/x-mpegurl; charset=utf-8");
-
-  const immutableVersion =
-    /^\/catalogos\/[^/]+\/\d+\//.test(url.pathname) ||
-    /^\/provider\/\d+\//.test(url.pathname);
-  headers.set("Cache-Control", immutableVersion
-    ? "public, max-age=31536000, immutable"
-    : "no-cache, no-store, max-age=0"
+  headers.set(
+    "Content-Type",
+    url.pathname.endsWith(".json")
+      ? "application/json; charset=utf-8"
+      : "audio/x-mpegurl; charset=utf-8"
   );
+  headers.set("Cache-Control", "no-cache, no-store, max-age=0");
   headers.set("ETag", object.httpEtag);
+
   return new Response(object.body, { headers });
 }
 
 async function readJsonBody(request) {
-  try { return await request.json(); }
-  catch { return {}; }
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
 }
 
 export default {
   async fetch(request, env) {
-    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({
-        ok: true,
-        worker: "lux-playlist-sync",
-        version: WORKER_VERSION,
-        mode: "per-user-atomic-https-snapshots"
-      });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.3" });
     }
 
     if (
       request.method === "GET" &&
-      (
-        url.pathname.startsWith("/listas/") ||
-        url.pathname.startsWith("/catalogos/") ||
-        url.pathname.startsWith("/provider/")
-      )
+      (url.pathname.startsWith("/listas/") || url.pathname.startsWith("/catalogos/"))
     ) {
       return serveR2Object(request, env);
     }
 
-    if (request.method === "POST" && url.pathname === "/sync-self") {
-      const body = await readJsonBody(request);
-      try {
-        const account = await authenticateUser(env, body.username, body.password);
-        const result = await syncUserSnapshot(env, account);
-        return json({ ok: result.status !== "error", result }, result.status === "error" ? 502 : 200);
-      } catch (error) {
-        const message = error?.message || "Falha ao atualizar a conta.";
-        return json({ ok: false, error: message }, /Credenciais/i.test(message) ? 401 : 500);
-      }
-    }
-
+    // Painel Admin: valida o administrador e sincroniza a conta escolhida.
     if (request.method === "POST" && url.pathname === "/sync-account") {
       const body = await readJsonBody(request);
       try {
@@ -464,31 +386,18 @@ export default {
         const targetUsername = String(body.targetUsername || admin.usuario || "").trim();
         const target = await getUserByUsername(env, targetUsername);
         if (!target) throw new Error("Usuário a sincronizar não encontrado.");
-        const result = await syncUserSnapshot(env, target);
-        return json({ ok: result.status !== "error", result }, result.status === "error" ? 502 : 200);
+
+        const result = await syncUser(env, target);
+        const ok = result.status !== "error";
+        return json({ ok, result }, result.status === "error" ? 502 : 200);
       } catch (error) {
         const message = error?.message || "Falha ao sincronizar conta.";
-        return json({ ok: false, error: message }, /Credenciais|administradores/i.test(message) ? 401 : 500);
+        const status = /Credenciais|administradores/i.test(message) ? 401 : 500;
+        return json({ ok: false, error: message }, status);
       }
     }
 
-    // Mantém a rota usada pelo painel antigo, mas agora ela processa um lote pequeno.
-    if (request.method === "POST" && url.pathname === "/sync-provider") {
-      const body = await readJsonBody(request);
-      try {
-        await authenticateAdmin(env, body.username, body.password);
-        const batch = await syncNextUserBatch(env);
-        return json({
-          ok: !batch.results.some(row => row.status === "error"),
-          mode: "user-snapshot-batch",
-          ...batch
-        });
-      } catch (error) {
-        const message = error?.message || "Falha ao sincronizar as listas.";
-        return json({ ok: false, error: message }, /Credenciais|administradores/i.test(message) ? 401 : 500);
-      }
-    }
-
+    // PowerShell/admin técnico. Com { username } sincroniza uma conta; sem body, todas.
     if (request.method === "POST" && url.pathname === "/sync") {
       if (request.headers.get("X-Sync-Token") !== env.SYNC_TOKEN) {
         return json({ error: "Não autorizado" }, 401);
@@ -496,28 +405,10 @@ export default {
 
       try {
         const body = await readJsonBody(request);
-        if (body.username) {
-          const user = await getUserByUsername(env, String(body.username));
-          if (!user) throw new Error("Usuário não encontrado.");
-          const result = await syncUserSnapshot(env, user);
-          return json({ ok: result.status !== "error", result }, result.status === "error" ? 502 : 200);
-        }
-
-        if (body.all === true) {
-          const results = await syncAllUserSnapshots(env);
-          return json({
-            ok: !results.some(row => row.status === "error"),
-            mode: "all-user-snapshots",
-            results
-          });
-        }
-
-        const batch = await syncNextUserBatch(env, body.limit);
-        return json({
-          ok: !batch.results.some(row => row.status === "error"),
-          mode: "user-snapshot-batch",
-          ...batch
-        });
+        const result = body.username
+          ? await syncOneByUsername(env, String(body.username))
+          : await syncAll(env);
+        return json({ ok: true, results: Array.isArray(result) ? result : [result] });
       } catch (error) {
         return json({ ok: false, error: error?.message || "Erro desconhecido" }, 500);
       }
@@ -526,27 +417,11 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: WORKER_VERSION,
-      mode: "per-user-atomic-https-snapshots"
+      version: "1.6.3"
     });
   },
 
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil((async () => {
-      const batch = await syncNextUserBatch(env);
-      const failed = batch.results.filter(row => row.status === "error");
-      if (failed.length) {
-        console.error("[Lux Sync] Algumas contas do lote falharam:", failed.map(row => ({
-          usuario: row.usuario,
-          message: row.message
-        })));
-      }
-      console.info("[Lux Sync] Lote concluído.", {
-        batchSize: batch.batchSize,
-        total: batch.total,
-        nextIndex: batch.nextIndex,
-        completedCycle: batch.completedCycle
-      });
-    })());
+    ctx.waitUntil(syncAll(env));
   }
 };

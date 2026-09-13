@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-25';
+  const FRIENDLY_UI_VERSION = '20260913-v163-clean-core-1';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -14,12 +14,9 @@
     [/Carregando perfis\.\.\./gi, 'Preparando seus perfis...'],
     [/Carregando catálogo de jogos/gi, 'Preparando seus jogos'],
     [/Buscando dados do jogo\.\.\./gi, 'Procurando informações do jogo...'],
-    [/Carregando guia de programação\.\.\./gi, 'Preparando a programação...'],
     [/Baixando categorias e canais\.\.\./gi, 'Preparando seus canais...'],
     [/Baixando catálogo e categorias\.\.\./gi, 'Organizando seu catálogo...'],
     [/Baixando catálogo HTTPS sincronizado\.\.\./gi, 'Preparando seu catálogo...'],
-    [/Preparando catálogo oficial do provedor\.\.\./gi, 'Preparando seu catálogo...'],
-    [/Preparando sua lista com os dados oficiais do provedor\.\.\./gi, 'Preparando seu catálogo...'],
     [/Buscando temporadas\.\.\./gi, 'Preparando temporadas...'],
     [/Carregando sinopse\.\.\./gi, 'Preparando detalhes...'],
     [/Sincronizando temporadas e episódios\.\.\./gi, 'Carregando episódios...'],
@@ -31,7 +28,6 @@
     [/Sincronização parcial de /gi, 'Atualização parcial de '],
     [/sincronizado com sucesso/gi, 'atualizado com sucesso'],
     [/Catálogo Xtream HTTPS sincronizado/gi, 'Catálogo atualizado'],
-    [/Catálogo oficial do provedor/gi, 'Catálogo oficial'],
     [/Lista M3U HTTPS sincronizada/gi, 'Catálogo atualizado'],
     [/Arquivo M3U no Supabase/gi, 'Lista salva'],
     [/Lista M3U original \(fallback HTTP\)/gi, 'Lista principal'],
@@ -48,6 +44,7 @@
   function friendlyText(value) {
     let text = String(value ?? '');
     if (!text) return text;
+
     text = text.replace(/versão\s+\d+(?:\.\d+){1,3}/gi, `versão ${APP_VERSION}`);
     for (const [pattern, replacement] of replacements) text = text.replace(pattern, replacement);
     return text;
@@ -62,15 +59,18 @@
 
   function updateElement(element) {
     if (!(element instanceof Element)) return;
+
     for (const attr of ['title', 'aria-label', 'placeholder']) {
       if (!element.hasAttribute(attr)) continue;
       const current = element.getAttribute(attr) || '';
       const next = friendlyText(current);
       if (next !== current) element.setAttribute(attr, next);
     }
+
     for (const child of element.childNodes) {
       if (child.nodeType === Node.TEXT_NODE) updateTextNode(child);
     }
+
     element.querySelectorAll('*').forEach(child => {
       for (const attr of ['title', 'aria-label', 'placeholder']) {
         if (!child.hasAttribute(attr)) continue;
@@ -95,66 +95,12 @@
 
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
 
-  const loadRuntimeStabilityFix = () => {
-    if (document.querySelector('script[data-lux-runtime-stability]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/runtime-stability-fix.js?v=20260912-stability2';
-    script.async = true;
-    script.dataset.luxRuntimeStability = '1';
-    document.head.appendChild(script);
-  };
-
   const loadGameDuplicateConsoleFix = () => {
     if (document.querySelector('script[data-lux-game-duplicate-console]')) return;
     const script = document.createElement('script');
     script.src = 'js/game-duplicate-console-fix.js?v=20260912-console-duplicate1';
     script.async = true;
     script.dataset.luxGameDuplicateConsole = '1';
-    document.head.appendChild(script);
-  };
-
-  const loadSports = () => {
-    if (document.querySelector('script[data-lux-sports]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/sports.js?v=20260913-guide-category2';
-    script.async = true;
-    script.dataset.luxSports = '1';
-    document.head.appendChild(script);
-  };
-
-  const loadSportsHomeGuard = () => {
-    if (document.querySelector('script[data-lux-sports-home-guard]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/sports-home-guard.js?v=20260913-guide-global3';
-    script.async = true;
-    script.dataset.luxSportsHomeGuard = '1';
-    document.head.appendChild(script);
-  };
-
-  const loadSportsMediaBridge = () => {
-    if (document.querySelector('script[data-lux-sports-media-bridge]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/sports-media-bridge.js?v=20260913-bridge3';
-    script.async = true;
-    script.dataset.luxSportsMediaBridge = '1';
-    document.head.appendChild(script);
-  };
-
-  const loadPlaylistFreshness = () => {
-    if (document.querySelector('script[data-lux-playlist-freshness]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/playlist-freshness.js?v=20260913-individual2';
-    script.async = true;
-    script.dataset.luxPlaylistFreshness = '1';
-    document.head.appendChild(script);
-  };
-
-  const loadUserAccessControl = () => {
-    if (document.querySelector('script[data-lux-user-access-control]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/user-access-control.js?v=20260913-access2';
-    script.async = true;
-    script.dataset.luxUserAccessControl = '1';
     document.head.appendChild(script);
   };
 
@@ -177,7 +123,9 @@
   };
 
   const originalAlert = window.alert?.bind(window);
-  if (originalAlert) window.alert = message => originalAlert(friendlyText(message));
+  if (originalAlert) {
+    window.alert = message => originalAlert(friendlyText(message));
+  }
 
   const observer = new MutationObserver(mutations => {
     for (const mutation of mutations) {
@@ -185,10 +133,12 @@
         updateTextNode(mutation.target);
         continue;
       }
+
       if (mutation.type === 'attributes') {
         updateElement(mutation.target);
         continue;
       }
+
       mutation.addedNodes.forEach(node => {
         if (node.nodeType === Node.TEXT_NODE) updateTextNode(node);
         else if (node.nodeType === Node.ELEMENT_NODE) updateElement(node);
@@ -198,13 +148,7 @@
 
   const start = () => {
     applyVersionEverywhere();
-    loadRuntimeStabilityFix();
     loadGameDuplicateConsoleFix();
-    loadSports();
-    loadSportsHomeGuard();
-    loadSportsMediaBridge();
-    loadPlaylistFreshness();
-    loadUserAccessControl();
     loadMobileControlOpacity();
     loadMobileCustomControls();
     observer.observe(document.documentElement, {

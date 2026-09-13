@@ -2,11 +2,13 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260913-v163-provider-categories8';
+  const RESET_VERSION = '20260912-v163-friendly-ui-1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
 
+  // Second pass after the forced refresh: mark this restore as applied,
+  // clean the temporary query and continue normally from now on.
   if (freshMarker === RESET_VERSION) {
     try { localStorage.setItem(RESET_KEY, RESET_VERSION); } catch (_) {}
     currentUrl.searchParams.delete('__lux_pwa_fresh');
@@ -20,6 +22,8 @@
     if (localStorage.getItem(RESET_KEY) === RESET_VERSION) return;
   } catch (_) {}
 
+  // This reset touches only web caches/service workers. Saves, ROM cache,
+  // preferences and user data stored in localStorage/IndexedDB are preserved.
   const refreshTargets = [
     './index.html',
     './css/style.css',
@@ -35,13 +39,6 @@
     './js/external-roms.js',
     './js/emulator.js',
     './js/emulator-speed-fix.js',
-    './js/sports.js',
-    './js/sports-home-guard.js',
-    './js/sports-media-bridge.js',
-    './js/playlist-freshness.js',
-    './js/user-access-control.js',
-    './js/sports-global-mapping.js',
-    './js/sports-admin.js',
     './js/mobile-ux.js',
     './js/mobile-lux-console.js',
     './js/mobile-lux-actions.js',
@@ -68,6 +65,7 @@
       } catch (_) {}
     }
 
+    // Remove any stale service worker left by an older PWA build.
     try {
       const registrations = await navigator.serviceWorker?.getRegistrations?.();
       if (registrations?.length) await Promise.allSettled(registrations.map(registration => registration.unregister()));
@@ -163,11 +161,11 @@ function animateDashboardEntry() {
 
 (() => {
   const modules = [
-    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260913-v163-friendly-ui-25'],
+    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260912-v163-friendly-ui-1'],
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
-    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260913-provider-metadata2'],
+    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260912-xtream-sync-1'],
     ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260912-admin-client-sync-1']
   ];
   modules.forEach(([name, src]) => {
@@ -229,6 +227,10 @@ function animateDashboardEntry() {
   else window.addEventListener('load', loadMobileScripts, { once: true });
 })();
 
+// Mantém a M3U como fonte principal. O Xtream automático continua disponível
+// apenas como fallback quando a lista M3U não puder ser carregada.
+// Também reaplica a categoria pública somente depois de os episódios virarem
+// uma série única e ignora mapas públicos genéricos antigos (FILMES/SERIES).
 (() => {
   let attempts = 0;
 
