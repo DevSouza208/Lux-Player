@@ -1,24 +1,18 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-clean1') return;
-  window.__luxSportsHomeGuardInstalled = '20260913-guide-clean1';
+  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-clean2') return;
+  window.__luxSportsHomeGuardInstalled = '20260913-guide-clean2';
 
   let observer = null;
   let attempts = 0;
 
-  function loadExtras() {
-    const extras = [
-      ['lux-sports-global-mapping','js/sports-global-mapping.js?v=20260913-map3'],
-      ['lux-sports-admin','js/sports-admin.js?v=20260912-sportsadmin1']
-    ];
-    extras.forEach(([name,src])=>{
-      if(document.querySelector(`script[data-${name}]`)) return;
-      const script=document.createElement('script');
-      script.src=src;
-      script.async=true;
-      script.setAttribute(`data-${name}`,'1');
-      document.head.appendChild(script);
-    });
+  function loadLogoDecorator() {
+    if (document.querySelector('script[data-lux-sports-logos]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/sports-global-mapping.js?v=20260913-footy1';
+    script.async = true;
+    script.dataset.luxSportsLogos = '1';
+    document.head.appendChild(script);
   }
 
   function ensureOwner() {
@@ -36,15 +30,12 @@
     return true;
   }
 
-  loadExtras();
+  loadLogoDecorator();
   const timer = setInterval(() => {
     attempts += 1;
     if (ensureOwner() || attempts >= 240) clearInterval(timer);
   }, 50);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      ensureOwner();
-      window.LuxSportsMapping?.refresh?.();
-    }
+    if (!document.hidden) ensureOwner();
   });
 })();
