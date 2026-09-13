@@ -1,33 +1,18 @@
 (() => {
   'use strict';
-  if (window.__luxPlaylistFreshnessInstalled === '20260913-individual2') return;
-  window.__luxPlaylistFreshnessInstalled = '20260913-individual2';
 
-  const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
-  const MAX_AGE = 3 * 60 * 60 * 1000;
-  const RETRY_AFTER_ERROR = 10 * 60 * 1000;
-  const checkedUsers = new Map();
-  let runningFor = '';
+  const VERSION = '20260913-server-snapshot1';
+  if (window.__luxPlaylistFreshnessInstalled === VERSION) return;
+  window.__luxPlaylistFreshnessInstalled = VERSION;
+
+  const CHECK_INTERVAL = 60 * 1000;
+  let running = false;
   let lastSeenUser = '';
-
-  const now = () => Date.now();
-
-  function saoPauloDay(value = Date.now()) {
-    const date = value instanceof Date ? value : new Date(value);
-    if (!Number.isFinite(date.getTime())) return '';
-    try {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Sao_Paulo',
-        year: 'numeric', month: '2-digit', day: '2-digit'
-      }).format(date);
-    } catch (_) {
-      return date.toISOString().slice(0, 10);
-    }
-  }
+  const lastApplied = new Map();
 
   function currentAccount() {
     try {
-      if (!currentUser?.user || !currentUser?.pass) return null;
+      if (!currentUser?.user) return null;
       return currentUser;
     } catch (_) {
       return null;
@@ -35,129 +20,130 @@
   }
 
   function getClient() {
-    try { return typeof supabaseClient !== 'undefined' ? supabaseClient : null; }
-    catch (_) { return null; }
-  }
-
-  function isStale(row) {
-    const syncedAt = row?.lista_m3u_sync_at ? new Date(row.lista_m3u_sync_at) : null;
-    const validDate = syncedAt && Number.isFinite(syncedAt.getTime());
-    if (!validDate) return true;
-    if (String(row?.lista_m3u_sync_status || '').toLowerCase() !== 'success') return true;
-    if (saoPauloDay(syncedAt) !== saoPauloDay()) return true;
-    return now() - syncedAt.getTime() > MAX_AGE;
+    try {
+      return typeof supabaseClient !== 'undefined' ? supabaseClient : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   async function readSyncState(username) {
     const client = getClient();
     if (!client) return null;
+
     const { data, error } = await client
       .from('usuarios')
-      .select('lista_m3u,lista_m3u_https,lista_m3u_sync_at,lista_m3u_sync_status')
+      .select('lista_m3u_https,lista_m3u_sync_at,lista_m3u_sync_status,lista_m3u_sync_error')
       .eq('usuario', username)
       .maybeSingle();
+
     if (error) throw error;
     return data || null;
   }
 
-  async function reloadCurrentCatalog(result, row, account) {
-    const playlist = result?.playlist || null;
-    const url = String(playlist?.url || row?.lista_m3u_https || account?.m3uHttpsUrl || '').trim();
-    if (url) {
-      try { account.m3uHttpsUrl = url; } catch (_) {}
-      try { if (currentUser) currentUser.m3uHttpsUrl = url; } catch (_) {}
-    }
+  async function applyPublishedSnapshot(row, account, force = false) {
+    const url = String(row?.lista_m3u_https || '').trim();
+    const status = String(row?.lista_m3u_sync_status || '').toLowerCase();
+    const syncedAt = String(row?.lista_m3u_sync_at || '');
+    if (status !== 'success' || !/^https:\/\//i.test(url)) return false;
 
-    try {
-      if (window.LuxSyncedCatalog?.reload) {
-        const loaded = await window.LuxSyncedCatalog.reload();
-        return Boolean(loaded?.count);
-      }
+    const signature = `${url}|${syncedAt}`;
+    const username = String(account?.user || '').trim();
+    const currentUrl = String(account?.m3uHttpsUrl || '').trim();
 
-      if (!/^https?:\/\//i.test(url) || typeof loadPlaylist !== 'function') return false;
-      await loadPlaylist(url);
-      try { window.LuxSports?.refresh?.(); } catch (_) {}
-      return true;
-    } catch (error) {
-      console.warn('[Lux Playlist Freshness] A lista individual atualizou, mas não pôde ser reaplicada nesta sessão.', error);
+    if (!force && lastApplied.get(username) === signature && currentUrl === url) {
       return false;
     }
-  }
 
-  async function syncSelf(account) {
-    const response = await fetch(`${WORKER_BASE}/sync-self`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify({ username: account.user, password: account.pass })
-    });
+    const changed = currentUrl !== url || lastApplied.get(username) !== signature;
+    account.m3uHttpsUrl = url;
+    try {
+      if (currentUser) currentUser.m3uHttpsUrl = url;
+    } catch (_) {}
 
-    let payload = null;
-    try { payload = await response.json(); } catch (_) {}
-    const playlist = payload?.result?.playlist;
-    if (!response.ok || payload?.error || playlist?.status === 'error') {
-      throw new Error(payload?.error || playlist?.message || `Worker respondeu HTTP ${response.status}`);
+    lastApplied.set(username, signature);
+    if (!changed && !force) return false;
+
+    if (window.LuxSyncedCatalog?.reload) {
+      try {
+        const loaded = await window.LuxSyncedCatalog.reload();
+        if (loaded?.count) {
+          try {
+            if (typeof window.setSection === 'function' && typeof currentSection !== 'undefined') {
+              window.setSection(currentSection || 'home');
+            }
+          } catch (_) {}
+          console.info('[Lux Snapshot] Nova versão HTTPS aplicada.', {
+            username,
+            syncedAt,
+            count: loaded.count
+          });
+          return true;
+        }
+      } catch (error) {
+        console.warn('[Lux Snapshot] A nova versão foi publicada, mas não pôde ser aplicada agora.', error);
+      }
     }
-    return payload?.result || null;
+
+    return false;
   }
 
-  async function refreshIfNeeded(force = false) {
-    if (window.luxElectron) return { skipped: 'electron' };
+  async function checkPublishedSnapshot(force = false) {
+    if (window.luxElectron || running) return { skipped: true };
+
     const account = currentAccount();
-    if (!account) return { skipped: 'no-user' };
+    if (!account) return { skipped: true };
+
     const username = String(account.user || '').trim();
-    if (!username || runningFor === username) return { skipped: 'running' };
+    if (!username) return { skipped: true };
 
-    const lastCheck = Number(checkedUsers.get(username) || 0);
-    if (!force && lastCheck && now() - lastCheck < 60 * 1000) return { skipped: 'checked' };
-    checkedUsers.set(username, now());
-    runningFor = username;
-
+    running = true;
     try {
       const row = await readSyncState(username);
-      if (!row || !/^https?:\/\//i.test(String(row.lista_m3u || '').trim())) return { skipped: 'no-remote-list' };
-      if (!force && !isStale(row)) return { fresh: true, syncedAt: row.lista_m3u_sync_at };
+      if (!row) return { skipped: true };
 
-      console.info('[Lux Playlist Freshness] M3U individual antiga detectada. Atualizando esta conta...');
-      const result = await syncSelf(account);
-      const reloaded = await reloadCurrentCatalog(result, row, account);
-      console.info('[Lux Playlist Freshness] Conta atualizada.', {
-        playlistSyncedAt: result?.playlist?.syncedAt,
-        providerVersion: result?.provider?.version,
-        reloaded
-      });
-      checkedUsers.set(username, now());
-      return { refreshed: true, reloaded, result };
+      const applied = await applyPublishedSnapshot(row, account, force);
+      return {
+        applied,
+        syncedAt: row.lista_m3u_sync_at || null,
+        status: row.lista_m3u_sync_status || null,
+        error: row.lista_m3u_sync_error || null
+      };
     } catch (error) {
-      console.warn('[Lux Playlist Freshness] Atualização automática indisponível.', error);
-      checkedUsers.set(username, now() - 60 * 1000 + RETRY_AFTER_ERROR);
+      console.warn('[Lux Snapshot] Não foi possível consultar a versão publicada.', error);
       return { error: error?.message || String(error) };
     } finally {
-      if (runningFor === username) runningFor = '';
+      running = false;
     }
   }
 
   function watchAccount() {
     const account = currentAccount();
     const username = String(account?.user || '');
+
     if (!username) {
       lastSeenUser = '';
       return;
     }
+
     if (username === lastSeenUser) return;
     lastSeenUser = username;
-    setTimeout(() => refreshIfNeeded(false), 600);
+
+    // Não baixa nada no navegador. Apenas consulta qual snapshot o servidor já terminou.
+    setTimeout(() => checkPublishedSnapshot(false), 800);
   }
 
   window.LuxPlaylistFreshness = {
-    check: () => refreshIfNeeded(false),
-    force: () => refreshIfNeeded(true),
-    staleAfterMs: MAX_AGE
+    check: () => checkPublishedSnapshot(false),
+    force: () => checkPublishedSnapshot(true),
+    mode: 'server-published-snapshots'
   };
 
   watchAccount();
   setInterval(watchAccount, 1000);
+  setInterval(() => checkPublishedSnapshot(false), CHECK_INTERVAL);
+
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) refreshIfNeeded(false);
+    if (!document.hidden) checkPublishedSnapshot(false);
   });
 })();
