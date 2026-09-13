@@ -2,8 +2,9 @@
   'use strict';
 
   if (window.__luxSportsInstalled) return;
-  window.__luxSportsInstalled = '20260912-sports1';
+  window.__luxSportsInstalled = '20260912-sports2';
 
+  const WATCH_LEAD_MS = 20 * 60 * 1000;
   const state = {
     games: [],
     mappings: [],
@@ -12,7 +13,8 @@
     error: '',
     fetchedAt: '',
     observer: null,
-    refreshTimer: null
+    refreshTimer: null,
+    activeTab: 'live'
   };
 
   const QUALITY_WORDS = new Set(['hd', 'fhd', 'uhd', 'sd', '4k', '8k', 'hevc', 'h265', 'h264', '60fps']);
@@ -85,9 +87,7 @@
 
   function aliasesFor(sourceName, mapping) {
     const key = normalize(sourceName);
-    const aliases = [sourceName];
-    const known = AUTO_ALIASES[key] || [];
-    aliases.push(...known);
+    const aliases = [sourceName, ...(AUTO_ALIASES[key] || [])];
     if (mapping?.channel_hint) aliases.unshift(mapping.channel_hint);
     return [...new Set(aliases.filter(Boolean))];
   }
@@ -96,9 +96,8 @@
     const channels = liveChannels();
     if (!sourceName || !channels.length) return { channel: null, score: 0, ambiguous: false, suggestion: null };
     const mapping = mappingMap().get(normalize(sourceName));
-    const variants = aliasesFor(sourceName, mapping);
     const ranked = channels
-      .map(channel => ({ channel, score: scoreChannel(channel.name, variants) }))
+      .map(channel => ({ channel, score: scoreChannel(channel.name, aliasesFor(sourceName, mapping)) }))
       .filter(entry => entry.score > 0)
       .sort((a, b) => b.score - a.score || String(a.channel.name).localeCompare(String(b.channel.name)));
 
@@ -108,13 +107,7 @@
     const exactManual = Boolean(mapping?.channel_hint && normalizeChannel(top.channel.name) === normalizeChannel(mapping.channel_hint));
     const accepted = exactManual || (top.score >= 100 && sameTop.length === 1);
     if (accepted) return { channel: top.channel, score: top.score, ambiguous: false, suggestion: top.channel, mapping };
-    return {
-      channel: null,
-      score: top.score,
-      ambiguous: sameTop.length > 1,
-      suggestion: allowWeakSuggestion ? top.channel : null,
-      mapping
-    };
+    return { channel: null, score: top.score, ambiguous: sameTop.length > 1, suggestion: allowWeakSuggestion ? top.channel : null, mapping };
   }
 
   function resolveGame(game) {
@@ -140,52 +133,151 @@
     }
   }
 
-  function visibleGames() {
+  function kickoffMs(game) {
+    return new Date(game?.kickoff || `${game?.date}T${game?.time}:00-03:00`).getTime();
+  }
+
+  function gamesByTab(tab = state.activeTab) {
     const now = Date.now();
     const today = localTodayKey();
-    const games = (state.games || []).filter(game => game && game.date === today);
-    const live = games.filter(game => game.status === 'live');
-    const upcoming = games.filter(game => {
-      if (game.status === 'live') return false;
-      const when = new Date(game.kickoff || `${game.date}T${game.time}:00-03:00`).getTime();
-      return Number.isFinite(when) && when >= now - (20 * 60 * 1000) && when <= now + (8 * 60 * 60 * 1000);
-    });
-    return [...live, ...upcoming].slice(0, 10);
+    const games = (state.games || []).filter(Boolean);
+
+    if (tab === 'results') {
+      return games
+        .filter(game => game.status === 'finished' && game.date === today)
+        .sort((a, b) => kickoffMs(b) - kickoffMs(a))
+        .slice(0, 16);
+    }
+
+    if (tab === 'live') {
+      return games
+        .filter(game => game.status === 'live')
+        .sort((a, b) => kickoffMs(a) - kickoffMs(b))
+        .slice(0, 16);
+    }
+
+    return games
+      .filter(game => game.status === 'scheduled' && Number.isFinite(kickoffMs(game)) && kickoffMs(game) >= now - (2 * 60 * 1000))
+      .sort((a, b) => kickoffMs(a) - kickoffMs(b))
+      .slice(0, 20);
+  }
+
+  function tabCount(tab) {
+    return gamesByTab(tab).length;
+  }
+
+  function canWatchGame(game) {
+    if (game?.status === 'live') return true;
+    if (game?.status !== 'scheduled') return false;
+    const start = kickoffMs(game);
+    if (!Number.isFinite(start)) return false;
+    const delta = start - Date.now();
+    return delta <= WATCH_LEAD_MS && delta >= -2 * 60 * 1000;
+  }
+
+  function unlockLabel(game) {
+    const start = kickoffMs(game);
+    if (!Number.isFinite(start)) return 'Disponível 20 min antes';
+    const unlock = new Date(start - WATCH_LEAD_MS);
+    try {
+      return `Disponível às ${unlock.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch (_) {
+      return 'Disponível 20 min antes';
+    }
   }
 
   function formatKickoff(game) {
     if (game?.status === 'live') return 'AO VIVO';
+    if (game?.status === 'finished') return 'FIM';
     return game?.time || '';
+  }
+
+  function ensureHomeTabs() {
+    const container = document.getElementById('homeJogosContainer');
+    const section = container?.parentElement;
+    if (!container || !section) return null;
+    let tabs = section.querySelector('[data-lux-sports-tabs]');
+    if (!tabs) {
+      tabs = document.createElement('div');
+      tabs.dataset.luxSportsTabs = '1';
+      tabs.className = 'flex flex-wrap gap-2';
+      const title = section.querySelector('h3');
+      if (title?.nextSibling) section.insertBefore(tabs, title.nextSibling);
+      else section.insertBefore(tabs, container);
+    }
+
+    const definitions = [
+      ['results', 'Resultados'],
+      ['live', 'Ao vivo'],
+      ['upcoming', 'Próximas partidas']
+    ];
+    tabs.innerHTML = definitions.map(([key, label]) => {
+      const active = state.activeTab === key;
+      const count = tabCount(key);
+      return `<button type="button" data-sports-tab="${key}" class="rounded-xl border px-3 py-2 text-[11px] font-bold transition ${active ? 'border-purple-500 bg-purple-600 text-white' : 'border-purple-900/60 bg-[#120c1f] text-purple-300 hover:bg-[#1a122c]'}">${label}<span class="ml-1.5 opacity-70">${count}</span></button>`;
+    }).join('');
+
+    tabs.querySelectorAll('[data-sports-tab]').forEach(button => {
+      button.addEventListener('click', () => {
+        state.activeTab = button.dataset.sportsTab || 'live';
+        renderHome();
+      });
+    });
+    return tabs;
+  }
+
+  function emptyMessage(tab) {
+    if (tab === 'results') return 'Nenhum resultado de hoje por enquanto.';
+    if (tab === 'live') return 'Nenhuma partida ao vivo agora.';
+    return 'Nenhuma próxima partida encontrada.';
   }
 
   function renderHome() {
     const container = document.getElementById('homeJogosContainer');
     if (!container || !state.loaded) return;
-    const games = visibleGames();
-    if (!games.length) return;
+    ensureHomeTabs();
+    const games = gamesByTab();
+
+    if (!games.length) {
+      container.innerHTML = `<p data-lux-sports-empty="1" class="text-xs text-purple-400/70">${emptyMessage(state.activeTab)}</p>`;
+      return;
+    }
 
     container.innerHTML = games.map(game => {
       const resolved = resolveGame(game);
       const live = game.status === 'live';
+      const finished = game.status === 'finished';
       const broadcasters = Array.isArray(game.broadcasters) ? game.broadcasters : [];
-      const score = live && Number.isFinite(Number(game.score_home)) && Number.isFinite(Number(game.score_away))
-        ? `${Number(game.score_home)} × ${Number(game.score_away)}`
-        : '×';
-      const watchButton = resolved?.channel
-        ? `<button type="button" data-sports-watch="${esc(game.id)}" class="mt-3 w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-[11px] font-black text-white transition">Assistir na ${esc(resolved.broadcaster)}</button>`
-        : `<div class="mt-3 rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2 text-[10px] text-purple-300">${broadcasters.length ? `📺 ${esc(broadcasters.join(', '))}` : 'Transmissão não informada'}</div>`;
+      const hasScore = (live || finished) && Number.isFinite(Number(game.score_home)) && Number.isFinite(Number(game.score_away));
+      const score = hasScore ? `${Number(game.score_home)} × ${Number(game.score_away)}` : '×';
+      const eligible = canWatchGame(game);
 
-      return `<article data-lux-sports-card="1" class="w-[260px] shrink-0 rounded-2xl border ${live ? 'border-rose-500/45' : 'border-purple-900/60'} bg-[#120c1f] p-4 shadow-lg">
+      let action = '';
+      if (finished) {
+        action = '';
+      } else if (eligible && resolved?.channel) {
+        action = `<button type="button" data-sports-watch="${esc(game.id)}" class="mt-3 w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-[11px] font-black text-white transition">Assistir na ${esc(resolved.broadcaster)}</button>`;
+      } else if (!eligible && game.status === 'scheduled') {
+        action = `<div class="mt-3 rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2 text-center text-[10px] text-purple-400">${esc(unlockLabel(game))}</div>`;
+      } else {
+        action = `<div class="mt-3 rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2 text-[10px] text-purple-300">${broadcasters.length ? `📺 ${esc(broadcasters.join(', '))}` : 'Transmissão não informada'}</div>`;
+      }
+
+      const border = live ? 'border-rose-500/45' : finished ? 'border-slate-700/60' : 'border-purple-900/60';
+      const badge = live ? 'bg-rose-500/20 text-rose-300' : finished ? 'bg-slate-800 text-slate-300' : 'bg-purple-950 text-purple-300';
+      const scoreClass = finished ? 'text-slate-200' : 'text-emerald-300';
+
+      return `<article data-lux-sports-card="1" class="w-[260px] shrink-0 rounded-2xl border ${border} bg-[#120c1f] p-4 shadow-lg">
         <div class="flex items-center justify-between gap-2">
           <span class="truncate text-[10px] font-bold uppercase tracking-wide text-purple-300">${esc(game.competition || 'Futebol')}</span>
-          <span class="shrink-0 rounded-full px-2 py-1 text-[9px] font-black ${live ? 'bg-rose-500/20 text-rose-300' : 'bg-purple-950 text-purple-300'}">${esc(formatKickoff(game))}</span>
+          <span class="shrink-0 rounded-full px-2 py-1 text-[9px] font-black ${badge}">${esc(formatKickoff(game))}</span>
         </div>
         <div class="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center">
           <strong class="text-xs leading-tight text-white">${esc(game.home)}</strong>
-          <strong class="text-sm text-emerald-300">${esc(score)}</strong>
+          <strong class="text-sm ${scoreClass}">${esc(score)}</strong>
           <strong class="text-xs leading-tight text-white">${esc(game.away)}</strong>
         </div>
-        ${watchButton}
+        ${action}
         <div class="mt-2 text-right text-[9px] text-purple-500">Dados: Super Placar</div>
       </article>`;
     }).join('');
@@ -193,6 +285,7 @@
     container.querySelectorAll('[data-sports-watch]').forEach(button => {
       button.addEventListener('click', () => {
         const game = state.games.find(item => String(item.id) === String(button.dataset.sportsWatch));
+        if (!game || !canWatchGame(game)) return;
         const resolved = resolveGame(game);
         if (!resolved?.channel) return;
         try {
@@ -210,6 +303,7 @@
   function unresolvedBroadcasters() {
     const counts = new Map();
     for (const game of state.games || []) {
+      if (game?.status === 'finished') continue;
       for (const broadcaster of game?.broadcasters || []) {
         const key = normalize(broadcaster);
         if (!key) continue;
@@ -231,7 +325,6 @@
   function injectAdmin() {
     const modal = document.getElementById('adminModal');
     if (!modal || document.querySelector('[data-admin-tab="sports"]')) return;
-
     const tabs = modal.querySelector('.admin-tab-btn')?.parentElement;
     if (!tabs) return;
     const button = document.createElement('button');
@@ -397,8 +490,9 @@
     const container = document.getElementById('homeJogosContainer');
     if (!container || state.observer) return;
     state.observer = new MutationObserver(() => {
-      if (!state.loaded || !visibleGames().length) return;
-      if (!container.querySelector('[data-lux-sports-card]')) queueMicrotask(renderHome);
+      if (!state.loaded || !state.games.length) return;
+      const section = container.parentElement;
+      if (!section?.querySelector('[data-lux-sports-tabs]')) queueMicrotask(renderHome);
     });
     state.observer.observe(container, { childList: true });
   }
