@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-14';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-15';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -113,7 +113,7 @@
   const loadSports = () => {
     if (document.querySelector('script[data-lux-sports]')) return;
     const script = document.createElement('script');
-    script.src = 'js/sports.js?v=20260912-sports3';
+    script.src = 'js/sports.js?v=20260912-guide5';
     script.async = true;
     script.dataset.luxSports = '1';
     document.head.appendChild(script);
@@ -122,7 +122,7 @@
   const loadSportsHomeGuard = () => {
     if (document.querySelector('script[data-lux-sports-home-guard]')) return;
     const script = document.createElement('script');
-    script.src = 'js/sports-home-guard.js?v=20260912-sports-home-guard1';
+    script.src = 'js/sports-home-guard.js?v=20260912-guide5';
     script.async = true;
     script.dataset.luxSportsHomeGuard = '1';
     document.head.appendChild(script);
