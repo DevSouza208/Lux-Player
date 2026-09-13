@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsGlobalMappingInstalled === '20260912-map1') return;
-  window.__luxSportsGlobalMappingInstalled = '20260912-map1';
+  if (window.__luxSportsGlobalMappingInstalled === '20260913-map2') return;
+  window.__luxSportsGlobalMappingInstalled = '20260913-map2';
 
   const GROUP_RE = /(guia\s+de\s+jogos|jogos\s+do\s+dia)/i;
   const QUALITY_RE = /\b(?:fhd|full\s*hd|hd|sd|uhd|4k|8k|hevc|h265|h264|60fps|50fps)\b/gi;
@@ -17,7 +17,10 @@
     'vasco da gama':'vasco-da-gama','flamengo':'flamengo-crf','mirassol':'mirassol-fc','remo':'clube-de-remo',
     'ceara':'ceara-sc','sport':'sport-recife','celta':'celta-vigo','coventry':'coventry-city',
     'brighton':'brighton-hove-albion','psg':'paris-saint-germain-psg','paris saint germain':'paris-saint-germain-psg',
-    'liverpool':'liverpool-fc','bayern de munique':'bayern-munich'
+    'liverpool':'liverpool-fc','bayern de munique':'bayern-munich',
+    'fc dallas':'fc-dallas','portland timbers':'portland-timbers','st louis city sc':'st-louis-city-sc',
+    'minnesota united fc':'minnesota-united','minnesota united':'minnesota-united','monterrey':'monterrey',
+    'tigres uanl':'tigres-uanl','colorado rapids':'colorado-rapids','cf montreal':'cf-montreal'
   }));
 
   function allLive() {
@@ -98,8 +101,9 @@
   }
 
   function teamSlug(name) {
-    const key=norm(name).replace(/\b(?:clube|club|futebol|football|fc|sc|ec|ac|cf|saf)\b/g,' ').replace(/\s+/g,' ').trim();
-    return FOOTY.get(key) || key.replace(/\s+/g,'-');
+    const full=norm(name).replace(/\b(?:da|de|do|das|dos)\b/g,' ').replace(/\s+/g,' ').trim();
+    const simplified=full.replace(/\b(?:clube|club|futebol|football|fc|sc|ec|ac|cf|saf)\b/g,' ').replace(/\s+/g,' ').trim();
+    return FOOTY.get(full) || FOOTY.get(simplified) || full.replace(/\s+/g,'-');
   }
   function footyUrl(name) {
     const slug=teamSlug(name);
