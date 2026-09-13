@@ -35,3 +35,7 @@ verify_jwt = false
 [functions.sports-feed]
 # Feed público em leitura; mapeamentos exigem login de administrador no corpo da função.
 verify_jwt = false
+
+[functions.sports-logos]
+# Escudos públicos extraídos da programação do Super Placar.
+verify_jwt = false
