@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-fast1') return;
-  window.__luxSportsHomeGuardInstalled = '20260913-guide-fast1';
+  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-fast2') return;
+  window.__luxSportsHomeGuardInstalled = '20260913-guide-fast2';
 
   let observer = null;
   let attempts = 0;
@@ -9,7 +9,7 @@
   function loadLogoDecorator() {
     if (document.querySelector('script[data-lux-sports-logos]')) return;
     const script = document.createElement('script');
-    script.src = 'js/sports-global-mapping.js?v=20260913-footy-fast1';
+    script.src = 'js/sports-global-mapping.js?v=20260913-footy-fast2';
     script.async = true;
     script.dataset.luxSportsLogos = '1';
     document.head.appendChild(script);
