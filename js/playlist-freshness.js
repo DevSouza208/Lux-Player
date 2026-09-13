@@ -1,9 +1,19 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260913-server-snapshot1';
+  const VERSION = '20260913-server-snapshot2';
   if (window.__luxPlaylistFreshnessInstalled === VERSION) return;
   window.__luxPlaylistFreshnessInstalled = VERSION;
+
+  const loadSnapshotLoader = () => {
+    if (document.querySelector('script[data-lux-user-snapshot-loader]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/user-snapshot-loader.js?v=20260913-user-snapshot-loader1';
+    script.async = true;
+    script.dataset.luxUserSnapshotLoader = '1';
+    document.head.appendChild(script);
+  };
+  loadSnapshotLoader();
 
   const CHECK_INTERVAL = 60 * 1000;
   let running = false;
@@ -129,7 +139,6 @@
     if (username === lastSeenUser) return;
     lastSeenUser = username;
 
-    // Não baixa nada no navegador. Apenas consulta qual snapshot o servidor já terminou.
     setTimeout(() => checkPublishedSnapshot(false), 800);
   }
 
