@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260913-provider-catalog1';
+  const BRIDGE_VERSION = '20260913-provider-metadata2';
   const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
   const PROVIDER_MANIFEST_URL = `${WORKER_BASE}/provider/manifest.json`;
 
@@ -41,6 +41,11 @@
     return match ? String(match[1]) : '';
   };
 
+  const isProviderManifest = manifest => {
+    const scope = String(manifest?.scope || '');
+    return scope.startsWith('provider') || Number(manifest?.schemaVersion || 0) >= 3;
+  };
+
   const deriveLegacyManifestUrl = () => {
     const httpsUrl = String(currentUser?.m3uHttpsUrl || '').trim();
     if (!/^https:\/\//i.test(httpsUrl)) return '';
@@ -54,13 +59,28 @@
     }
   };
 
+  const getIndividualPlaylistUrl = manifest => {
+    const synced = String(currentUser?.m3uHttpsUrl || '').trim();
+    if (/^https:\/\//i.test(synced)) return synced;
+
+    const original = String(currentUser?.m3uUrl || '').trim();
+    if (/^https:\/\//i.test(original)) return original;
+
+    // Apenas manifestos legados por usuário podem fornecer a própria playlist.
+    if (!isProviderManifest(manifest)) {
+      const legacy = String(manifest?.playlist || '').trim();
+      if (/^https:\/\//i.test(legacy)) return legacy;
+    }
+    return '';
+  };
+
   const fetchJson = async (url, cache = 'no-store') => {
     const response = await fetch(url, { cache });
     if (!response.ok) throw new Error(`HTTP ${response.status} em ${url}`);
     return response.json();
   };
 
-  const fetchText = async (url, cache = 'force-cache') => {
+  const fetchText = async (url, cache = 'no-store') => {
     const response = await fetch(url, { cache });
     if (!response.ok) throw new Error(`HTTP ${response.status} em ${url}`);
     return response.text();
@@ -72,7 +92,7 @@
     for (const url of candidates) {
       try {
         const manifest = await fetchJson(url, 'no-store');
-        if (!manifest?.files || !manifest?.playlist) throw new Error('Manifesto incompleto.');
+        if (!manifest?.files) throw new Error('Manifesto incompleto.');
         return { manifest, url };
       } catch (error) {
         lastError = error;
@@ -99,56 +119,46 @@
     const used = new Set();
     const byLogo = mapBy(groupedSeries, item => normalizeAssetUrl(item.logo));
     const byName = mapBy(groupedSeries, item => normalizeText(item.name));
-
-    // Índice simples por primeiro token para evitar comparar todas as séries com todas.
     const byToken = new Map();
+
     groupedSeries.forEach(item => {
-      const tokens = normalizeText(item.name).split(' ').filter(token => token.length > 2);
-      const token = tokens[0];
+      const token = normalizeText(item.name).split(' ').find(value => value.length > 2);
       if (!token) return;
       const list = byToken.get(token) || [];
       list.push(item);
       byToken.set(token, list);
     });
 
-    return official => {
+    const match = official => {
       const coverKey = normalizeAssetUrl(official?.cover || official?.cover_big || official?.backdrop_path?.[0]);
       if (coverKey) {
-        const byCover = firstUnused(byLogo.get(coverKey), used);
-        if (byCover) {
-          used.add(byCover);
-          return byCover;
-        }
+        const candidate = firstUnused(byLogo.get(coverKey), used);
+        if (candidate) { used.add(candidate); return candidate; }
       }
 
       const nameKey = normalizeText(official?.name);
       if (nameKey) {
         const exact = firstUnused(byName.get(nameKey), used);
-        if (exact) {
-          used.add(exact);
-          return exact;
-        }
+        if (exact) { used.add(exact); return exact; }
       }
 
-      const firstToken = nameKey.split(' ').find(token => token.length > 2);
-      const candidates = firstToken ? (byToken.get(firstToken) || []) : [];
+      const token = nameKey.split(' ').find(value => value.length > 2);
       let best = null;
       let bestScore = 0;
-      for (const candidate of candidates) {
+      for (const candidate of token ? (byToken.get(token) || []) : []) {
         if (used.has(candidate)) continue;
         const score = tokenScore(official?.name, candidate?.name);
-        if (score > bestScore) {
-          bestScore = score;
-          best = candidate;
-        }
+        if (score > bestScore) { bestScore = score; best = candidate; }
       }
-
       if (best && bestScore >= 0.72) {
         used.add(best);
         return best;
       }
       return null;
     };
+
+    match.used = used;
+    return match;
   };
 
   const buildCatalogItems = ({ playlistText, liveCategories, movieCategories, seriesCategories, live, movies, series }) => {
@@ -166,77 +176,96 @@
 
     const groupedSeries = groupedM3u.filter(item => item?.type === 'series' && item?.m3uEpisodes);
     const matchSeries = buildSeriesMatcher(groupedSeries);
-
     const liveCatMap = Object.fromEntries((liveCategories || []).map(item => [String(item.category_id), String(item.category_name || '').trim()]));
     const movieCatMap = Object.fromEntries((movieCategories || []).map(item => [String(item.category_id), String(item.category_name || '').trim()]));
     const seriesCatMap = Object.fromEntries((seriesCategories || []).map(item => [String(item.category_id), String(item.category_name || '').trim()]));
 
     const parsedItems = [];
-    let matchedLive = 0;
-    let matchedMovies = 0;
+    const matchedLiveIds = new Set();
+    const matchedMovieIds = new Set();
     let matchedSeries = 0;
 
+    // Metadados são globais, mas a existência e a URL de reprodução vêm SEMPRE da M3U individual.
     (live || []).forEach(item => {
       const streamId = String(item.stream_id ?? '');
       const m3u = rawLiveById.get(streamId);
-      if (m3u) matchedLive += 1;
-      const groupName = liveCatMap[String(item.category_id)] || m3u?.group || 'Canais';
+      if (!m3u?.url) return;
+      matchedLiveIds.add(streamId);
+      const groupName = liveCatMap[String(item.category_id)] || m3u.group || 'Canais';
       parsedItems.push({
         ...item,
         id: parsedItems.length,
         stream_id: item.stream_id,
         category_id: item.category_id,
-        name: item.name || m3u?.name || 'Sem título',
+        name: item.name || m3u.name || 'Sem título',
         group: groupName,
         providerGroup: groupName,
-        logo: item.stream_icon || m3u?.logo || '',
-        url: m3u?.url || '',
+        logo: item.stream_icon || m3u.logo || '',
+        url: m3u.url,
         type: 'live',
-        source: 'provider-xtream',
-        isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
+        source: 'provider-metadata+user-m3u',
+        isAdult: isAdultContent(groupName, item.name || m3u.name) || item.adult === true || String(item.is_adult || '') === '1'
       });
     });
 
     (movies || []).forEach(item => {
       const streamId = String(item.stream_id ?? '');
       const m3u = rawMoviesById.get(streamId);
-      if (m3u) matchedMovies += 1;
-      const groupName = movieCatMap[String(item.category_id)] || m3u?.group || 'Filmes';
+      if (!m3u?.url) return;
+      matchedMovieIds.add(streamId);
+      const groupName = movieCatMap[String(item.category_id)] || m3u.group || 'Filmes';
       parsedItems.push({
         ...item,
         id: parsedItems.length,
         stream_id: item.stream_id,
         category_id: item.category_id,
-        name: item.name || m3u?.name || 'Sem título',
+        name: item.name || m3u.name || 'Sem título',
         group: groupName,
         providerGroup: groupName,
-        logo: item.stream_icon || m3u?.logo || '',
-        url: m3u?.url || '',
+        logo: item.stream_icon || m3u.logo || '',
+        url: m3u.url,
         type: 'movies',
-        source: 'provider-xtream',
-        isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
+        source: 'provider-metadata+user-m3u',
+        isAdult: isAdultContent(groupName, item.name || m3u.name) || item.adult === true || String(item.is_adult || '') === '1'
       });
     });
 
     (series || []).forEach(item => {
       const m3uSeries = matchSeries(item);
-      if (m3uSeries) matchedSeries += 1;
-      const groupName = seriesCatMap[String(item.category_id)] || m3uSeries?.group || 'Séries';
+      if (!m3uSeries?.m3uEpisodes) return;
+      matchedSeries += 1;
+      const groupName = seriesCatMap[String(item.category_id)] || m3uSeries.group || 'Séries';
       parsedItems.push({
         ...item,
         id: parsedItems.length,
         series_id: item.series_id,
         category_id: item.category_id,
-        name: item.name || m3uSeries?.name || 'Sem título',
+        name: item.name || m3uSeries.name || 'Sem título',
         group: groupName,
         providerGroup: groupName,
-        logo: item.cover || m3uSeries?.logo || '',
+        logo: item.cover || m3uSeries.logo || '',
         type: 'series',
-        source: 'provider-xtream',
-        m3uEpisodes: m3uSeries?.m3uEpisodes || null,
-        m3uSeriesName: m3uSeries?.name || '',
-        isAdult: isAdultContent(groupName, item.name || m3uSeries?.name) || item.adult === true || String(item.is_adult || '') === '1'
+        source: 'provider-metadata+user-m3u',
+        m3uEpisodes: m3uSeries.m3uEpisodes,
+        m3uSeriesName: m3uSeries.name || '',
+        isAdult: isAdultContent(groupName, item.name || m3uSeries.name) || item.adult === true || String(item.is_adult || '') === '1'
       });
+    });
+
+    // Se a API global ainda não conhece um item recém-chegado, mantém o item da M3U individual.
+    rawM3uItems.forEach(item => {
+      const streamId = extractXtreamStreamId(item.url);
+      if (item.type === 'live' && streamId && !matchedLiveIds.has(streamId)) {
+        parsedItems.push({ ...item, id: parsedItems.length, source: 'user-m3u-fallback', providerGroup: item.group || '' });
+      }
+      if (item.type === 'movies' && streamId && !matchedMovieIds.has(streamId)) {
+        parsedItems.push({ ...item, id: parsedItems.length, source: 'user-m3u-fallback', providerGroup: item.group || '' });
+      }
+    });
+
+    groupedSeries.forEach(item => {
+      if (item?.type !== 'series' || !item?.m3uEpisodes || matchSeries.used.has(item)) return;
+      parsedItems.push({ ...item, id: parsedItems.length, source: 'user-m3u-fallback', providerGroup: item.group || '' });
     });
 
     return {
@@ -244,11 +273,13 @@
       stats: {
         rawM3u: rawM3uItems.length,
         groupedM3u: groupedM3u.length,
-        official: parsedItems.length,
-        matchedLive,
-        matchedMovies,
+        available: parsedItems.length,
+        matchedLive: matchedLiveIds.size,
+        matchedMovies: matchedMovieIds.size,
         matchedSeries,
-        officialSeries: (series || []).length,
+        providerLive: (live || []).length,
+        providerMovies: (movies || []).length,
+        providerSeries: (series || []).length,
         liveCategories: (liveCategories || []).length,
         movieCategories: (movieCategories || []).length,
         seriesCategories: (seriesCategories || []).length
@@ -258,10 +289,14 @@
 
   const loadSyncedCatalog = async () => {
     const splash = document.getElementById('splashStatusMessage');
-    if (splash) splash.innerText = 'Preparando catálogo oficial do provedor...';
+    if (splash) splash.innerText = 'Preparando sua lista com os dados oficiais do provedor...';
 
     const { manifest, url: manifestUrl } = await loadManifest();
-    const versionedCache = manifest.scope === 'provider' ? 'force-cache' : 'no-store';
+    const playlistUrl = getIndividualPlaylistUrl(manifest);
+    if (!playlistUrl) throw new Error('A lista HTTPS individual desta conta ainda não está disponível.');
+
+    const providerTruth = isProviderManifest(manifest);
+    const metadataCache = providerTruth ? 'force-cache' : 'no-store';
 
     const [
       playlistText,
@@ -272,13 +307,13 @@
       movies,
       series
     ] = await Promise.all([
-      fetchText(manifest.playlist, versionedCache),
-      fetchJson(manifest.files.liveCategories, versionedCache),
-      fetchJson(manifest.files.movieCategories, versionedCache),
-      fetchJson(manifest.files.seriesCategories, versionedCache),
-      fetchJson(manifest.files.live, versionedCache),
-      fetchJson(manifest.files.movies, versionedCache),
-      fetchJson(manifest.files.series, versionedCache)
+      fetchText(playlistUrl, 'no-store'),
+      fetchJson(manifest.files.liveCategories, metadataCache),
+      fetchJson(manifest.files.movieCategories, metadataCache),
+      fetchJson(manifest.files.seriesCategories, metadataCache),
+      fetchJson(manifest.files.live, metadataCache),
+      fetchJson(manifest.files.movies, metadataCache),
+      fetchJson(manifest.files.series, metadataCache)
     ]);
 
     const built = buildCatalogItems({
@@ -290,11 +325,8 @@
       movies,
       series
     });
-    if (!built.items.length) throw new Error('Catálogo HTTPS não retornou itens utilizáveis.');
+    if (!built.items.length) throw new Error('Sua lista não retornou itens utilizáveis com o catálogo do provedor.');
 
-    // No catálogo mestre, nomes e categorias do Xtream são a fonte da verdade.
-    // A antiga organização compartilhada do Admin não é aplicada por cima deles.
-    const providerTruth = manifest.scope === 'provider' || Number(manifest.schemaVersion) >= 3;
     allMediaItems = (providerTruth
       ? built.items
       : built.items.map(item => applySharedCategoryToItem(item)))
@@ -306,27 +338,30 @@
     window.__luxProviderCatalogActive = providerTruth;
     window.__luxSyncedXtreamManifest = manifest;
     window.__luxSyncedXtreamManifestUrl = manifestUrl;
+    window.__luxIndividualPlaylistUrl = playlistUrl;
     window.__luxSyncedXtreamStats = built.stats;
 
     window.dispatchEvent(new CustomEvent('lux:media-updated', {
-      detail: { source: providerTruth ? 'provider-catalog' : 'legacy-synced-catalog', count: allMediaItems.length, version: manifest.version }
+      detail: { source: providerTruth ? 'provider-metadata+user-m3u' : 'legacy-synced-catalog', count: allMediaItems.length, version: manifest.version }
     }));
     window.dispatchEvent(new CustomEvent('lux:playlist-updated', {
-      detail: { source: providerTruth ? 'provider-catalog' : 'legacy-synced-catalog', version: manifest.version }
+      detail: { source: 'user-m3u', url: playlistUrl, version: manifest.version }
     }));
 
-    console.info('[Lux Play] Catálogo oficial do provedor carregado.', {
+    console.info('[Lux Play] Metadados globais + M3U individual carregados.', {
       manifest: manifest.version,
+      playlist: playlistUrl,
       providerTruth,
       ...built.stats
     });
-    return { count: built.items.length, stats: built.stats, manifest, providerTruth };
+    return { count: built.items.length, stats: built.stats, manifest, providerTruth, playlistUrl };
   };
 
   window.LuxSyncedCatalog = {
     reload: loadSyncedCatalog,
     manifestUrl: () => PROVIDER_MANIFEST_URL,
     legacyManifestUrl: deriveLegacyManifestUrl,
+    individualPlaylistUrl: () => getIndividualPlaylistUrl(window.__luxSyncedXtreamManifest),
     version: BRIDGE_VERSION
   };
 
@@ -334,19 +369,18 @@
     if (window.__luxSyncedCatalogBridgeInstalled === BRIDGE_VERSION) return true;
     if (typeof window.loadMediaSourcesInPriority !== 'function') return false;
     if (typeof window.parseM3U !== 'function' || typeof window.groupM3uSeriesEpisodes !== 'function') return false;
-    if (typeof window.profileAllowsMedia !== 'function' && typeof profileAllowsMedia !== 'function') return false;
+    if (typeof profileAllowsMedia !== 'function') return false;
 
     const originalLoadMediaSourcesInPriority = window.loadMediaSourcesInPriority;
     const originalResolveUserCredentials = window.resolveUserCredentials;
     const originalOpenSeriesModal = window.openSeriesModal;
-
-    // Evita empilhar wrappers ao executar uma versão nova do bridge sobre uma antiga.
     const baseLoader = originalLoadMediaSourcesInPriority.__luxBaseLoader || originalLoadMediaSourcesInPriority;
+
     const providerLoader = async function () {
       if (!window.luxElectron) {
         try {
           const result = await loadSyncedCatalog();
-          setMediaSourceState('provider-xtream', 'Catálogo oficial do provedor', result.count);
+          setMediaSourceState('provider-metadata+user-m3u', 'Lista individual + catálogo oficial', result.count);
           return true;
         } catch (error) {
           window.__luxSyncedXtreamActive = false;
@@ -359,23 +393,23 @@
     providerLoader.__luxBaseLoader = baseLoader;
     window.loadMediaSourcesInPriority = providerLoader;
 
-    if (typeof originalResolveUserCredentials === 'function' && !originalResolveUserCredentials.__luxProviderCredentials) {
+    if (typeof originalResolveUserCredentials === 'function' && !originalResolveUserCredentials.__luxProviderMetadataCredentials) {
       const baseCredentials = originalResolveUserCredentials.__luxBaseCredentials || originalResolveUserCredentials;
       const patchedCredentials = function (user) {
         if (!window.luxElectron && window.__luxPreferSyncedSeriesEpisodes) {
-          return { isXc: false, url: String(window.__luxSyncedXtreamManifest?.playlist || user?.m3uHttpsUrl || user?.m3uUrl || '') };
+          return { isXc: false, url: String(user?.m3uHttpsUrl || user?.m3uUrl || '') };
         }
         return baseCredentials.apply(this, arguments);
       };
       patchedCredentials.__luxBaseCredentials = baseCredentials;
-      patchedCredentials.__luxProviderCredentials = true;
+      patchedCredentials.__luxProviderMetadataCredentials = true;
       window.resolveUserCredentials = patchedCredentials;
     }
 
-    if (typeof originalOpenSeriesModal === 'function' && !originalOpenSeriesModal.__luxProviderSeries) {
+    if (typeof originalOpenSeriesModal === 'function' && !originalOpenSeriesModal.__luxProviderMetadataSeries) {
       const baseOpenSeries = originalOpenSeriesModal.__luxBaseOpenSeries || originalOpenSeriesModal;
       const patchedOpenSeries = async function (series) {
-        const useSyncedSeries = !window.luxElectron && window.__luxSyncedXtreamActive && /(?:provider|synced)-xtream/.test(String(series?.source || ''));
+        const useSyncedSeries = !window.luxElectron && window.__luxSyncedXtreamActive && /(?:provider|synced|user-m3u)/.test(String(series?.source || ''));
         if (!useSyncedSeries) return baseOpenSeries.apply(this, arguments);
         window.__luxPreferSyncedSeriesEpisodes = true;
         try {
@@ -385,7 +419,7 @@
         }
       };
       patchedOpenSeries.__luxBaseOpenSeries = baseOpenSeries;
-      patchedOpenSeries.__luxProviderSeries = true;
+      patchedOpenSeries.__luxProviderMetadataSeries = true;
       window.openSeriesModal = patchedOpenSeries;
     }
 
@@ -429,7 +463,7 @@
     button.id = 'adminPlaylistCatalogSyncButton';
     button.type = 'button';
     button.className = 'flex-1 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all disabled:opacity-50';
-    button.textContent = 'Atualizar provedor agora';
+    button.textContent = 'Atualizar dados do provedor';
     button.addEventListener('click', () => window.adminSyncPlaylistCatalog?.());
     categoryButton.parentElement.appendChild(button);
 
@@ -448,7 +482,7 @@
     if (syncBusy) return;
     const isAdmin = String(currentUser?.accountRole || currentUser?.role || '').toLowerCase() === 'admin';
     if (!isAdmin) {
-      setStatus('Apenas o administrador pode atualizar o provedor.', 'error');
+      setStatus('Apenas o administrador pode atualizar os dados do provedor.', 'error');
       return;
     }
 
@@ -463,9 +497,9 @@
     syncBusy = true;
     if (button) {
       button.disabled = true;
-      button.textContent = 'Atualizando provedor...';
+      button.textContent = 'Atualizando dados...';
     }
-    setStatus('Baixando playlist, categorias e catálogo oficiais do provedor...');
+    setStatus('Baixando categorias, nomes e catálogo oficial do provedor...');
 
     try {
       const response = await fetch(`${WORKER_BASE}/sync-provider`, {
@@ -478,19 +512,19 @@
         throw new Error(data?.error || `Worker respondeu HTTP ${response.status}`);
       }
 
-      setStatus('Provedor atualizado. Recarregando o catálogo oficial...');
+      setStatus('Dados do provedor atualizados. Reaplicando na sua lista...');
       const result = await window.LuxSyncedCatalog?.reload?.();
-      if (!result?.count) throw new Error('O provedor atualizou, mas o catálogo não pôde ser aplicado.');
+      if (!result?.count) throw new Error('Os dados atualizaram, mas o catálogo não pôde ser aplicado à sua lista.');
 
       if (typeof window.setSection === 'function') window.setSection(currentSection || 'home');
-      setStatus(`Catálogo oficial atualizado · ${result.count} itens.`, 'ok');
+      setStatus(`Dados oficiais atualizados · ${result.count} itens disponíveis nesta conta.`, 'ok');
     } catch (error) {
-      setStatus(error?.message || 'Não foi possível atualizar o provedor.', 'error');
+      setStatus(error?.message || 'Não foi possível atualizar os dados do provedor.', 'error');
     } finally {
       syncBusy = false;
       if (button) {
         button.disabled = false;
-        button.textContent = 'Atualizar provedor agora';
+        button.textContent = 'Atualizar dados do provedor';
       }
     }
   };
