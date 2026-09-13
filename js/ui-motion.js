@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260913-v163-provider-catalog1';
+  const RESET_VERSION = '20260913-v163-provider-categories8';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -39,6 +39,7 @@
     './js/sports-home-guard.js',
     './js/sports-media-bridge.js',
     './js/playlist-freshness.js',
+    './js/user-access-control.js',
     './js/sports-global-mapping.js',
     './js/sports-admin.js',
     './js/mobile-ux.js',
@@ -162,11 +163,11 @@ function animateDashboardEntry() {
 
 (() => {
   const modules = [
-    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260913-v163-friendly-ui-20'],
+    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260913-v163-friendly-ui-25'],
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
-    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260913-provider-catalog1'],
+    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260913-provider-metadata2'],
     ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260912-admin-client-sync-1']
   ];
   modules.forEach(([name, src]) => {
