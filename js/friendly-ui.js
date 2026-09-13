@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-9';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-10';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -117,7 +117,7 @@
   const loadSports = () => {
     if (document.querySelector('script[data-lux-sports]')) return;
     const script = document.createElement('script');
-    script.src = 'js/sports.js?v=20260912-sports1';
+    script.src = 'js/sports.js?v=20260912-sports2';
     script.async = true;
     script.dataset.luxSports = '1';
     document.head.appendChild(script);
