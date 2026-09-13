@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxPlaylistFreshnessInstalled === '20260913-provider1') return;
-  window.__luxPlaylistFreshnessInstalled = '20260913-provider1';
+  if (window.__luxPlaylistFreshnessInstalled === '20260913-individual2') return;
+  window.__luxPlaylistFreshnessInstalled = '20260913-individual2';
 
   const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
   const MAX_AGE = 3 * 60 * 60 * 1000;
@@ -60,20 +60,26 @@
     return data || null;
   }
 
-  async function reloadProviderCatalog(result, row, account) {
+  async function reloadCurrentCatalog(result, row, account) {
+    const playlist = result?.playlist || null;
+    const url = String(playlist?.url || row?.lista_m3u_https || account?.m3uHttpsUrl || '').trim();
+    if (url) {
+      try { account.m3uHttpsUrl = url; } catch (_) {}
+      try { if (currentUser) currentUser.m3uHttpsUrl = url; } catch (_) {}
+    }
+
     try {
       if (window.LuxSyncedCatalog?.reload) {
         const loaded = await window.LuxSyncedCatalog.reload();
         return Boolean(loaded?.count);
       }
 
-      const url = result?.playlist || result?.url || row?.lista_m3u_https || account?.m3uHttpsUrl;
-      if (!/^https?:\/\//i.test(String(url || '')) || typeof loadPlaylist !== 'function') return false;
+      if (!/^https?:\/\//i.test(url) || typeof loadPlaylist !== 'function') return false;
       await loadPlaylist(url);
       try { window.LuxSports?.refresh?.(); } catch (_) {}
       return true;
     } catch (error) {
-      console.warn('[Lux Playlist Freshness] O provedor atualizou, mas o catálogo não pôde ser recarregado nesta sessão.', error);
+      console.warn('[Lux Playlist Freshness] A lista individual atualizou, mas não pôde ser reaplicada nesta sessão.', error);
       return false;
     }
   }
@@ -88,8 +94,9 @@
 
     let payload = null;
     try { payload = await response.json(); } catch (_) {}
-    if (!response.ok || payload?.error || payload?.result?.status === 'error') {
-      throw new Error(payload?.error || payload?.result?.message || `Worker respondeu HTTP ${response.status}`);
+    const playlist = payload?.result?.playlist;
+    if (!response.ok || payload?.error || playlist?.status === 'error') {
+      throw new Error(payload?.error || playlist?.message || `Worker respondeu HTTP ${response.status}`);
     }
     return payload?.result || null;
   }
@@ -111,10 +118,14 @@
       if (!row || !/^https?:\/\//i.test(String(row.lista_m3u || '').trim())) return { skipped: 'no-remote-list' };
       if (!force && !isStale(row)) return { fresh: true, syncedAt: row.lista_m3u_sync_at };
 
-      console.info('[Lux Playlist Freshness] Catálogo do provedor antigo detectado. Verificando atualização...');
+      console.info('[Lux Playlist Freshness] M3U individual antiga detectada. Atualizando esta conta...');
       const result = await syncSelf(account);
-      const reloaded = await reloadProviderCatalog(result, row, account);
-      console.info('[Lux Playlist Freshness] Catálogo mestre verificado.', { syncedAt: result?.syncedAt, version: result?.version, reloaded });
+      const reloaded = await reloadCurrentCatalog(result, row, account);
+      console.info('[Lux Playlist Freshness] Conta atualizada.', {
+        playlistSyncedAt: result?.playlist?.syncedAt,
+        providerVersion: result?.provider?.version,
+        reloaded
+      });
       checkedUsers.set(username, now());
       return { refreshed: true, reloaded, result };
     } catch (error) {
