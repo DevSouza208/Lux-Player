@@ -50,11 +50,16 @@ async function getUserByUsername(env, username) {
   return rows?.[0] || null;
 }
 
-async function authenticateAdmin(env, username, password) {
+async function authenticateUser(env, username, password) {
   const account = await getUserByUsername(env, username);
   if (!account || String(account.senha || "") !== String(password || "")) {
     throw new Error("Credenciais inválidas.");
   }
+  return account;
+}
+
+async function authenticateAdmin(env, username, password) {
+  const account = await authenticateUser(env, username, password);
   if (String(account.cargo || "").trim().toLowerCase() !== "admin") {
     throw new Error("Apenas administradores podem iniciar a sincronização manual.");
   }
@@ -131,7 +136,6 @@ async function saveRemoteResponseToR2(env, key, response, contentType) {
   const contentLength = /^\d+$/.test(String(rawLength || "")) ? Number(rawLength) : 0;
   const options = { httpMetadata: r2HttpMetadata(contentType) };
 
-  // Quando o fornecedor informa o tamanho, mantemos streaming real sem bufferizar.
   if (Number.isSafeInteger(contentLength) && contentLength > 0) {
     const fixed = new FixedLengthStream(contentLength);
     await Promise.all([
@@ -141,9 +145,6 @@ async function saveRemoteResponseToR2(env, key, response, contentType) {
     return contentLength;
   }
 
-  // Alguns servidores Xtream respondem em chunked transfer e não enviam
-  // Content-Length. R2 não aceita um ReadableStream de tamanho desconhecido
-  // em put(), então neste caso usamos um valor de tamanho fixo (ArrayBuffer).
   const buffer = await response.arrayBuffer();
   await env.LISTS_BUCKET.put(key, buffer, options);
   return buffer.byteLength;
@@ -188,8 +189,6 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
   const previousManifest = await readPreviousCatalogManifest(env, username);
   const saved = [];
 
-  // Um endpoint grande por vez. Se o fornecedor vier sem Content-Length,
-  // o fallback precisa bufferizar somente aquele arquivo, nunca vários juntos.
   for (const part of catalogParts) {
     saved.push(await syncCatalogPart(env, source, versionPrefix, part));
   }
@@ -223,6 +222,68 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
     files: Object.keys(files),
     bytes
   };
+}
+
+async function syncPlaylistOnly(env, user) {
+  const username = String(user.usuario || "").trim();
+  const sourceUrl = String(user.lista_m3u || "").trim();
+
+  if (!username || !/^https?:\/\//i.test(sourceUrl)) {
+    return { usuario: username, status: "skipped", message: "Sem URL HTTP/HTTPS válida" };
+  }
+
+  try {
+    const playlistResponse = await fetchWithTimeout(
+      sourceUrl,
+      { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } },
+      120000
+    );
+
+    if (!playlistResponse.ok) {
+      throw new Error(`Fornecedor respondeu HTTP ${playlistResponse.status}`);
+    }
+
+    const encodedUser = encodeURIComponent(username);
+    const objectKey = `listas/${encodedUser}.m3u`;
+    const playlistBytes = await saveRemoteResponseToR2(
+      env,
+      objectKey,
+      playlistResponse,
+      "audio/x-mpegurl; charset=utf-8"
+    );
+
+    const httpsUrl = `${baseUrl(env)}/${objectKey}`;
+    const syncedAt = new Date().toISOString();
+
+    await updateUser(env, username, {
+      lista_m3u_https: httpsUrl,
+      lista_m3u_sync_at: syncedAt,
+      lista_m3u_sync_status: "success",
+      lista_m3u_sync_error: null
+    });
+
+    return {
+      usuario: username,
+      status: "success",
+      url: httpsUrl,
+      playlistBytes,
+      syncedAt,
+      mode: "playlist-only"
+    };
+  } catch (error) {
+    await updateUser(env, username, {
+      lista_m3u_sync_at: new Date().toISOString(),
+      lista_m3u_sync_status: "error",
+      lista_m3u_sync_error: error?.message || "Erro desconhecido"
+    });
+
+    return {
+      usuario: username,
+      status: "error",
+      message: error?.message || "Erro desconhecido",
+      mode: "playlist-only"
+    };
+  }
 }
 
 async function syncUser(env, user) {
@@ -307,7 +368,7 @@ async function syncOneByUsername(env, username) {
   return syncUser(env, user);
 }
 
-async function syncAll(env) {
+async function getUsersWithPlaylists(env) {
   const response = await supabaseFetch(
     env,
     "usuarios?select=usuario,lista_m3u&lista_m3u=not.is.null"
@@ -317,13 +378,26 @@ async function syncAll(env) {
     throw new Error(`Erro ao consultar usuários: HTTP ${response.status}`);
   }
 
-  const users = await response.json();
+  return response.json();
+}
+
+async function syncAll(env) {
+  const users = await getUsersWithPlaylists(env);
   const results = [];
 
-  // Cron conservador: uma conta por vez. O catálogo de cada conta já faz
-  // bastante I/O e isso evita picos de memória/subrequests no Worker.
   for (const user of users) {
     results.push(await syncUser(env, user));
+  }
+
+  return results;
+}
+
+async function syncAllPlaylists(env) {
+  const users = await getUsersWithPlaylists(env);
+  const results = [];
+
+  for (const user of users) {
+    results.push(await syncPlaylistOnly(env, user));
   }
 
   return results;
@@ -368,7 +442,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.3" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.3-playlist-fresh1" });
     }
 
     if (
@@ -378,7 +452,18 @@ export default {
       return serveR2Object(request, env);
     }
 
-    // Painel Admin: valida o administrador e sincroniza a conta escolhida.
+    if (request.method === "POST" && url.pathname === "/sync-self") {
+      const body = await readJsonBody(request);
+      try {
+        const account = await authenticateUser(env, body.username, body.password);
+        const result = await syncPlaylistOnly(env, account);
+        return json({ ok: result.status !== "error", result }, result.status === "error" ? 502 : 200);
+      } catch (error) {
+        const message = error?.message || "Falha ao atualizar a lista.";
+        return json({ ok: false, error: message }, /Credenciais/i.test(message) ? 401 : 500);
+      }
+    }
+
     if (request.method === "POST" && url.pathname === "/sync-account") {
       const body = await readJsonBody(request);
       try {
@@ -397,7 +482,6 @@ export default {
       }
     }
 
-    // PowerShell/admin técnico. Com { username } sincroniza uma conta; sem body, todas.
     if (request.method === "POST" && url.pathname === "/sync") {
       if (request.headers.get("X-Sync-Token") !== env.SYNC_TOKEN) {
         return json({ error: "Não autorizado" }, 401);
@@ -417,11 +501,11 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.6.3"
+      version: "1.6.3-playlist-fresh1"
     });
   },
 
   async scheduled(controller, env, ctx) {
-    ctx.waitUntil(syncAll(env));
+    ctx.waitUntil(syncAllPlaylists(env));
   }
 };
