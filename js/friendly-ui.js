@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-24';
+  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-25';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -134,7 +134,7 @@
   const loadSportsMediaBridge = () => {
     if (document.querySelector('script[data-lux-sports-media-bridge]')) return;
     const script = document.createElement('script');
-    script.src = 'js/sports-media-bridge.js?v=20260913-bridge2';
+    script.src = 'js/sports-media-bridge.js?v=20260913-bridge3';
     script.async = true;
     script.dataset.luxSportsMediaBridge = '1';
     document.head.appendChild(script);
