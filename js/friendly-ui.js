@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-clean-core-1';
+  const FRIENDLY_UI_VERSION = '20260913-v163-m3u-core-1';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -95,6 +95,15 @@
 
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
 
+  const loadStreamingM3uCore = () => {
+    if (document.querySelector('script[data-lux-streaming-m3u-core]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/streaming-m3u-core.js?v=20260913-m3u-core-1';
+    script.async = true;
+    script.dataset.luxStreamingM3uCore = '1';
+    document.head.appendChild(script);
+  };
+
   const loadGameDuplicateConsoleFix = () => {
     if (document.querySelector('script[data-lux-game-duplicate-console]')) return;
     const script = document.createElement('script');
@@ -148,6 +157,7 @@
 
   const start = () => {
     applyVersionEverywhere();
+    loadStreamingM3uCore();
     loadGameDuplicateConsoleFix();
     loadMobileControlOpacity();
     loadMobileCustomControls();
