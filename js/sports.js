@@ -1,11 +1,19 @@
 (() => {
   'use strict';
-  if (window.__luxSportsInstalled === '20260913-guide-fast1') return;
-  window.__luxSportsInstalled = '20260913-guide-fast1';
+  if (window.__luxSportsInstalled === '20260913-guide-fast2') return;
+  window.__luxSportsInstalled = '20260913-guide-fast2';
 
   const LEAD = 20 * 60 * 1000;
   const GROUP_RE = /(guia\s+de\s+jogos|jogos\s+do\s+dia)/i;
-  const state = { games: [], tab: 'live', loaded: false, signature: '', observer: null };
+  const state = {
+    games: [],
+    tab: 'live',
+    loaded: false,
+    loading: true,
+    userSelectedTab: false,
+    signature: '',
+    observer: null
+  };
   let lastMediaRef = null;
   let lastMediaLength = -1;
   let scanTimer = null;
@@ -88,7 +96,7 @@
 
   function list(tab=state.tab) {
     state.games.forEach(g => { g.status = infer(g); });
-    const wanted = tab === 'results' ? 'finished' : tab === 'live' ? 'live' : 'scheduled';
+    const wanted = tab === 'live' ? 'live' : 'scheduled';
     return state.games
       .filter(g => g.status === wanted)
       .sort((a,b) => {
@@ -96,7 +104,7 @@
         if (!Number.isFinite(x) && !Number.isFinite(y)) return a.home.localeCompare(b.home,'pt-BR');
         if (!Number.isFinite(x)) return 1;
         if (!Number.isFinite(y)) return -1;
-        return tab === 'results' ? y - x : x - y;
+        return x - y;
       });
   }
 
@@ -109,7 +117,6 @@
   function tomorrow(g) { return g.date && g.date === dateKey(1); }
   function badge(g) {
     if (g.status === 'live') return 'AO VIVO';
-    if (g.status === 'finished') return 'FIM';
     if (tomorrow(g)) return `AMANHÃ · ${g.time || ''}`;
     return g.time || 'HORÁRIO A CONFIRMAR';
   }
@@ -138,16 +145,20 @@
     let bar = section.querySelector('[data-lux-sports-tabs]');
     if (!bar) {
       bar = document.createElement('div');
-      bar.dataset.luxSportsTabs = 'guide-fast1';
+      bar.dataset.luxSportsTabs = 'guide-fast2';
       bar.className = 'flex flex-wrap gap-2';
       const h = section.querySelector('h3');
       section.insertBefore(bar, h?.nextSibling || box);
     }
-    bar.innerHTML = [['results','Resultados'],['live','Ao vivo'],['upcoming','Próximas partidas']].map(([k,l]) => {
+    bar.innerHTML = [['live','Ao vivo'],['upcoming','Próximas partidas']].map(([k,l]) => {
       const a = state.tab === k;
       return `<button data-tab="${k}" class="rounded-xl border px-3 py-2 text-[11px] font-bold ${a&&k==='live'?'border-emerald-400 bg-emerald-500 text-white':a?'border-purple-500 bg-purple-600 text-white':'border-purple-900/60 bg-[#120c1f] text-purple-300'}">${l}<span class="ml-1.5 opacity-70">${list(k).length}</span></button>`;
     }).join('');
-    bar.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { state.tab = b.dataset.tab; render(); });
+    bar.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => {
+      state.userSelectedTab = true;
+      state.tab = b.dataset.tab;
+      render();
+    });
   }
 
   function open(item) {
@@ -166,23 +177,32 @@
   function render() {
     const box = document.getElementById('homeJogosContainer');
     if (!box || !state.loaded) return;
+
+    if (!state.loading && !state.userSelectedTab && state.tab === 'live' && list('live').length === 0 && list('upcoming').length > 0) {
+      state.tab = 'upcoming';
+    }
+
     tabs();
+
+    if (state.loading || state.games.length === 0) {
+      box.innerHTML = '<p data-lux-sports-empty class="text-xs text-purple-400/70">Carregando partidas...</p>';
+      return;
+    }
+
     const games = list();
     if (!games.length) {
-      box.innerHTML = `<p data-lux-sports-empty class="text-xs text-purple-400/70">${state.tab==='results'?'Nenhum resultado do Guia de Jogos por enquanto.':state.tab==='live'?'Nenhuma partida do Guia de Jogos está ao vivo agora.':'Nenhuma próxima partida encontrada no Guia de Jogos.'}</p>`;
+      box.innerHTML = `<p data-lux-sports-empty class="text-xs text-purple-400/70">${state.tab==='live'?'Nenhuma partida ao vivo agora.':'Nenhuma próxima partida encontrada.'}</p>`;
       return;
     }
 
     box.innerHTML = games.slice(0,state.tab==='upcoming'?24:18).map(g => {
-      const live = g.status === 'live', fin = g.status === 'finished', ok = canWatch(g);
+      const live = g.status === 'live', ok = canWatch(g);
       const hasScore = g.score_home !== null && g.score_home !== '' && g.score_away !== null && g.score_away !== '' && Number.isFinite(Number(g.score_home)) && Number.isFinite(Number(g.score_away));
-      const score = (live || fin) && hasScore ? `${Number(g.score_home)} × ${Number(g.score_away)}` : '×';
-      const border = live ? 'border-emerald-500/60' : fin ? 'border-slate-700/60' : 'border-purple-900/60';
-      const tag = live ? 'bg-emerald-500/20 text-emerald-300' : fin ? 'bg-slate-800 text-slate-300' : 'bg-purple-950 text-purple-300';
-      const streams = fin
-        ? '<div class="mt-3 h-[118px]"></div><div class="h-5"></div>'
-        : `<div class="mt-3 flex h-[118px] content-start flex-wrap gap-2 overflow-y-auto rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2">${g.channels.map((c,i)=>chip(g,c,i,ok)).join('')}</div><div class="mt-2 h-5 text-center text-[10px] text-purple-400">${!ok&&g.status==='scheduled'?esc(unlock(g)):''}</div>`;
-      return `<article data-sports-guide-card class="flex h-[400px] w-[290px] shrink-0 flex-col rounded-2xl border ${border} bg-[#120c1f] p-4"><div class="flex h-7 items-center justify-between gap-2"><span class="truncate text-[10px] font-bold uppercase text-purple-300">${esc(g.competition||'Futebol')}</span><span class="rounded-full px-2 py-1 text-[9px] font-black ${tag}">${esc(badge(g))}</span></div><div class="mt-4 grid min-h-[104px] grid-cols-[1fr_auto_1fr] items-center gap-2">${team(g.home,g.home_logo)}<strong class="text-sm ${fin?'text-slate-200':'text-emerald-300'}">${esc(score)}</strong>${team(g.away,g.away_logo)}</div>${streams}<div class="mt-auto pt-2 text-right text-[9px] text-purple-500">Canais: Guia de Jogos</div></article>`;
+      const score = live && hasScore ? `${Number(g.score_home)} × ${Number(g.score_away)}` : '×';
+      const border = live ? 'border-emerald-500/60' : 'border-purple-900/60';
+      const tag = live ? 'bg-emerald-500/20 text-emerald-300' : 'bg-purple-950 text-purple-300';
+      const streams = `<div class="mt-3 flex h-[118px] content-start flex-wrap gap-2 overflow-y-auto rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2">${g.channels.map((c,i)=>chip(g,c,i,ok)).join('')}</div><div class="mt-2 h-5 text-center text-[10px] text-purple-400">${!ok&&g.status==='scheduled'?esc(unlock(g)):''}</div>`;
+      return `<article data-sports-guide-card class="flex h-[400px] w-[290px] shrink-0 flex-col rounded-2xl border ${border} bg-[#120c1f] p-4"><div class="flex h-7 items-center justify-between gap-2"><span class="truncate text-[10px] font-bold uppercase text-purple-300">${esc(g.competition||'Futebol')}</span><span class="rounded-full px-2 py-1 text-[9px] font-black ${tag}">${esc(badge(g))}</span></div><div class="mt-4 grid min-h-[104px] grid-cols-[1fr_auto_1fr] items-center gap-2">${team(g.home,g.home_logo)}<strong class="text-sm text-emerald-300">${esc(score)}</strong>${team(g.away,g.away_logo)}</div>${streams}<div class="mt-auto pt-2 text-right text-[9px] text-purple-500">Canais: Guia de Jogos</div></article>`;
     }).join('');
 
     box.querySelectorAll('[data-team-logo]').forEach(img => {
@@ -211,9 +231,18 @@
     const src = items(source);
     const sig = src.map(x => `${x.name}|${x.url}|${x.logo||''}`).join('\n');
     if (!force && sig === state.signature) return false;
+
     state.signature = sig;
     state.games = group(src);
     state.loaded = true;
+    state.loading = source.length === 0;
+
+    if (!state.loading && !state.userSelectedTab) {
+      const liveCount = list('live').length;
+      const upcomingCount = list('upcoming').length;
+      state.tab = liveCount > 0 ? 'live' : upcomingCount > 0 ? 'upcoming' : 'live';
+    }
+
     render();
     return true;
   }
