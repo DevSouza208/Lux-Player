@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-7';
+  const FRIENDLY_UI_VERSION = '20260912-v163-friendly-ui-8';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -105,6 +105,15 @@
     document.head.appendChild(script);
   };
 
+  const loadGameDuplicateConsoleFix = () => {
+    if (document.querySelector('script[data-lux-game-duplicate-console]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/game-duplicate-console-fix.js?v=20260912-console-duplicate1';
+    script.async = true;
+    script.dataset.luxGameDuplicateConsole = '1';
+    document.head.appendChild(script);
+  };
+
   const loadMobileControlOpacity = () => {
     if (!mobileMedia() || document.querySelector('script[data-lux-mobile-control-opacity]')) return;
     const script = document.createElement('script');
@@ -150,6 +159,7 @@
   const start = () => {
     applyVersionEverywhere();
     loadRuntimeStabilityFix();
+    loadGameDuplicateConsoleFix();
     loadMobileControlOpacity();
     loadMobileCustomControls();
     observer.observe(document.documentElement, {
