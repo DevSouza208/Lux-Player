@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-21';
+  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-22';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -19,6 +19,7 @@
     [/Baixando catálogo e categorias\.\.\./gi, 'Organizando seu catálogo...'],
     [/Baixando catálogo HTTPS sincronizado\.\.\./gi, 'Preparando seu catálogo...'],
     [/Preparando catálogo oficial do provedor\.\.\./gi, 'Preparando seu catálogo...'],
+    [/Preparando sua lista com os dados oficiais do provedor\.\.\./gi, 'Preparando seu catálogo...'],
     [/Buscando temporadas\.\.\./gi, 'Preparando temporadas...'],
     [/Carregando sinopse\.\.\./gi, 'Preparando detalhes...'],
     [/Sincronizando temporadas e episódios\.\.\./gi, 'Carregando episódios...'],
@@ -142,7 +143,7 @@
   const loadPlaylistFreshness = () => {
     if (document.querySelector('script[data-lux-playlist-freshness]')) return;
     const script = document.createElement('script');
-    script.src = 'js/playlist-freshness.js?v=20260913-provider1';
+    script.src = 'js/playlist-freshness.js?v=20260913-individual2';
     script.async = true;
     script.dataset.luxPlaylistFreshness = '1';
     document.head.appendChild(script);
