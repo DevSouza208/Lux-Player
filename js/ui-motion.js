@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260912-v163-sports-guide5';
+  const RESET_VERSION = '20260913-v163-shield-admin1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -37,6 +37,8 @@
     './js/emulator-speed-fix.js',
     './js/sports.js',
     './js/sports-home-guard.js',
+    './js/sports-global-mapping.js',
+    './js/sports-admin.js',
     './js/mobile-ux.js',
     './js/mobile-lux-console.js',
     './js/mobile-lux-actions.js',
@@ -158,7 +160,7 @@ function animateDashboardEntry() {
 
 (() => {
   const modules = [
-    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260912-v163-friendly-ui-15'],
+    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260913-v163-friendly-ui-17'],
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
