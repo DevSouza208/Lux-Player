@@ -2,39 +2,44 @@
   'use strict';
 
   if (window.__luxSportsInstalled) return;
-  window.__luxSportsInstalled = '20260912-sports2';
+  window.__luxSportsInstalled = '20260912-sports3';
 
   const WATCH_LEAD_MS = 20 * 60 * 1000;
   const state = {
     games: [],
     mappings: [],
+    teamLogos: new Map(),
+    teamLogoPairs: new Map(),
     loaded: false,
     loading: false,
+    loadingTeamLogos: false,
+    teamLogosLoaded: false,
     error: '',
     fetchedAt: '',
     observer: null,
     refreshTimer: null,
-    activeTab: 'live'
+    activeTab: 'live',
+    renderQueued: false
   };
 
   const QUALITY_WORDS = new Set(['hd', 'fhd', 'uhd', 'sd', '4k', '8k', 'hevc', 'h265', 'h264', '60fps']);
   const AUTO_ALIASES = {
-    'amazon': ['amazon', 'amazon prime', 'prime video'],
+    amazon: ['amazon', 'amazon prime', 'prime video'],
     'apple tv': ['apple tv', 'appletv'],
-    'cazetv': ['cazetv', 'caze tv'],
-    'disney': ['disney', 'disney plus'],
+    cazetv: ['cazetv', 'caze tv'],
+    disney: ['disney', 'disney plus'],
     'disney plus': ['disney', 'disney plus'],
     'espn brasil': ['espn brasil', 'espn'],
     'ge tv': ['ge tv', 'getv'],
-    'globoplay': ['globoplay'],
-    'onefootball': ['onefootball', 'one football'],
-    'paramount': ['paramount', 'paramount plus'],
+    globoplay: ['globoplay'],
+    onefootball: ['onefootball', 'one football'],
+    paramount: ['paramount', 'paramount plus'],
     'paramount plus': ['paramount', 'paramount plus'],
-    'premiere': ['premiere'],
-    'record': ['record', 'record tv'],
-    'sportv': ['sportv', 'spor tv'],
-    'sportynet': ['sportynet', 'sporty net'],
-    'xsports': ['xsports', 'x sports']
+    premiere: ['premiere'],
+    record: ['record', 'record tv'],
+    sportv: ['sportv', 'spor tv'],
+    sportynet: ['sportynet', 'sporty net'],
+    xsports: ['xsports', 'x sports']
   };
 
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({
@@ -121,15 +126,16 @@
     return best;
   }
 
-  function localTodayKey() {
+  function localDateKey(offsetDays = 0) {
+    const target = new Date(Date.now() + (offsetDays * 24 * 60 * 60 * 1000));
     try {
       const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
-      }).formatToParts(new Date());
+      }).formatToParts(target);
       const obj = Object.fromEntries(parts.map(part => [part.type, part.value]));
       return `${obj.year}-${obj.month}-${obj.day}`;
     } catch (_) {
-      return new Date().toISOString().slice(0, 10);
+      return target.toISOString().slice(0, 10);
     }
   }
 
@@ -139,7 +145,7 @@
 
   function gamesByTab(tab = state.activeTab) {
     const now = Date.now();
-    const today = localTodayKey();
+    const today = localDateKey();
     const games = (state.games || []).filter(Boolean);
 
     if (tab === 'results') {
@@ -172,7 +178,11 @@
     const start = kickoffMs(game);
     if (!Number.isFinite(start)) return false;
     const delta = start - Date.now();
-    return delta <= WATCH_LEAD_MS && delta >= -2 * 60 * 1000;
+    return delta <= WATCH_LEAD_MS && delta >= -(2 * 60 * 1000);
+  }
+
+  function isTomorrow(game) {
+    return game?.date === localDateKey(1);
   }
 
   function unlockLabel(game) {
@@ -180,7 +190,8 @@
     if (!Number.isFinite(start)) return 'Disponível 20 min antes';
     const unlock = new Date(start - WATCH_LEAD_MS);
     try {
-      return `Disponível às ${unlock.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      const time = unlock.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return isTomorrow(game) ? `Disponível amanhã às ${time}` : `Disponível às ${time}`;
     } catch (_) {
       return 'Disponível 20 min antes';
     }
@@ -189,7 +200,51 @@
   function formatKickoff(game) {
     if (game?.status === 'live') return 'AO VIVO';
     if (game?.status === 'finished') return 'FIM';
+    if (isTomorrow(game)) return `AMANHÃ · ${game?.time || ''}`;
     return game?.time || '';
+  }
+
+  function teamLogoEntry(game) {
+    if (!game) return null;
+    return state.teamLogos.get(String(game.id))
+      || state.teamLogoPairs.get(`${normalize(game.home)}|${normalize(game.away)}`)
+      || null;
+  }
+
+  function teamHtml(name, logo, side) {
+    const image = logo
+      ? `<img data-sports-team-logo="1" src="${esc(logo)}" alt="Escudo ${esc(name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" class="h-8 w-8 object-contain drop-shadow">`
+      : '';
+    return `<div class="min-w-0 flex flex-col items-center justify-center gap-1.5 ${side === 'home' ? 'text-right' : 'text-left'}">
+      ${image}
+      <strong class="max-w-full text-xs leading-tight text-white">${esc(name)}</strong>
+    </div>`;
+  }
+
+  function channelLogoHtml(channel, sizeClass = 'h-5 w-5') {
+    const logo = String(channel?.logo || '').trim();
+    if (!logo) return '';
+    return `<img data-sports-channel-logo="1" src="${esc(logo)}" alt="${esc(channel?.name || 'Canal')}" loading="lazy" decoding="async" referrerpolicy="no-referrer" class="${sizeClass} shrink-0 rounded-md object-contain">`;
+  }
+
+  function broadcasterResolutions(game) {
+    const broadcasters = Array.isArray(game?.broadcasters) ? game.broadcasters.filter(Boolean) : [];
+    return broadcasters.map(name => ({ name, resolution: resolveBroadcaster(name, false) }));
+  }
+
+  function broadcasterChipsHtml(game) {
+    const entries = broadcasterResolutions(game);
+    if (!entries.length) return '<span class="text-purple-400">Transmissão não informada</span>';
+    return entries.map(({ name, resolution }) => {
+      const logo = channelLogoHtml(resolution?.channel);
+      return `<span class="inline-flex items-center gap-1.5 rounded-lg bg-purple-950/50 px-2 py-1 text-[10px] text-purple-200">${logo}<span>${esc(name)}</span></span>`;
+    }).join('');
+  }
+
+  function watchButtonHtml(game, resolved) {
+    if (!resolved?.channel) return '';
+    const logo = channelLogoHtml(resolved.channel, 'h-5 w-5');
+    return `<button type="button" data-sports-watch="${esc(game.id)}" class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-[11px] font-black text-white transition hover:bg-emerald-500">${logo}<span>Assistir na ${esc(resolved.broadcaster)}</span></button>`;
   }
 
   function ensureHomeTabs() {
@@ -211,10 +266,16 @@
       ['live', 'Ao vivo'],
       ['upcoming', 'Próximas partidas']
     ];
+
     tabs.innerHTML = definitions.map(([key, label]) => {
       const active = state.activeTab === key;
-      const count = tabCount(key);
-      return `<button type="button" data-sports-tab="${key}" class="rounded-xl border px-3 py-2 text-[11px] font-bold transition ${active ? 'border-purple-500 bg-purple-600 text-white' : 'border-purple-900/60 bg-[#120c1f] text-purple-300 hover:bg-[#1a122c]'}">${label}<span class="ml-1.5 opacity-70">${count}</span></button>`;
+      const liveActive = active && key === 'live';
+      const activeClasses = liveActive
+        ? 'border-emerald-400 bg-emerald-500 text-white shadow-lg shadow-emerald-950/20'
+        : active
+          ? 'border-purple-500 bg-purple-600 text-white'
+          : 'border-purple-900/60 bg-[#120c1f] text-purple-300 hover:bg-[#1a122c]';
+      return `<button type="button" data-sports-tab="${key}" class="rounded-xl border px-3 py-2 text-[11px] font-bold transition ${activeClasses}">${label}<span class="ml-1.5 opacity-70">${tabCount(key)}</span></button>`;
     }).join('');
 
     tabs.querySelectorAll('[data-sports-tab]').forEach(button => {
@@ -232,6 +293,12 @@
     return 'Nenhuma próxima partida encontrada.';
   }
 
+  function bindImageFallbacks(container) {
+    container.querySelectorAll('img[data-sports-team-logo], img[data-sports-channel-logo]').forEach(img => {
+      img.addEventListener('error', () => img.remove(), { once: true });
+    });
+  }
+
   function renderHome() {
     const container = document.getElementById('homeJogosContainer');
     if (!container || !state.loaded) return;
@@ -247,40 +314,42 @@
       const resolved = resolveGame(game);
       const live = game.status === 'live';
       const finished = game.status === 'finished';
-      const broadcasters = Array.isArray(game.broadcasters) ? game.broadcasters : [];
+      const eligible = canWatchGame(game);
+      const logos = teamLogoEntry(game) || {};
       const hasScore = (live || finished) && Number.isFinite(Number(game.score_home)) && Number.isFinite(Number(game.score_away));
       const score = hasScore ? `${Number(game.score_home)} × ${Number(game.score_away)}` : '×';
-      const eligible = canWatchGame(game);
 
       let action = '';
-      if (finished) {
-        action = '';
-      } else if (eligible && resolved?.channel) {
-        action = `<button type="button" data-sports-watch="${esc(game.id)}" class="mt-3 w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-[11px] font-black text-white transition">Assistir na ${esc(resolved.broadcaster)}</button>`;
-      } else if (!eligible && game.status === 'scheduled') {
-        action = `<div class="mt-3 rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2 text-center text-[10px] text-purple-400">${esc(unlockLabel(game))}</div>`;
-      } else {
-        action = `<div class="mt-3 rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2 text-[10px] text-purple-300">${broadcasters.length ? `📺 ${esc(broadcasters.join(', '))}` : 'Transmissão não informada'}</div>`;
+      if (!finished && eligible && resolved?.channel) action = watchButtonHtml(game, resolved);
+      else if (!finished && game.status === 'scheduled') {
+        action = `<div class="mt-3 space-y-2">
+          <div class="flex flex-wrap items-center gap-2 rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2">${broadcasterChipsHtml(game)}</div>
+          <div class="rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2 text-center text-[10px] text-purple-400">${esc(unlockLabel(game))}</div>
+        </div>`;
+      } else if (!finished) {
+        action = `<div class="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-purple-900/50 bg-[#100a1c] px-3 py-2">${broadcasterChipsHtml(game)}</div>`;
       }
 
-      const border = live ? 'border-rose-500/45' : finished ? 'border-slate-700/60' : 'border-purple-900/60';
-      const badge = live ? 'bg-rose-500/20 text-rose-300' : finished ? 'bg-slate-800 text-slate-300' : 'bg-purple-950 text-purple-300';
+      const border = live ? 'border-emerald-500/60 shadow-lg shadow-emerald-950/10' : finished ? 'border-slate-700/60' : 'border-purple-900/60';
+      const badge = live ? 'bg-emerald-500/20 text-emerald-300' : finished ? 'bg-slate-800 text-slate-300' : 'bg-purple-950 text-purple-300';
       const scoreClass = finished ? 'text-slate-200' : 'text-emerald-300';
 
-      return `<article data-lux-sports-card="1" class="w-[260px] shrink-0 rounded-2xl border ${border} bg-[#120c1f] p-4 shadow-lg">
+      return `<article data-lux-sports-card="1" data-sports-game-id="${esc(game.id)}" class="w-[260px] shrink-0 rounded-2xl border ${border} bg-[#120c1f] p-4">
         <div class="flex items-center justify-between gap-2">
           <span class="truncate text-[10px] font-bold uppercase tracking-wide text-purple-300">${esc(game.competition || 'Futebol')}</span>
           <span class="shrink-0 rounded-full px-2 py-1 text-[9px] font-black ${badge}">${esc(formatKickoff(game))}</span>
         </div>
         <div class="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center">
-          <strong class="text-xs leading-tight text-white">${esc(game.home)}</strong>
+          ${teamHtml(game.home, logos.home_logo, 'home')}
           <strong class="text-sm ${scoreClass}">${esc(score)}</strong>
-          <strong class="text-xs leading-tight text-white">${esc(game.away)}</strong>
+          ${teamHtml(game.away, logos.away_logo, 'away')}
         </div>
         ${action}
         <div class="mt-2 text-right text-[9px] text-purple-500">Dados: Super Placar</div>
       </article>`;
     }).join('');
+
+    bindImageFallbacks(container);
 
     container.querySelectorAll('[data-sports-watch]').forEach(button => {
       button.addEventListener('click', () => {
@@ -297,6 +366,15 @@
           console.warn('[Lux Sports] Não foi possível abrir o canal:', error);
         }
       });
+    });
+  }
+
+  function scheduleRenderHome() {
+    if (state.renderQueued) return;
+    state.renderQueued = true;
+    queueMicrotask(() => {
+      state.renderQueued = false;
+      renderHome();
     });
   }
 
@@ -327,6 +405,7 @@
     if (!modal || document.querySelector('[data-admin-tab="sports"]')) return;
     const tabs = modal.querySelector('.admin-tab-btn')?.parentElement;
     if (!tabs) return;
+
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.adminTab = 'sports';
@@ -427,6 +506,29 @@
     return data || {};
   }
 
+  async function loadTeamLogos() {
+    if (state.loadingTeamLogos || state.teamLogosLoaded) return;
+    state.loadingTeamLogos = true;
+    try {
+      let client;
+      try { client = supabaseClient; } catch (_) { return; }
+      if (!client?.functions?.invoke) return;
+      const { data, error } = await client.functions.invoke('sports-logos', { body: { action: 'logos' } });
+      if (error || data?.error) throw error || new Error(data.error);
+      const logos = Array.isArray(data?.logos) ? data.logos : [];
+      logos.forEach(entry => {
+        if (entry?.id) state.teamLogos.set(String(entry.id), entry);
+        if (entry?.home && entry?.away) state.teamLogoPairs.set(`${normalize(entry.home)}|${normalize(entry.away)}`, entry);
+      });
+      state.teamLogosLoaded = true;
+      if (state.loaded) renderHome();
+    } catch (error) {
+      console.warn('[Lux Sports] Escudos indisponíveis:', error);
+    } finally {
+      state.loadingTeamLogos = false;
+    }
+  }
+
   async function loadFeed(force = false) {
     if (state.loading) return;
     state.loading = true;
@@ -445,6 +547,7 @@
       state.fetchedAt = data.fetched_at || '';
       state.loaded = true;
       renderHome();
+      loadTeamLogos();
     } catch (error) {
       state.error = error?.message || 'Não foi possível atualizar os esportes.';
       console.warn('[Lux Sports]', error);
@@ -490,9 +593,9 @@
     const container = document.getElementById('homeJogosContainer');
     if (!container || state.observer) return;
     state.observer = new MutationObserver(() => {
-      if (!state.loaded || !state.games.length) return;
-      const section = container.parentElement;
-      if (!section?.querySelector('[data-lux-sports-tabs]')) queueMicrotask(renderHome);
+      if (!state.loaded) return;
+      const hasSportsContent = container.querySelector('[data-lux-sports-card], [data-lux-sports-empty]');
+      if (!hasSportsContent) scheduleRenderHome();
     });
     state.observer.observe(container, { childList: true });
   }
