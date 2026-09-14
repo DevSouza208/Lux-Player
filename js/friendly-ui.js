@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260913-v163-friendly-ui-18';
+  const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-19';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -91,6 +91,19 @@
   }
 
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
+
+  // [LUX-AUTH-005] Instala a ponte que troca o SELECT * de usuários pela
+  // requisição server-side `auth-login`. Carregamos cedo para que tanto login
+  // manual quanto login automático usem a nova rota sempre que possível.
+  const loadBackendAuth = () => {
+    if (document.querySelector('script[data-lux-backend-auth]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/auth-backend.js?v=20260914-auth-backend1';
+    script.async = true;
+    script.fetchPriority = 'high';
+    script.dataset.luxBackendAuth = '1';
+    document.head.appendChild(script);
+  };
 
   const loadRuntimeStabilityFix = () => {
     if (document.querySelector('script[data-lux-runtime-stability]')) return;
@@ -190,6 +203,7 @@
 
   const start = () => {
     applyVersionEverywhere();
+    loadBackendAuth();
     loadRuntimeStabilityFix();
     loadStreamSessionGuard();
     loadAccountUiPolish();
