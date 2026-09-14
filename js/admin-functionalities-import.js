@@ -3,6 +3,7 @@
 
   // ============================================================
   // [LUX-ADMIN-013] IMPORTAÇÃO / EXPORTAÇÃO DO MAPA FUNCIONAL
+  // [LUX-ADMIN-014] ROLAGEM DO MAPA FUNCIONAL
   // ============================================================
   // Complemento do dashboard de Funcionalidades.
   //
@@ -10,13 +11,15 @@
   // - permitir a migração inicial dos CSVs MAIN/DEVELOP para o Supabase;
   // - permitir baixar um snapshot CSV da branch exibida;
   // - manter a gravação atrás da Edge Function functional-map, que revalida
-  //   usuário/senha e exige cargo=admin.
+  //   usuário/senha e exige cargo=admin;
+  // - garantir que a lista e o painel de detalhes possam rolar dentro do modal
+  //   sem fazer o Painel Admin inteiro crescer além do limite da tela.
   //
   // Este arquivo NÃO acessa functional_map_csv diretamente e não usa service role.
   // ============================================================
 
   if (window.__luxAdminFunctionalitiesImportInstalled) return;
-  window.__luxAdminFunctionalitiesImportInstalled = '20260914-functional-import1';
+  window.__luxAdminFunctionalitiesImportInstalled = '20260914-functional-import2';
 
   const getClient = () => {
     try { return typeof supabaseClient !== 'undefined' ? supabaseClient : null; }
@@ -113,6 +116,37 @@
     }
   }
 
+  // [LUX-ADMIN-014]
+  // O modal Admin usa flex + max-height + overflow-hidden. Dentro dele, o dashboard
+  // usa outro flex e um grid. Em CSS Grid/Flex, filhos têm min-height:auto por padrão;
+  // isso pode impedir o item de encolher e, consequentemente, o overflow-y:auto nunca
+  // recebe uma área menor para rolar. Forçamos min-height:0 em toda a cadeia até os
+  // dois painéis roláveis. Assim somente a lista/detalhes rolam, sem mover cabeçalho,
+  // filtros ou botões de importação.
+  function ensureFunctionalScroll() {
+    const panel = document.getElementById('adminTabFunctionalities');
+    const rows = document.getElementById('functionalRows');
+    const detail = document.getElementById('functionalDetail');
+    const body = rows?.parentElement || null;
+    const root = body?.parentElement || panel?.firstElementChild || null;
+    if (!panel || !root || !body || !rows || !detail) return false;
+
+    panel.classList.add('min-h-0', 'overflow-hidden');
+    root.classList.add('min-h-0', 'overflow-hidden');
+    body.classList.add('min-h-0', 'overflow-hidden');
+
+    [rows, detail].forEach(element => {
+      element.classList.add('min-h-0', 'overflow-y-auto', 'overscroll-contain');
+      element.style.minHeight = '0';
+      element.style.overflowY = 'auto';
+      element.style.overscrollBehavior = 'contain';
+      element.style.touchAction = 'pan-y';
+      element.style.webkitOverflowScrolling = 'touch';
+    });
+
+    return true;
+  }
+
   function installButtons() {
     const panel = document.getElementById('adminTabFunctionalities');
     const filters = document.getElementById('functionalSearch')?.parentElement;
@@ -148,10 +182,16 @@
     return true;
   }
 
+  function install() {
+    const scrollReady = ensureFunctionalScroll();
+    const buttonsReady = installButtons();
+    return scrollReady && (buttonsReady || document.getElementById('functionalSearch')?.parentElement?.dataset?.luxFunctionalImport === '1');
+  }
+
   let attempts = 0;
   const timer = setInterval(() => {
     attempts += 1;
-    if (installButtons() || attempts >= 120) clearInterval(timer);
+    if (install() || attempts >= 120) clearInterval(timer);
   }, 100);
-  installButtons();
+  install();
 })();
