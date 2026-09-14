@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-19';
+  const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-20';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -92,17 +92,64 @@
 
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
 
-  // [LUX-AUTH-006] Instala a ponte que troca o SELECT * de usuários pela
-  // requisição server-side `auth-login`. Carregamos cedo para que tanto login
-  // manual quanto login automático usem a nova rota sempre que possível.
-  const loadBackendAuth = () => {
-    if (document.querySelector('script[data-lux-backend-auth]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/auth-backend.js?v=20260914-auth-backend1';
-    script.async = true;
-    script.fetchPriority = 'high';
-    script.dataset.luxBackendAuth = '1';
-    document.head.appendChild(script);
+  // ============================================================
+  // [LUX-AUTH-006] LOGIN SERVER-SIDE — BOOTSTRAP
+  // ============================================================
+  // O auto-login do script.js roda no evento DOMContentLoaded da window. Este
+  // módulo escuta o mesmo ciclo pelo document e instala a substituição ANTES de o
+  // evento chegar à window. Assim login manual, auto-login e "Recarregar Dados"
+  // deixam de executar SELECT * FROM usuarios.
+  //
+  // Mantemos handleLogin() intacto: apenas trocamos fetchUsersFromSupabase(). Isso
+  // reduz o risco de regressão em perfis, validade, catálogo e mensagens atuais.
+  // ============================================================
+  const installBackendAuthBridge = () => {
+    if (window.__luxBackendAuthInstalled) return true;
+    if (typeof window.fetchUsersFromSupabase !== 'function') return false;
+    if (typeof supabaseClient === 'undefined' || !supabaseClient?.functions?.invoke) return false;
+
+    const originalFetchUsers = window.fetchUsersFromSupabase;
+
+    const getCredentials = () => {
+      let activeUser = null;
+      try { activeUser = typeof currentUser !== 'undefined' ? currentUser : null; } catch (_) {}
+      if (activeUser?.user && activeUser?.pass) {
+        return { username: String(activeUser.user).trim(), password: String(activeUser.pass) };
+      }
+      return {
+        username: String(document.getElementById('authEmail')?.value || '').trim(),
+        password: String(document.getElementById('authPass')?.value || ''),
+      };
+    };
+
+    window.fetchUsersFromSupabase = async function () {
+      const { username, password } = getCredentials();
+      if (!username || !password) return [];
+
+      const { data, error } = await supabaseClient.functions.invoke('auth-login', {
+        body: { username, password },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.ok === false && data?.reason === 'invalid_credentials') return [];
+      if (!data?.ok || !data?.account) return [];
+
+      // Compatibilidade temporária: outras Edge Functions ainda autenticam com a
+      // senha digitada. A senha DO BANCO não é retornada por auth-login.
+      return [{ ...data.account, senha: password }];
+    };
+
+    window.fetchUsersFromSupabase.__luxBackendAuth = true;
+    window.fetchUsersFromSupabase.__luxLegacyFetchUsers = originalFetchUsers;
+    window.__luxBackendAuthInstalled = '20260914-auth-backend2';
+    window.LuxBackendAuth = {
+      version: '20260914-auth-backend2',
+      legacyFetchUsers: originalFetchUsers,
+    };
+
+    console.info('[Lux Play] Login backend instalado.');
+    return true;
   };
 
   const loadRuntimeStabilityFix = () => {
@@ -202,8 +249,8 @@
   });
 
   const start = () => {
+    installBackendAuthBridge();
     applyVersionEverywhere();
-    loadBackendAuth();
     loadRuntimeStabilityFix();
     loadStreamSessionGuard();
     loadAccountUiPolish();
@@ -223,6 +270,9 @@
     window.__luxAppVersion = APP_VERSION;
   };
 
+  // Se friendly-ui terminar de carregar antes do DOMContentLoaded, tentamos instalar
+  // cedo e repetimos no evento. Isso cobre tanto login manual quanto auto-login.
+  installBackendAuthBridge();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
