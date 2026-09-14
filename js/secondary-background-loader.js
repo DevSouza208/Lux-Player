@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-secondary-background-1';
+  const VERSION = '20260914-secondary-background-2';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
@@ -18,29 +18,38 @@
         current = current.__luxSecondarySourcesOriginal;
         continue;
       }
+      if (current.__luxNonBlockingBase) {
+        current = current.__luxNonBlockingBase;
+        continue;
+      }
       break;
     }
     return current;
   }
 
+  let backgroundRun = null;
   function runComplementInBackground() {
-    setTimeout(async () => {
-      try {
-        if (window.LuxSecondarySources?.mergeIntoCurrentCatalog) {
-          await window.LuxSecondarySources.mergeIntoCurrentCatalog({ refreshUi: true });
+    if (backgroundRun) return backgroundRun;
+    backgroundRun = new Promise(resolve => setTimeout(resolve, 0))
+      .then(async () => {
+        try {
+          if (window.LuxSecondarySources?.mergeIntoCurrentCatalog) {
+            await window.LuxSecondarySources.mergeIntoCurrentCatalog({ refreshUi: true });
+          }
+        } catch (error) {
+          console.warn('[LUX-IPTV-039] Fontes secundárias falharam em segundo plano:', error);
         }
-      } catch (error) {
-        console.warn('[LUX-IPTV-039] Fontes secundárias falharam em segundo plano:', error);
-      }
 
-      try {
-        if (window.LuxProviderSources?.mergeIntoCurrentCatalog) {
-          await window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true });
+        try {
+          if (window.LuxProviderSources?.mergeIntoCurrentCatalog) {
+            await window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true });
+          }
+        } catch (error) {
+          console.warn('[LUX-IPTV-039] Providers falharam em segundo plano:', error);
         }
-      } catch (error) {
-        console.warn('[LUX-IPTV-039] Providers falharam em segundo plano:', error);
-      }
-    }, 0);
+      })
+      .finally(() => { backgroundRun = null; });
+    return backgroundRun;
   }
 
   function install() {
@@ -60,15 +69,18 @@
     wrapped.__luxNonBlockingSources = true;
     wrapped.__luxNonBlockingBase = base;
     window.loadMediaSourcesInPriority = wrapped;
-    console.info('[LUX-IPTV-039] Complementos externos agora carregam em segundo plano.');
+    console.info('[LUX-IPTV-039] Complementos externos carregam em segundo plano.');
     return true;
   }
 
+  // Secondary/provider modules chegam de forma assíncrona e podem embrulhar a função
+  // depois deste arquivo. Reaplicamos a proteção por alguns segundos para garantir
+  // que a camada mais externa continue não bloqueante antes e depois do login.
   let attempts = 0;
-  if (!install()) {
-    const timer = setInterval(() => {
-      attempts += 1;
-      if (install() || attempts >= 240) clearInterval(timer);
-    }, 50);
-  }
+  install();
+  const timer = setInterval(() => {
+    attempts += 1;
+    install();
+    if (attempts >= 120) clearInterval(timer);
+  }, 100);
 })();
