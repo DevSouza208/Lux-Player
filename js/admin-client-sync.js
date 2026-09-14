@@ -219,7 +219,7 @@
   const loadNonBlockingLayer = () => {
     if (document.querySelector('script[data-lux-secondary-background-loader]')) return;
     const script = document.createElement('script');
-    script.src = 'js/secondary-background-loader.js?v=20260914-secondary-background-1';
+    script.src = 'js/secondary-background-loader.js?v=20260914-secondary-background-2';
     script.async = true;
     script.setAttribute('data-lux-secondary-background-loader', '1');
     document.head.appendChild(script);
@@ -233,5 +233,27 @@
     setTimeout(loadNonBlockingLayer, 3500);
   } else {
     setTimeout(loadNonBlockingLayer, 1200);
+  }
+})();
+
+// [LUX-IPTV-040] Busca real de catálogo em providers PT-BR suportados.
+(() => {
+  const loadProviderSearch = () => {
+    if (window.LuxProviderSearch || document.querySelector('script[data-lux-provider-search-ui]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/provider-search-ui.js?v=20260914-provider-search-1';
+    script.async = true;
+    script.setAttribute('data-lux-provider-search-ui', '1');
+    document.head.appendChild(script);
+  };
+
+  const providerScript = document.querySelector('script[data-lux-provider-content-sources]');
+  if (window.LuxProviderSources) {
+    loadProviderSearch();
+  } else if (providerScript) {
+    providerScript.addEventListener('load', loadProviderSearch, { once: true });
+    setTimeout(loadProviderSearch, 3500);
+  } else {
+    setTimeout(loadProviderSearch, 1200);
   }
 })();
