@@ -217,8 +217,7 @@ Deno.serve(async (request: Request) => {
       if (!response.ok || !response.body) return json({ error: `A fonte respondeu HTTP ${response.status}.` }, 502);
       const streamHeaders = new Headers(headers);
       streamHeaders.set('Content-Type', 'audio/x-mpegurl; charset=utf-8');
-      const length = response.headers.get('content-length');
-      if (length && /^\d+$/.test(length)) streamHeaders.set('Content-Length', length);
+      // Não replica Content-Length da origem: fetch pode descomprimir o corpo e o tamanho deixa de ser confiável.
       return new Response(response.body, { status: 200, headers: streamHeaders });
     }
 
