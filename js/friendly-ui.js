@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-20';
+  const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-21';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -93,22 +93,23 @@
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
 
   // ============================================================
-  // [LUX-AUTH-006] LOGIN SERVER-SIDE — BOOTSTRAP
+  // [LUX-AUTH-006] LOGIN SERVER-SIDE — ÚNICO CAMINHO NO DEVELOP
   // ============================================================
-  // O auto-login do script.js roda no evento DOMContentLoaded da window. Este
-  // módulo escuta o mesmo ciclo pelo document e instala a substituição ANTES de o
-  // evento chegar à window. Assim login manual, auto-login e "Recarregar Dados"
-  // deixam de executar SELECT * FROM usuarios.
+  // A função legada fetchUsersFromSupabase() continua fisicamente em script.js
+  // enquanto o monólito não for refatorado, mas é SUBSTITUÍDA em runtime por esta
+  // implementação e não possui fallback. Login manual, auto-login e Recarregar
+  // Dados passam pela Edge Function auth-login.
   //
-  // Mantemos handleLogin() intacto: apenas trocamos fetchUsersFromSupabase(). Isso
-  // reduz o risco de regressão em perfis, validade, catálogo e mensagens atuais.
+  // IMPORTANTE:
+  // - não fazemos SELECT * de usuarios no navegador;
+  // - a Edge Function devolve somente a conta autenticada;
+  // - a senha salva no banco nunca volta na resposta;
+  // - RLS continua desligado nesta etapa porque o Admin legado ainda usa a tabela.
   // ============================================================
   const installBackendAuthBridge = () => {
     if (window.__luxBackendAuthInstalled) return true;
     if (typeof window.fetchUsersFromSupabase !== 'function') return false;
     if (typeof supabaseClient === 'undefined' || !supabaseClient?.functions?.invoke) return false;
-
-    const originalFetchUsers = window.fetchUsersFromSupabase;
 
     const getCredentials = () => {
       let activeUser = null;
@@ -130,25 +131,31 @@
         body: { username, password },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        console.error('[LUX-AUTH-006] Falha ao chamar auth-login:', error);
+        throw new Error('auth_backend_request_failed');
+      }
+      if (data?.error) {
+        console.error('[LUX-AUTH-006] auth-login respondeu erro:', data.error);
+        throw new Error(data.error);
+      }
       if (data?.ok === false && data?.reason === 'invalid_credentials') return [];
-      if (!data?.ok || !data?.account) return [];
+      if (!data?.ok || !data?.account) {
+        console.error('[LUX-AUTH-006] Resposta inesperada de auth-login:', data);
+        throw new Error('auth_backend_invalid_response');
+      }
 
-      // Compatibilidade temporária: outras Edge Functions ainda autenticam com a
-      // senha digitada. A senha DO BANCO não é retornada por auth-login.
+      // Compatibilidade temporária: algumas Edge Functions ainda autenticam com a
+      // senha digitada. Esta senha vem do próprio formulário/localStorage; NÃO é
+      // a senha do banco retornada pelo servidor.
       return [{ ...data.account, senha: password }];
     };
 
     window.fetchUsersFromSupabase.__luxBackendAuth = true;
-    window.fetchUsersFromSupabase.__luxLegacyFetchUsers = originalFetchUsers;
-    window.__luxBackendAuthInstalled = '20260914-auth-backend2';
-    window.LuxBackendAuth = {
-      version: '20260914-auth-backend2',
-      legacyFetchUsers: originalFetchUsers,
-    };
+    window.__luxBackendAuthInstalled = '20260914-auth-backend3';
+    window.LuxBackendAuth = { version: '20260914-auth-backend3', mode: 'backend-only' };
 
-    console.info('[Lux Play] Login backend instalado.');
+    console.info('[Lux Play] Login backend-only instalado.');
     return true;
   };
 
@@ -161,8 +168,6 @@
     document.head.appendChild(script);
   };
 
-  // [LUX-IPTV-STREAM-001] Carrega a guarda antes de qualquer nova evolução de player.
-  // Ela não substitui o player: apenas envolve as entradas playLiveChannel/openVodPlayer.
   const loadStreamSessionGuard = () => {
     if (document.querySelector('script[data-lux-stream-session-guard]')) return;
     const script = document.createElement('script');
@@ -172,8 +177,6 @@
     document.head.appendChild(script);
   };
 
-  // [LUX-AUTH-DATE-001] Formata apenas a apresentação do vencimento e adiciona
-  // o contador de streams no painel Admin sem mudar os dados salvos no banco.
   const loadAccountUiPolish = () => {
     if (document.querySelector('script[data-lux-account-ui-polish]')) return;
     const script = document.createElement('script');
@@ -270,8 +273,6 @@
     window.__luxAppVersion = APP_VERSION;
   };
 
-  // Se friendly-ui terminar de carregar antes do DOMContentLoaded, tentamos instalar
-  // cedo e repetimos no evento. Isso cobre tanto login manual quanto auto-login.
   installBackendAuthBridge();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
