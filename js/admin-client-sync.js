@@ -171,3 +171,13 @@
   script.setAttribute('data-lux-secondary-content-sources', '1');
   document.head.appendChild(script);
 })();
+
+// [LUX-IPTV-036] Organiza automaticamente as fontes secundárias por idioma.
+(() => {
+  if (document.querySelector('script[data-lux-secondary-locale-filter]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/secondary-locale-filter.js?v=20260914-secondary-locale1';
+  script.async = true;
+  script.setAttribute('data-lux-secondary-locale-filter', '1');
+  document.head.appendChild(script);
+})();
