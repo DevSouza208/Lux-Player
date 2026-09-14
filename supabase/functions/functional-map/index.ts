@@ -2,26 +2,30 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 // ============================================================
 // [LUX-BACKEND-016] MAPA FUNCIONAL — BACKEND ADMIN
-// [LUX-ARCH-023] CSV SEPARADO POR BRANCH
+// [LUX-ARCH-023] MAIN / DEVELOP NO MESMO DASHBOARD
+// [LUX-BACKEND-017] MAPA NORMALIZADO — 1 FUNCIONALIDADE = 1 LINHA
 // ============================================================
-// Entrega ao Painel Admin o CSV de MAIN ou DEVELOP.
+// Fonte de verdade atual: public.functional_map_items.
+//
+// Fluxo:
+// - PUT recebe CSV, faz parse no servidor e substitui atomicamente as linhas
+//   daquela branch por meio da RPC replace_functional_map_items();
+// - GET lê as linhas normalizadas e remonta o CSV só para manter o frontend e
+//   o botão "Baixar CSV" compatíveis;
+// - functional_map_csv virou apenas fonte LEGADA de migração. Se a nova tabela
+//   estiver vazia, um GET importa automaticamente o CSV antigo uma única vez.
 //
 // Segurança:
-// - functional_map_csv tem RLS e não concede acesso ao browser;
+// - navegador não acessa functional_map_items diretamente;
 // - service role existe somente nesta Edge Function;
-// - cada leitura/escrita valida usuário/senha e exige cargo=admin;
-// - nenhum dado da tabela usuarios é devolvido além da autorização.
-//
-// Fonte de verdade:
-// - DEVELOP é semeado uma única vez e depois editado diretamente no Supabase;
-// - MAIN também possui sua própria linha. No primeiro acesso, se ela estiver vazia,
-//   é derivada do DEVELOP removendo itens ainda não promovidos e restaurando os
-//   estados de segurança que continuam pendentes em produção.
+// - cada ação revalida usuário/senha e exige cargo=admin;
+// - RLS de usuarios permanece DESLIGADO nesta etapa, conforme decisão atual.
 // ============================================================
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const json = (data: unknown, status = 200) =>
@@ -31,23 +35,32 @@ const clean = (value: unknown, max = 300) => String(value ?? '').trim().slice(0,
 type Branch = 'main' | 'develop';
 type CsvRow = Record<string, string>;
 
+type MapItem = {
+  id: string;
+  area: string;
+  funcionalidade: string;
+  status: string;
+  tag: string;
+  o_que_faz: string;
+  opiniao: string;
+  sugestoes_melhoria: string;
+  arquivos_modulos: string;
+  funcoes_simbolos: string;
+  dependencias_fluxo: string;
+  position: number;
+};
+
+const CSV_HEADERS = [
+  'Área', 'Funcionalidade', 'Status', 'Tag', 'O que faz', 'Minha opinião',
+  'Sugestões de melhoria', 'ID', 'Arquivos / módulos', 'Funções / símbolos',
+  'Dependências / fluxo',
+];
+
 async function gunzipBase64(value: string): Promise<string> {
   const raw = atob(value.replace(/\s+/g, ''));
   const bytes = Uint8Array.from(raw, char => char.charCodeAt(0));
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
   return await new Response(stream).text();
-}
-
-async function gzipBase64(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
-  const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
-  let binary = '';
-  const step = 0x8000;
-  for (let i = 0; i < compressed.length; i += step) {
-    binary += String.fromCharCode(...compressed.subarray(i, i + step));
-  }
-  return btoa(binary);
 }
 
 function looksLikeMap(csv: string): boolean {
@@ -61,6 +74,7 @@ function parseCsv(text: string): { headers: string[]; rows: CsvRow[] } {
   let row: string[] = [];
   let field = '';
   let quoted = false;
+
   for (let i = 0; i < source.length; i += 1) {
     const char = source[i];
     if (quoted) {
@@ -74,83 +88,120 @@ function parseCsv(text: string): { headers: string[]; rows: CsvRow[] } {
     else if (char === '\n') { row.push(field); matrix.push(row); row = []; field = ''; }
     else if (char !== '\r') field += char;
   }
+
   if (field || row.length) { row.push(field); matrix.push(row); }
-  const headers = (matrix.shift() || []).map(v => String(v || '').trim());
-  const rows = matrix.filter(cells => cells.some(Boolean)).map(cells => {
-    const item: CsvRow = {};
-    headers.forEach((header, index) => { item[header] = String(cells[index] ?? ''); });
-    return item;
-  });
+  const headers = (matrix.shift() || []).map(value => String(value || '').trim());
+  const rows = matrix
+    .filter(cells => cells.some(value => String(value || '').trim()))
+    .map(cells => {
+      const item: CsvRow = {};
+      headers.forEach((header, index) => { item[header] = String(cells[index] ?? ''); });
+      return item;
+    });
   return { headers, rows };
 }
 
-function csvEscape(value: string): string {
+function csvEscape(value: unknown): string {
   const raw = String(value ?? '');
   return /[",\r\n]/.test(raw) ? `"${raw.replaceAll('"', '""')}"` : raw;
 }
 
-function serializeCsv(headers: string[], rows: CsvRow[]): string {
-  const lines = [headers.map(csvEscape).join(',')];
-  rows.forEach(row => lines.push(headers.map(header => csvEscape(row[header] || '')).join(',')));
+function serializeCsv(rows: CsvRow[]): string {
+  const lines = [CSV_HEADERS.map(csvEscape).join(',')];
+  rows.forEach(row => lines.push(CSV_HEADERS.map(header => csvEscape(row[header] || '')).join(',')));
   return `${lines.join('\n')}\n`;
 }
 
-// IDs criados somente no develop após o checkpoint funcional atual da main.
-const DEVELOP_ONLY_IDS = new Set([
-  'LUX-AUTH-005',
-  'LUX-IPTV-033',
-  'LUX-IPTV-034',
-  'LUX-ADMIN-012',
-  'LUX-BACKEND-015',
-  'LUX-AUTH-006',
-  'LUX-ARCH-022',
-  'LUX-ADMIN-013',
-  'LUX-BACKEND-016',
-  'LUX-ARCH-023',
-]);
+function normalizeCsvRows(rows: CsvRow[]): MapItem[] {
+  const seen = new Set<string>();
+  const items: MapItem[] = [];
 
-function deriveMainCsv(developCsv: string): string {
-  const { headers, rows } = parseCsv(developCsv);
-  const mainRows = rows.filter(row => !DEVELOP_ONLY_IDS.has(row.ID));
+  rows.forEach((row, index) => {
+    const id = clean(row.ID, 120);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    items.push({
+      id,
+      area: String(row['Área'] || ''),
+      funcionalidade: String(row['Funcionalidade'] || ''),
+      status: String(row['Status'] || ''),
+      tag: String(row['Tag'] || ''),
+      o_que_faz: String(row['O que faz'] || ''),
+      opiniao: String(row['Minha opinião'] || ''),
+      sugestoes_melhoria: String(row['Sugestões de melhoria'] || ''),
+      arquivos_modulos: String(row['Arquivos / módulos'] || ''),
+      funcoes_simbolos: String(row['Funções / símbolos'] || ''),
+      dependencias_fluxo: String(row['Dependências / fluxo'] || ''),
+      position: index + 1,
+    });
+  });
 
-  // [LUX-AUTH-001] Em produção o login antigo continua sendo dívida até a promoção.
-  const login = mainRows.find(row => row.ID === 'LUX-AUTH-001');
-  if (login) {
-    login.Status = '✅ Funcional / ⚠️ risco';
-    login.Tag = 'PRIORIDADE';
-    login['O que faz'] = 'Autentica a conta principal do Lux Play usando usuário e senha e carrega os dados vinculados à conta.';
-    login['Minha opinião'] = 'Funciona no produto atual, mas é o maior débito de segurança do projeto porque o fluxo legado depende demais do frontend.';
-    login['Sugestões de melhoria'] = 'Migrar para autenticação server-side/sessão revogável, sem entregar a tabela inteira de usuários ao navegador.';
-    login['Arquivos / módulos'] = 'js/script.js · supabase/functions/profiles/index.ts';
-    login['Funções / símbolos'] = 'handleLogin() · fetchUsersFromSupabase() · parseSupabaseUsers()';
-    login['Dependências / fluxo'] = 'Supabase tabela usuarios → autenticação → perfis → startApp';
-  }
-
-  // [LUX-ARCH-001] O risco ainda existe na MAIN até o login backend ser promovido.
-  const security = mainRows.find(row => row.ID === 'LUX-ARCH-001');
-  if (security) {
-    security.Status = '🚨 Risco confirmado';
-    security.Tag = 'PRIORIDADE';
-    security['O que faz'] = 'O fluxo legado depende da leitura de dados de usuários no cliente antes da autenticação.';
-    security['Minha opinião'] = 'É o maior risco técnico do sistema atual.';
-    security['Sugestões de melhoria'] = 'Migrar autenticação para função/server e restringir RLS da tabela usuarios.';
-    security['Arquivos / módulos'] = 'js/script.js · js/runtime-stability-fix.js · js/synced-catalog.js · electron/main.js · supabase/functions/*';
-    security['Funções / símbolos'] = 'fluxo transversal; consultar arquivos indicados e Mapa de Código';
-    security['Dependências / fluxo'] = 'Transversal: autenticação + DOM + credenciais + módulos globais + deploy';
-  }
-
-  return serializeCsv(headers, mainRows);
+  return items;
 }
 
-async function decodeRecord(record: any): Promise<string> {
-  if (!record?.csv_text) return '';
-  const csv = record.encoding === 'gzip-base64'
-    ? await gunzipBase64(record.csv_text)
-    : String(record.csv_text || '');
-  return looksLikeMap(csv) ? csv : '';
+function dbRowsToCsvRows(rows: any[]): CsvRow[] {
+  return rows.map(row => ({
+    'Área': String(row.area || ''),
+    'Funcionalidade': String(row.funcionalidade || ''),
+    'Status': String(row.status || ''),
+    'Tag': String(row.tag || ''),
+    'O que faz': String(row.o_que_faz || ''),
+    'Minha opinião': String(row.opiniao || ''),
+    'Sugestões de melhoria': String(row.sugestoes_melhoria || ''),
+    'ID': String(row.id || ''),
+    'Arquivos / módulos': String(row.arquivos_modulos || ''),
+    'Funções / símbolos': String(row.funcoes_simbolos || ''),
+    'Dependências / fluxo': String(row.dependencias_fluxo || ''),
+  }));
 }
 
-Deno.serve(async (request) => {
+async function replaceBranch(admin: any, branch: Branch, rows: CsvRow[], updatedBy: string) {
+  const items = normalizeCsvRows(rows);
+  if (!items.length) throw new Error('CSV sem funcionalidades válidas.');
+  const { data, error } = await admin.rpc('replace_functional_map_items', {
+    p_branch: branch,
+    p_rows: items,
+    p_updated_by: updatedBy,
+  });
+  if (error) throw error;
+  return Number(data || items.length);
+}
+
+async function loadLegacyCsv(admin: any, branch: Branch): Promise<string> {
+  const { data: record, error } = await admin
+    .from('functional_map_csv')
+    .select('csv_text,encoding')
+    .eq('branch', branch)
+    .maybeSingle();
+  if (error || !record?.csv_text) return '';
+  try {
+    const csv = record.encoding === 'gzip-base64'
+      ? await gunzipBase64(record.csv_text)
+      : String(record.csv_text || '');
+    return looksLikeMap(csv) ? csv : '';
+  } catch (error) {
+    console.warn('[functional-map] Falha ao ler CSV legado:', branch, error);
+    return '';
+  }
+}
+
+async function ensureMigrated(admin: any, branch: Branch, username: string) {
+  const { count, error: countError } = await admin
+    .from('functional_map_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('branch', branch);
+  if (countError) throw countError;
+  if ((count || 0) > 0) return false;
+
+  const legacyCsv = await loadLegacyCsv(admin, branch);
+  if (!legacyCsv) return false;
+  const parsed = parseCsv(legacyCsv);
+  await replaceBranch(admin, branch, parsed.rows, `${username}:legacy-migration`);
+  console.info(`[functional-map] ${branch} migrado do CSV legado para linhas normalizadas.`);
+  return true;
+}
+
+Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ ok: false, error: 'Método não permitido.' }, 405);
 
@@ -178,69 +229,46 @@ Deno.serve(async (request) => {
       .ilike('usuario', username)
       .eq('senha', password)
       .maybeSingle();
-
     if (authError) throw authError;
     if (!account || String(account.cargo || '').trim().toLowerCase() !== 'admin') {
       return json({ ok: false, error: 'Acesso restrito ao administrador.' }, 403);
     }
 
-    // [LUX-BACKEND-016] Importação administrativa de CSV. É útil para a migração
-    // inicial do Excel e também funciona como recuperação manual do mapa. O arquivo
-    // é validado antes de substituir a branch escolhida.
     if (action === 'put') {
       const incomingCsv = String(body?.csv || '');
       if (!looksLikeMap(incomingCsv)) {
         return json({ ok: false, error: 'CSV inválido: cabeçalho do mapa funcional não encontrado.' }, 400);
       }
-      const encoded = await gzipBase64(incomingCsv);
+      const parsed = parseCsv(incomingCsv);
+      const imported = await replaceBranch(admin, branch, parsed.rows, username);
       const now = new Date().toISOString();
-      const { error: saveError } = await admin.from('functional_map_csv').upsert({
-        branch,
-        csv_text: encoded,
-        encoding: 'gzip-base64',
-        updated_at: now,
-        updated_by: username,
-      }, { onConflict: 'branch' });
-      if (saveError) throw saveError;
-      return json({ ok: true, branch, updatedAt: now });
+      return json({ ok: true, branch, imported, updatedAt: now, storage: 'functional_map_items' });
     }
 
-    const { data: record, error: mapError } = await admin
-      .from('functional_map_csv')
-      .select('branch,csv_text,encoding,updated_at')
+    await ensureMigrated(admin, branch, username);
+
+    const { data: rows, error: mapError } = await admin
+      .from('functional_map_items')
+      .select('id,area,funcionalidade,status,tag,o_que_faz,opiniao,sugestoes_melhoria,arquivos_modulos,funcoes_simbolos,dependencias_fluxo,position,updated_at')
       .eq('branch', branch)
-      .maybeSingle();
+      .order('position', { ascending: true });
     if (mapError) throw mapError;
+    if (!rows?.length) return json({ ok: false, error: `Mapa ${branch.toUpperCase()} ainda não foi inicializado.` }, 503);
 
-    let csv = await decodeRecord(record);
-    let updatedAt = record?.updated_at || null;
+    const csv = serializeCsv(dbRowsToCsvRows(rows));
+    const updatedAt = rows.reduce((latest: string, row: any) => {
+      const value = String(row.updated_at || '');
+      return value > latest ? value : latest;
+    }, '');
 
-    // MAIN nasce de um snapshot do DEVELOP somente se ainda não existir no banco.
-    // Depois de criado, cada branch passa a evoluir independentemente.
-    if (!csv && branch === 'main') {
-      const { data: developRecord, error: developError } = await admin
-        .from('functional_map_csv')
-        .select('csv_text,encoding,updated_at')
-        .eq('branch', 'develop')
-        .maybeSingle();
-      if (developError) throw developError;
-      const developCsv = await decodeRecord(developRecord);
-      if (!developCsv) return json({ ok: false, error: 'Mapa DEVELOP ainda não foi inicializado.' }, 503);
-
-      csv = deriveMainCsv(developCsv);
-      const encoded = await gzipBase64(csv);
-      const now = new Date().toISOString();
-      const { error: saveError } = await admin.from('functional_map_csv').upsert({
-        branch: 'main', csv_text: encoded, encoding: 'gzip-base64', updated_at: now,
-        updated_by: 'functional-map-derived-main',
-      }, { onConflict: 'branch' });
-      if (saveError) throw saveError;
-      updatedAt = now;
-    }
-
-    if (!csv) return json({ ok: false, error: `Mapa ${branch.toUpperCase()} ainda não foi inicializado.` }, 503);
-
-    return json({ ok: true, branch, csv, updatedAt: updatedAt || new Date().toISOString() });
+    return json({
+      ok: true,
+      branch,
+      csv,
+      count: rows.length,
+      updatedAt: updatedAt || new Date().toISOString(),
+      storage: 'functional_map_items',
+    });
   } catch (error) {
     console.error('[functional-map]', error);
     return json({ ok: false, error: 'Não foi possível carregar o mapa funcional.' }, 500);
