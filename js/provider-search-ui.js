@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-provider-search-1';
+  const VERSION = '20260914-provider-search-2';
   if (window.__luxProviderSearchUiInstalled === VERSION) return;
   window.__luxProviderSearchUiInstalled = VERSION;
 
@@ -39,6 +39,9 @@
     const poster = item?.poster
       ? `<img src="${escapeHtml(item.poster)}" alt="" loading="lazy" class="h-20 w-14 shrink-0 rounded-lg object-cover bg-[#180f29]" onerror="this.style.display='none'">`
       : '<div class="h-20 w-14 shrink-0 rounded-lg bg-[#180f29] flex items-center justify-center text-[10px] text-sky-300/50">sem capa</div>';
+    const variant = item?.variant === 'dub'
+      ? '<span class="rounded-full border border-amber-800/40 bg-amber-950/30 px-2 py-0.5 text-[9px] font-bold text-amber-300">DUBLADO</span>'
+      : '';
     return `
       <article class="flex gap-3 rounded-xl border border-sky-900/40 bg-[#0d0817] p-2.5" data-provider-result>
         ${poster}
@@ -47,6 +50,7 @@
             <strong class="text-xs text-white">${escapeHtml(item?.title || 'Sem título')}</strong>
             <span class="rounded-full border border-sky-800/50 bg-sky-950/40 px-2 py-0.5 text-[9px] font-bold text-sky-300">${escapeHtml(item?.providerName || item?.provider || 'Provider')}</span>
             <span class="rounded-full border border-emerald-800/40 bg-emerald-950/30 px-2 py-0.5 text-[9px] font-bold text-emerald-300">PT-BR</span>
+            ${variant}
           </div>
           <p class="mt-1 break-all text-[10px] text-purple-400/80">${escapeHtml(item?.url || '')}</p>
           <div class="mt-2 flex flex-wrap gap-2">
@@ -75,6 +79,17 @@
     status.textContent = `${lastResults.length} resultado(s) encontrado(s)${failedText}`;
   }
 
+  async function syncResultsToCatalog(results) {
+    if (!Array.isArray(results) || !results.length) return null;
+    let attempts = 0;
+    while (!window.LuxProviderCatalog?.mergeSearchResults && attempts < 40) {
+      attempts += 1;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (!window.LuxProviderCatalog?.mergeSearchResults) return null;
+    return window.LuxProviderCatalog.mergeSearchResults(results);
+  }
+
   async function handleSearch(event) {
     event?.preventDefault?.();
     const input = document.getElementById('luxProviderSearchInput');
@@ -95,6 +110,18 @@
     try {
       const data = await searchProviders(query, String(select?.value || 'all'));
       renderResults(data);
+      if (Array.isArray(data?.results) && data.results.length) {
+        const baseText = status?.textContent || '';
+        try {
+          const merged = await syncResultsToCatalog(data.results);
+          if (status && merged) {
+            status.textContent = `${baseText} · catálogo Lux atualizado: ${Number(merged.added || 0)} novo(s), ${Number(merged.merged || 0)} combinado(s)`;
+          }
+        } catch (mergeError) {
+          console.warn('[LUX-IPTV-041] Busca funcionou, mas a mesclagem no catálogo falhou:', mergeError);
+          if (status) status.textContent = `${baseText} · busca OK; catálogo será atualizado em segundo plano`;
+        }
+      }
     } catch (error) {
       if (status) status.textContent = error?.message || 'Falha ao pesquisar providers.';
       if (root) root.innerHTML = `<p class="rounded-xl border border-rose-900/40 bg-rose-950/10 p-3 text-xs text-rose-300">${escapeHtml(error?.message || 'Falha ao pesquisar providers.')}</p>`;
@@ -115,7 +142,7 @@
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h5 class="text-xs font-bold uppercase text-sky-300">Buscar conteúdo nos providers</h5>
-          <p class="mt-1 text-[10px] text-sky-200/60">Busca real, neste primeiro teste, em Anime Fire e Dattebayo BR. Ela retorna catálogo e fonte; episódios/reprodução entram na próxima etapa do bridge.</p>
+          <p class="mt-1 text-[10px] text-sky-200/60">Anime Fire e Dattebayo BR. Os resultados também são mesclados ao catálogo do Lux; obras ausentes viram cards novos e versões da mesma obra ficam como fonte alternativa.</p>
         </div>
       </div>
       <form id="luxProviderSearchForm" class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
@@ -124,7 +151,7 @@
           <option value="animefire">Anime Fire</option>
           <option value="dattebayobr">Dattebayo BR</option>
         </select>
-        <input id="luxProviderSearchInput" type="search" autocomplete="off" placeholder="Ex.: Naruto, Bleach, One Piece..." class="rounded-xl border border-sky-900/50 bg-[#120c1f] px-3 py-2 text-xs text-white placeholder:text-sky-200/30">
+        <input id="luxProviderSearchInput" type="search" autocomplete="off" placeholder="Ex.: Naruto, Bleach, Sword Art Online..." class="rounded-xl border border-sky-900/50 bg-[#120c1f] px-3 py-2 text-xs text-white placeholder:text-sky-200/30">
         <button id="luxProviderSearchButton" type="submit" class="rounded-xl bg-sky-700 px-4 py-2 text-xs font-bold text-white hover:bg-sky-600 disabled:opacity-50">Buscar</button>
       </form>
       <p id="luxProviderSearchStatus" class="mt-2 min-h-[18px] text-[10px] text-sky-300/80">Digite um anime para testar os providers.</p>
