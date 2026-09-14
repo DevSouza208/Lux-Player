@@ -2,7 +2,7 @@
   'use strict';
 
   // ============================================================
-  // [LUX-AUTH-005] BRIDGE DE LOGIN BACKEND
+  // [LUX-AUTH-006] BRIDGE DE LOGIN BACKEND
   // ============================================================
   // Este arquivo substitui somente a função que antes fazia:
   //   SELECT * FROM usuarios
