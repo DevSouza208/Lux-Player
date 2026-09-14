@@ -2,18 +2,20 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 // ============================================================
 // [LUX-AUTH-006] LOGIN SERVER-SIDE DO LUX PLAYER
+// [LUX-ARCH-001] AUTENTICACAO FORA DO FRONTEND
 // ============================================================
 // Objetivo:
 // - o navegador envia somente usuario + senha para esta Edge Function;
-// - o backend consulta somente a conta correspondente;
+// - SOMENTE o servidor decide se as credenciais sao validas;
+// - o backend consulta apenas a conta correspondente;
 // - a tabela completa `usuarios` nunca volta para o frontend;
-// - a senha armazenada no banco nunca volta na resposta.
+// - a senha armazenada no banco nunca volta na resposta;
+// - a validade da conta tambem e conferida no servidor.
 //
 // FASE ATUAL:
-// - RLS de `usuarios` continua DESLIGADO por enquanto, porque o painel Admin
-//   legado ainda acessa a tabela diretamente;
-// - esta funcao corrige primeiro o caminho de LOGIN;
-// - depois migraremos o Admin e so entao ativaremos RLS.
+// - RLS de `usuarios` continua DESLIGADO de proposito nesta etapa;
+// - o painel Admin legado ainda possui acessos diretos que serao migrados depois;
+// - NAO ativar RLS antes dessa migracao, para nao quebrar o Admin atual.
 // ============================================================
 
 const corsHeaders = {
@@ -31,6 +33,27 @@ function json(data: unknown, status = 200) {
 
 function clean(value: unknown, max: number) {
   return String(value ?? '').trim().slice(0, max);
+}
+
+// Converte os dois formatos que ja existem/foram usados no projeto para YYYY-MM-DD.
+// Comparamos apenas datas, mantendo a conta valida durante TODO o dia do vencimento.
+function normalizeDueDate(value: unknown): string {
+  const raw = clean(value, 30);
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return br ? `${br[3]}-${br[2]}-${br[1]}` : '';
+}
+
+function todayInSaoPaulo(): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find(part => part.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
 Deno.serve(async (request: Request) => {
@@ -57,9 +80,8 @@ Deno.serve(async (request: Request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Usamos select('*') SOMENTE NO SERVIDOR para evitar problemas de parsing com
-    // nomes de coluna legados como `senha18+`. O navegador ainda recebe somente
-    // UMA conta e a senha e removida antes de montar a resposta.
+    // O SELECT * existe SOMENTE no servidor para suportar colunas legadas como
+    // `senha18+`. A consulta ja filtra por UMA conta e pela senha antes de retornar.
     const { data: account, error } = await admin
       .from('usuarios')
       .select('*')
@@ -74,10 +96,17 @@ Deno.serve(async (request: Request) => {
 
     if (!account) return json({ ok: false, reason: 'invalid_credentials' });
 
-    // Nunca devolver senha do banco. A senha digitada ja existe no browser nesta
-    // fase de compatibilidade e sera eliminada quando migrarmos para sessao/token.
+    // A validade faz parte da autorizacao. O browser nao decide mais se uma conta
+    // vencida pode entrar; ele apenas apresenta o motivo retornado pelo servidor.
+    const dueDate = normalizeDueDate((account as Record<string, unknown>).vencimento);
+    if (dueDate && dueDate < todayInSaoPaulo()) {
+      return json({ ok: false, reason: 'expired', dueDate: (account as Record<string, unknown>).vencimento || dueDate });
+    }
+
+    // Nunca devolver a senha do banco. Outros dados da propria conta continuam
+    // sendo enviados porque o app ainda precisa deles para catalogo/perfis.
     const { senha: _senha, ...safeAccount } = account as Record<string, unknown>;
-    return json({ ok: true, account: safeAccount });
+    return json({ ok: true, account: safeAccount, authenticatedBy: 'server' });
   } catch (error) {
     console.error('[LUX-AUTH-006] Erro inesperado:', error);
     return json({ ok: false, error: 'backend_unavailable' }, 500);
