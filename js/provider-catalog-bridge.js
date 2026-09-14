@@ -1,11 +1,12 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-provider-catalog-2';
+  const VERSION = '20260914-provider-catalog-3';
   if (window.__luxProviderCatalogBridgeInstalled === VERSION) return;
   window.__luxProviderCatalogBridgeInstalled = VERSION;
 
   const FUNCTION_NAME = 'provider-search';
+  const STREAM_FUNCTION = 'provider-stream';
   const SERIES_GROUP = 'Séries | Animes ⚡ PLUS';
   const MOVIE_GROUP = 'Filmes | Anime ⚡ PLUS';
   const providerDefs = [
@@ -15,6 +16,7 @@
   const extraResults = new Map();
   const catalogCache = new Map();
   const episodeCache = new Map();
+  const streamCache = new Map();
   let registered = false;
 
   const safeCurrentUser = () => {
@@ -38,6 +40,18 @@
       body: authBody({ action, ...payload })
     });
     if (error) throw new Error(data?.error || error.message || 'Falha ao consultar provider.');
+    if (data?.error) throw new Error(data.error);
+    return data || {};
+  }
+
+  async function invokeStream(payload = {}) {
+    if (typeof supabaseClient === 'undefined' || !supabaseClient?.functions?.invoke) {
+      throw new Error('Serviço de reprodução dos providers indisponível.');
+    }
+    const { data, error } = await supabaseClient.functions.invoke(STREAM_FUNCTION, {
+      body: authBody(payload)
+    });
+    if (error) throw new Error(data?.error || error.message || 'Falha ao resolver o vídeo do provider.');
     if (data?.error) throw new Error(data.error);
     return data || {};
   }
@@ -126,6 +140,26 @@
     });
     episodeCache.set(key, promise);
     return promise;
+  }
+
+  async function resolveProviderStream(provider, pageUrl) {
+    const key = `${provider}|${pageUrl}`;
+    const cached = streamCache.get(key);
+    if (cached && cached.expiresAt > Date.now() && /^https?:\/\//i.test(String(cached.url || ''))) {
+      return cached;
+    }
+
+    const data = await invokeStream({ provider, url: pageUrl });
+    const streamUrl = String(data?.streamUrl || '');
+    if (!/^https?:\/\//i.test(streamUrl)) throw new Error('O provider não devolveu um vídeo reproduzível.');
+    const result = {
+      url: streamUrl,
+      quality: String(data?.quality || 'AUTO'),
+      alternatives: Array.isArray(data?.alternatives) ? data.alternatives : [],
+      expiresAt: Date.now() + (5 * 60 * 1000)
+    };
+    streamCache.set(key, result);
+    return result;
   }
 
   function providerSlugFromSource(source) {
@@ -256,11 +290,30 @@
 
     const originalPlayer = window.openVodPlayer;
     if (typeof originalPlayer === 'function' && !originalPlayer.__luxProviderEpisodeWrapped) {
-      const wrappedPlayer = function(item) {
+      const wrappedPlayer = async function(item) {
         if (item?.luxProviderEpisode) {
-          const url = String(item.providerPageUrl || item.url || '');
-          if (/^https?:\/\//i.test(url)) {
-            window.open(url, '_blank', 'noopener,noreferrer');
+          const pageUrl = String(item.providerPageUrl || item.url || '');
+          const provider = String(item.providerSlug || '');
+          if (/^https?:\/\//i.test(pageUrl) && provider === 'dattebayobr') {
+            try {
+              const resolved = await resolveProviderStream(provider, pageUrl);
+              return await originalPlayer.call(this, {
+                ...item,
+                url: resolved.url,
+                providerPageUrl: pageUrl,
+                providerStreamQuality: resolved.quality,
+                providerStreamAlternatives: resolved.alternatives,
+                luxProviderEpisode: false,
+                luxProviderResolvedStream: true
+              });
+            } catch (error) {
+              console.warn('[LUX-IPTV-042] Falha ao resolver stream direto do provider:', error);
+              alert(error?.message || 'Não foi possível obter o vídeo deste episódio.');
+              return;
+            }
+          }
+          if (/^https?:\/\//i.test(pageUrl)) {
+            window.open(pageUrl, '_blank', 'noopener,noreferrer');
             return;
           }
         }
@@ -324,7 +377,8 @@
     mergeSearchResults,
     syncCatalogNow,
     fetchEpisodes: fetchProviderEpisodes,
-    clearCache: () => { catalogCache.clear(); episodeCache.clear(); }
+    resolveStream: resolveProviderStream,
+    clearCache: () => { catalogCache.clear(); episodeCache.clear(); streamCache.clear(); }
   };
 
   let attempts = 0;
