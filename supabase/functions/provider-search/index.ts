@@ -49,6 +49,13 @@ function detectVariant(title: string, url = '') {
   return 'default';
 }
 
+function detectMediaType(title: string, url = '') {
+  const text = `${title} ${url}`;
+  if (/\/(?:filmes?|movies?)\//i.test(url)) return 'movies';
+  if (/\b(?:filme|movie|gekijouban|the movie|longa[- ]metragem)\b/i.test(text)) return 'movies';
+  return 'series';
+}
+
 async function fetchHtml(url: string, referer: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
@@ -94,7 +101,7 @@ function parseDattebayoCards(html: string) {
     const poster = absoluteUrl(base, img.attr('data-src') || img.attr('src') || '');
     if (!title || !href) return;
     results.push({
-      provider: 'dattebayobr', providerName: 'Dattebayo BR', lang: 'pt-BR', type: 'series',
+      provider: 'dattebayobr', providerName: 'Dattebayo BR', lang: 'pt-BR', type: detectMediaType(title, href),
       title, url: href, poster, variant: detectVariant(title, href)
     });
   });
@@ -120,15 +127,17 @@ function parseAnimeFireCards(html: string) {
   const base = 'https://animefire.io';
   const $ = load(html);
   const results: any[] = [];
-  $('article.cardUltimosEps > a').each((_, element) => {
+  $('article.cardUltimosEps > a, article.cardUltimosEps a[href]').each((_, element) => {
     const anchor = $(element);
-    const title = cleanText(anchor.find('h3.animeTitle').first().text(), 300);
-    const href = animeFireSeriesUrl(absoluteUrl(base, anchor.attr('href') || ''));
+    const title = cleanText(anchor.find('h3.animeTitle').first().text() || anchor.attr('title') || '', 300);
+    const rawHref = absoluteUrl(base, anchor.attr('href') || '');
+    const mediaType = detectMediaType(title, rawHref);
+    const href = mediaType === 'series' ? animeFireSeriesUrl(rawHref) : rawHref;
     const img = anchor.find('img').first();
     const poster = absoluteUrl(base, img.attr('data-src') || img.attr('src') || '');
     if (!title || !href) return;
     results.push({
-      provider: 'animefire', providerName: 'Anime Fire', lang: 'pt-BR', type: 'series',
+      provider: 'animefire', providerName: 'Anime Fire', lang: 'pt-BR', type: mediaType,
       title, url: href, poster, variant: detectVariant(title, href)
     });
   });
@@ -150,19 +159,53 @@ async function searchAnimeFire(query: string, page: number) {
 
 async function catalogDattebayo() {
   const base = 'https://www.dattebayo-br.com';
-  const html = await fetchHtml(base, base);
-  return parseDattebayoCards(html).slice(0, 80);
+  const pages = [base, `${base}/animes`, `${base}/anime-dublado`];
+  const settled = await Promise.allSettled(pages.map(url => fetchHtml(url, base)));
+  const items: any[] = [];
+  settled.forEach(row => { if (row.status === 'fulfilled') items.push(...parseDattebayoCards(row.value)); });
+  return dedupe(items).slice(0, 300);
+}
+
+function findAnimeFireLastPage(html: string, kind: string) {
+  const $ = load(html);
+  let max = 1;
+  const re = new RegExp(`/lista-de-animes-${kind}/(\\d+)`, 'i');
+  $('a[href]').each((_, element) => {
+    const href = String($(element).attr('href') || '');
+    const match = href.match(re);
+    if (match) max = Math.max(max, Number(match[1]) || 1);
+  });
+  return Math.min(max, 24);
+}
+
+async function collectAnimeFireList(kind: 'legendados' | 'dublados') {
+  const base = 'https://animefire.io';
+  const firstUrl = `${base}/lista-de-animes-${kind}/1`;
+  const first = await fetchHtml(firstUrl, base);
+  const lastPage = findAnimeFireLastPage(first, kind);
+  const items = [...parseAnimeFireCards(first)];
+  const remaining = Array.from({ length: Math.max(0, lastPage - 1) }, (_, index) => index + 2);
+  for (let offset = 0; offset < remaining.length; offset += 6) {
+    const batch = remaining.slice(offset, offset + 6);
+    const settled = await Promise.allSettled(batch.map(page => fetchHtml(`${base}/lista-de-animes-${kind}/${page}`, base)));
+    settled.forEach(row => { if (row.status === 'fulfilled') items.push(...parseAnimeFireCards(row.value)); });
+  }
+  return items;
 }
 
 async function catalogAnimeFire() {
-  const base = 'https://animefire.io';
-  const pages = [1, 2, 3];
-  const settled = await Promise.allSettled(pages.map(page => fetchHtml(`${base}/top-animes/${page}`, base)));
+  const settled = await Promise.allSettled([
+    collectAnimeFireList('legendados'),
+    collectAnimeFireList('dublados')
+  ]);
   const items: any[] = [];
-  settled.forEach(row => {
-    if (row.status === 'fulfilled') items.push(...parseAnimeFireCards(row.value));
-  });
-  return items.slice(0, 120);
+  settled.forEach(row => { if (row.status === 'fulfilled') items.push(...row.value); });
+  if (!items.length) {
+    const base = 'https://animefire.io';
+    const fallback = await Promise.allSettled([1, 2, 3].map(page => fetchHtml(`${base}/top-animes/${page}`, base)));
+    fallback.forEach(row => { if (row.status === 'fulfilled') items.push(...parseAnimeFireCards(row.value)); });
+  }
+  return dedupe(items).slice(0, 1800);
 }
 
 function episodeNumberFromText(value: string, fallback: number) {
@@ -177,7 +220,7 @@ async function episodesDattebayo(rawUrl: string) {
   const items: any[] = [];
   const seen = new Set<string>();
 
-  for (let page = 1; page <= 8 && items.length < 300; page++) {
+  for (let page = 1; page <= 12 && items.length < 500; page++) {
     const pageUrl = page === 1 ? seriesUrl : `${seriesUrl}/page/${page}`;
     const html = await fetchHtml(pageUrl, base);
     const $ = load(html);
@@ -193,7 +236,7 @@ async function episodesDattebayo(rawUrl: string) {
       const title = cleanText(root.find('.ultimosEpisodiosHomeItemInfosNome').first().text(), 300) || `Episódio ${rawNumber || items.length + 1}`;
       const episode = episodeNumberFromText(rawNumber || title, items.length + index + 1);
       seen.add(href);
-      items.push({ id: `dattebayobr:${encodeURIComponent(href)}`, episode, episode_num: episode, title, pageUrl: href, provider: 'dattebayobr', providerName: 'Dattebayo BR' });
+      items.push({ id: `dattebayobr:${encodeURIComponent(href)}`, episode, episodeNum: episode, episode_num: episode, title, pageUrl: href, provider: 'dattebayobr', providerName: 'Dattebayo BR' });
       added++;
     });
     if (!added) break;
@@ -215,7 +258,7 @@ async function episodesAnimeFire(rawUrl: string) {
     const text = cleanText(anchor.text(), 300);
     const lastPath = (() => { try { return new URL(href).pathname.split('/').filter(Boolean).pop() || ''; } catch { return ''; } })();
     const episode = Number(lastPath) || episodeNumberFromText(text, index + 1);
-    items.push({ id: `animefire:${encodeURIComponent(href)}`, episode, episode_num: episode, title: text || `Episódio ${episode}`, pageUrl: href, provider: 'animefire', providerName: 'Anime Fire' });
+    items.push({ id: `animefire:${encodeURIComponent(href)}`, episode, episodeNum: episode, episode_num: episode, title: text || `Episódio ${episode}`, pageUrl: href, provider: 'animefire', providerName: 'Anime Fire' });
   });
   return items.sort((a, b) => Number(a.episode || 0) - Number(b.episode || 0));
 }
