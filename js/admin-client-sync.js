@@ -181,3 +181,13 @@
   script.setAttribute('data-lux-secondary-locale-filter', '1');
   document.head.appendChild(script);
 })();
+
+// [LUX-IPTV-037] Segura conteúdo sem idioma confiável até aprovação do admin.
+(() => {
+  if (document.querySelector('script[data-lux-secondary-locale-approval]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/secondary-locale-approval.js?v=20260914-secondary-locale-approval1';
+  script.async = true;
+  script.setAttribute('data-lux-secondary-locale-approval', '1');
+  document.head.appendChild(script);
+})();
