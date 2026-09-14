@@ -1,11 +1,13 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-provider-catalog-1';
+  const VERSION = '20260914-provider-catalog-2';
   if (window.__luxProviderCatalogBridgeInstalled === VERSION) return;
   window.__luxProviderCatalogBridgeInstalled = VERSION;
 
   const FUNCTION_NAME = 'provider-search';
+  const SERIES_GROUP = 'Séries | Animes ⚡ PLUS';
+  const MOVIE_GROUP = 'Filmes | Anime ⚡ PLUS';
   const providerDefs = [
     { id: 'provider:animefire', slug: 'animefire', name: 'Anime Fire', priority: 10 },
     { id: 'provider:dattebayobr', slug: 'dattebayobr', name: 'Dattebayo BR', priority: 20 }
@@ -47,15 +49,26 @@
       .trim();
   }
 
+  function inferType(raw) {
+    const explicit = String(raw?.providerMediaType || raw?.mediaType || raw?.type || '').toLowerCase();
+    if (['movies', 'movie', 'filme', 'film'].includes(explicit)) return 'movies';
+    const url = String(raw?.url || raw?.providerUrl || '');
+    const title = String(raw?.title || raw?.name || '');
+    if (/\/(?:filmes?|movies?)\//i.test(url)) return 'movies';
+    if (/\b(?:filme|movie|gekijouban|the movie|longa[- ]metragem)\b/i.test(`${title} ${url}`)) return 'movies';
+    return 'series';
+  }
+
   function toLuxItem(raw, def) {
     const title = String(raw?.title || '').trim();
     const variant = String(raw?.variant || 'default');
-    return {
+    const mediaType = inferType(raw);
+    const item = {
       id: `provider:${def.slug}:${encodeURIComponent(raw?.url || title)}`,
       name: title,
-      seriesName: title,
-      type: 'series',
-      group: variant === 'dub' ? 'Animes · Dublado' : 'Animes · Providers',
+      seriesName: mediaType === 'series' ? title : '',
+      type: mediaType,
+      group: mediaType === 'movies' ? MOVIE_GROUP : SERIES_GROUP,
       logo: String(raw?.poster || ''),
       url: String(raw?.url || ''),
       isAdult: false,
@@ -63,9 +76,12 @@
       providerSlug: def.slug,
       providerName: def.name,
       providerVariant: variant,
+      providerMediaType: mediaType,
       providerBaseTitle: stripDubTitle(title),
       luxProviderCatalog: true
     };
+    try { window.LuxProviderRouting?.routeItem?.(item); } catch (_) {}
+    return item;
   }
 
   async function loadCatalogFor(def) {
@@ -95,8 +111,9 @@
       return (Array.isArray(data?.episodes) ? data.episodes : []).map((episode, index) => ({
         ...episode,
         id: String(episode?.id || `${provider}:${index + 1}`),
-        episode_num: Number(episode?.episode_num ?? episode?.episode ?? index + 1),
-        episode: Number(episode?.episode ?? episode?.episode_num ?? index + 1),
+        episodeNum: Number(episode?.episodeNum ?? episode?.episode_num ?? episode?.episode ?? index + 1),
+        episode_num: Number(episode?.episode_num ?? episode?.episodeNum ?? episode?.episode ?? index + 1),
+        episode: Number(episode?.episode ?? episode?.episode_num ?? episode?.episodeNum ?? index + 1),
         title: `${prefix}${String(episode?.title || `Episódio ${index + 1}`)}`.trim(),
         url: String(episode?.pageUrl || ''),
         providerPageUrl: String(episode?.pageUrl || ''),
@@ -118,6 +135,7 @@
   }
 
   function getProviderRefs(series) {
+    if (String(series?.type || '') !== 'series') return [];
     const refs = [];
     const push = (slug, name, url, variant = 'default') => {
       if (!slug || !/^https?:\/\//i.test(String(url || ''))) return;
@@ -150,7 +168,8 @@
       name: ref.variant === 'dub' && !/dublad/i.test(String(series?.name || ''))
         ? `${series.name} · Dublado`
         : series.name,
-      group: ref.variant === 'dub' ? 'Animes · Dublado' : (series.group || 'Animes · Providers'),
+      type: 'series',
+      group: SERIES_GROUP,
       url: ref.url,
       providerUrl: ref.url,
       providerSlug: ref.slug,
@@ -163,7 +182,8 @@
 
   function installSeriesBridge() {
     const originalOpen = window.openSeriesModal;
-    if (typeof originalOpen !== 'function' || originalOpen.__luxProviderCatalogWrapped) return Boolean(originalOpen?.__luxProviderCatalogWrapped);
+    if (typeof originalOpen !== 'function') return false;
+    if (originalOpen.__luxProviderCatalogWrapped) return true;
 
     const wrappedOpen = async function(series, resumeState = null, autoPlayResume = false) {
       const refs = getProviderRefs(series);
@@ -177,6 +197,7 @@
         }
       }
 
+      // Conteúdo principal sempre abre primeiro com temporadas/episódios originais intactos.
       const result = await originalOpen.call(this, series, resumeState, autoPlayResume);
       if (!refs.length) return result;
 
@@ -251,7 +272,8 @@
   }
 
   function registerAdapters() {
-    if (registered || !window.LuxProviderSources?.registerAdapter) return false;
+    if (registered) return true;
+    if (!window.LuxProviderSources?.registerAdapter) return false;
     providerDefs.forEach(def => {
       try { window.LuxProviderSources.unregisterAdapter?.(def.id); } catch (_) {}
       window.LuxProviderSources.registerAdapter({
@@ -266,6 +288,10 @@
     return true;
   }
 
+  function routeCatalog() {
+    try { window.LuxProviderRouting?.routeAll?.(); } catch (_) {}
+  }
+
   async function mergeSearchResults(items) {
     const list = Array.isArray(items) ? items : [];
     list.forEach(item => {
@@ -276,16 +302,21 @@
       if (key && !bucket.some(existing => String(existing?.url || '') === key)) bucket.push(item);
       extraResults.set(slug, bucket);
     });
-    if (registerAdapters() && window.LuxProviderSources?.mergeIntoCurrentCatalog) {
-      return window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true });
+
+    if (!registerAdapters() || !window.LuxProviderSources?.mergeIntoCurrentCatalog) {
+      return { added: 0, merged: 0, adapters: 0, skipped: true };
     }
-    return { added: 0, merged: 0, adapters: 0, skipped: true };
+    const result = await window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true });
+    routeCatalog();
+    return result;
   }
 
   async function syncCatalogNow() {
     if (!registerAdapters() || !window.LuxProviderSources?.mergeIntoCurrentCatalog) return { skipped: true };
     catalogCache.clear();
-    return window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true });
+    const result = await window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true });
+    routeCatalog();
+    return result;
   }
 
   window.LuxProviderCatalog = {
@@ -308,9 +339,10 @@
 
   setTimeout(() => {
     try {
-      registerAdapters();
-      if (typeof allMediaItems !== 'undefined' && Array.isArray(allMediaItems) && allMediaItems.length && window.LuxProviderSources?.mergeIntoCurrentCatalog) {
-        window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true }).catch(error => console.warn('[LUX-IPTV-041] Catálogo inicial dos providers falhou:', error));
+      if (registerAdapters() && typeof allMediaItems !== 'undefined' && Array.isArray(allMediaItems) && allMediaItems.length && window.LuxProviderSources?.mergeIntoCurrentCatalog) {
+        window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true })
+          .then(() => routeCatalog())
+          .catch(error => console.warn('[LUX-IPTV-041] Catálogo inicial dos providers falhou:', error));
       }
     } catch (_) {}
   }, 2200);
