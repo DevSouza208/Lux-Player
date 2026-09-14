@@ -4,96 +4,82 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 // [LUX-AUTH-006] LOGIN SERVER-SIDE DO LUX PLAYER
 // ============================================================
 // Objetivo:
-// - impedir que o navegador baixe a tabela inteira `usuarios` para validar login;
-// - consultar somente a conta informada pelo usuário;
-// - nunca devolver a senha armazenada no banco;
-// - manter compatibilidade com o fluxo atual de perfis e catálogo.
+// - o navegador envia somente usuario + senha para esta Edge Function;
+// - o backend consulta somente a conta correspondente;
+// - a tabela completa `usuarios` nunca volta para o frontend;
+// - a senha armazenada no banco nunca volta na resposta.
 //
-// IMPORTANTE:
-// Esta é a primeira etapa da correção de autenticação. O painel Admin ainda acessa
-// `usuarios` diretamente no frontend, portanto RLS NÃO deve ser ativado ainda.
-// Quando o Admin também migrar para Edge Functions, o acesso direto à tabela pode
-// ser bloqueado com segurança.
+// FASE ATUAL:
+// - RLS de `usuarios` continua DESLIGADO por enquanto, porque o painel Admin
+//   legado ainda acessa a tabela diretamente;
+// - esta funcao corrige primeiro o caminho de LOGIN;
+// - depois migraremos o Admin e so entao ativaremos RLS.
 // ============================================================
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const json = (data: unknown, status = 200) =>
-  Response.json(data, {
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json; charset=utf-8' },
   });
+}
 
-const text = (value: unknown, max = 180) => String(value ?? '').trim().slice(0, max);
+function clean(value: unknown, max: number) {
+  return String(value ?? '').trim().slice(0, max);
+}
 
-Deno.serve(async (request) => {
+Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  if (request.method !== 'POST') return json({ ok: false, error: 'Método não permitido.' }, 405);
+  if (request.method !== 'POST') return json({ ok: false, error: 'method_not_allowed' }, 405);
 
   try {
     const body = await request.json().catch(() => ({}));
-    const username = text(body?.username, 120);
-    const password = text(body?.password, 300);
+    const username = clean(body?.username, 120);
+    const password = clean(body?.password, 300);
 
-    // Resposta deliberadamente genérica: não informa se foi usuário ou senha que
-    // falhou e evita facilitar enumeração de contas.
     if (!username || !password) {
       return json({ ok: false, reason: 'invalid_credentials' });
     }
 
-    const url = Deno.env.get('SUPABASE_URL');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!url || !serviceRoleKey) throw new Error('Configuração do backend indisponível.');
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error('[LUX-AUTH-006] Supabase env ausente.');
+      return json({ ok: false, error: 'backend_unavailable' }, 500);
+    }
 
-    // A service role fica somente no servidor. Ela nunca é enviada ao navegador.
-    const admin = createClient(url, serviceRoleKey, {
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // [LUX-AUTH-006]
-    // A consulta filtra a própria credencial no PostgreSQL. Diferente do fluxo
-    // antigo, nenhuma lista de clientes é entregue ao browser para comparação.
+    // Usamos select('*') SOMENTE NO SERVIDOR para evitar problemas de parsing com
+    // nomes de coluna legados como `senha18+`. O navegador ainda recebe somente
+    // UMA conta e a senha e removida antes de montar a resposta.
     const { data: account, error } = await admin
       .from('usuarios')
-      .select([
-        'nome',
-        'usuario',
-        'vencimento',
-        'lista_m3u',
-        'cargo',
-        'userxc',
-        'senhaxc',
-        'urlxc',
-        'senha18+',
-        'lista_m3u_https',
-        'lista_m3u_sync_at',
-        'lista_m3u_sync_status',
-        'lista_m3u_sync_error',
-        'categorias_compartilhadas',
-        'acesso_jogos',
-        'acesso_livros',
-        'provider_status',
-        'provider_exp_date',
-        'provider_exp_at',
-        'provider_sync_at',
-        'stream_limit',
-      ].join(','))
+      .select('*')
       .ilike('usuario', username)
       .eq('senha', password)
       .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[LUX-AUTH-006] Falha na consulta:', error.message);
+      return json({ ok: false, error: 'database_error' }, 500);
+    }
+
     if (!account) return json({ ok: false, reason: 'invalid_credentials' });
 
-    // A senha digitada não volta na resposta. O frontend já a possui na memória
-    // durante esta fase de compatibilidade porque outras Edge Functions legadas
-    // ainda autenticam com usuário/senha. Isso será removido na migração de sessão.
-    return json({ ok: true, account });
+    // Nunca devolver senha do banco. A senha digitada ja existe no browser nesta
+    // fase de compatibilidade e sera eliminada quando migrarmos para sessao/token.
+    const { senha: _senha, ...safeAccount } = account as Record<string, unknown>;
+    return json({ ok: true, account: safeAccount });
   } catch (error) {
-    console.error('[auth-login]', error);
-    return json({ ok: false, error: 'Não foi possível entrar agora.' }, 500);
+    console.error('[LUX-AUTH-006] Erro inesperado:', error);
+    return json({ ok: false, error: 'backend_unavailable' }, 500);
   }
 });
