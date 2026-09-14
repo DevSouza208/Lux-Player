@@ -7,7 +7,6 @@ const headers = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Cache-Control': 'no-store'
 };
-
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
 
 function cleanText(value: unknown, max = 200) {
@@ -35,11 +34,14 @@ function absoluteUrl(base: string, value: string) {
 function normalizeTitle(value: string) {
   return String(value || '')
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function slugify(value: string) {
+  return normalizeTitle(value).replace(/\s+/g, '-');
 }
 
 function detectVariant(title: string, url = '') {
@@ -94,16 +96,13 @@ function parseDattebayoCards(html: string) {
   const results: any[] = [];
   $('div.ultimosAnimesHomeItem').each((_, element) => {
     const root = $(element);
-    const anchor = root.find('a').first();
+    const anchor = root.find('a[href]').first();
     const title = cleanText(root.find('.ultimosAnimesHomeItemInfosNome').first().text(), 300);
     const href = absoluteUrl(base, anchor.attr('href') || '');
     const img = root.find('.ultimosAnimesHomeItemImg img').first();
     const poster = absoluteUrl(base, img.attr('data-src') || img.attr('src') || '');
     if (!title || !href) return;
-    results.push({
-      provider: 'dattebayobr', providerName: 'Dattebayo BR', lang: 'pt-BR', type: detectMediaType(title, href),
-      title, url: href, poster, variant: detectVariant(title, href)
-    });
+    results.push({ provider: 'dattebayobr', providerName: 'Dattebayo BR', lang: 'pt-BR', type: detectMediaType(title, href), title, url: href, poster, variant: detectVariant(title, href) });
   });
   return results;
 }
@@ -113,9 +112,11 @@ function animeFireSeriesUrl(rawUrl: string) {
     const url = new URL(rawUrl);
     const parts = url.pathname.split('/').filter(Boolean);
     const last = parts[parts.length - 1] || '';
-    if (/^\d+$/.test(last)) {
+    if (/^\d+(?:\.\d+)?$/.test(last)) {
       parts.pop();
       url.pathname = `/${parts.join('/')}-todos-os-episodios`;
+      url.search = '';
+      url.hash = '';
     }
     return url.toString();
   } catch {
@@ -127,34 +128,36 @@ function parseAnimeFireCards(html: string) {
   const base = 'https://animefire.io';
   const $ = load(html);
   const results: any[] = [];
-  $('article.cardUltimosEps > a, article.cardUltimosEps a[href]').each((_, element) => {
-    const anchor = $(element);
-    const title = cleanText(anchor.find('h3.animeTitle').first().text() || anchor.attr('title') || '', 300);
+  const seen = new Set<string>();
+  $('div.divCardUltimosEps, article.cardUltimosEps').each((_, element) => {
+    const root = $(element);
+    const anchor = root.is('a') ? root : root.find('a[href]').first();
+    if (!anchor.length) return;
+    const title = cleanText(root.find('h3.animeTitle').first().text() || anchor.find('h3.animeTitle').first().text() || anchor.attr('title') || '', 300);
     const rawHref = absoluteUrl(base, anchor.attr('href') || '');
+    if (!title || !rawHref) return;
     const mediaType = detectMediaType(title, rawHref);
     const href = mediaType === 'series' ? animeFireSeriesUrl(rawHref) : rawHref;
-    const img = anchor.find('img').first();
-    const poster = absoluteUrl(base, img.attr('data-src') || img.attr('src') || '');
-    if (!title || !href) return;
-    results.push({
-      provider: 'animefire', providerName: 'Anime Fire', lang: 'pt-BR', type: mediaType,
-      title, url: href, poster, variant: detectVariant(title, href)
-    });
+    const img = root.find('img').first();
+    const poster = absoluteUrl(base, img.attr('data-src') || img.attr('data-original') || img.attr('src') || '');
+    const key = `${normalizeTitle(title)}|${href}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push({ provider: 'animefire', providerName: 'Anime Fire', lang: 'pt-BR', type: mediaType, title, url: href, poster, variant: detectVariant(title, href) });
   });
   return results;
 }
 
 async function searchDattebayo(query: string, page: number) {
   const base = 'https://www.dattebayo-br.com';
-  const html = await fetchHtml(`${base}/busca?busca=${encodeURIComponent(query)}&page=${page}`, base);
-  return parseDattebayoCards(html).slice(0, 40);
+  return parseDattebayoCards(await fetchHtml(`${base}/busca?busca=${encodeURIComponent(query)}&page=${page}`, base)).slice(0, 40);
 }
 
-async function searchAnimeFire(query: string, page: number) {
+async function searchAnimeFire(query: string, _page: number) {
   const base = 'https://animefire.io';
-  const slug = query.trim().toLowerCase().replace(/\s+/g, '-');
-  const html = await fetchHtml(`${base}/pesquisar/${encodeURIComponent(slug)}/${page}`, base);
-  return parseAnimeFireCards(html).slice(0, 40);
+  const slug = slugify(query);
+  if (!slug) return [];
+  return parseAnimeFireCards(await fetchHtml(`${base}/pesquisar/${encodeURIComponent(slug)}`, base)).slice(0, 60);
 }
 
 async function catalogDattebayo() {
@@ -180,29 +183,27 @@ function findAnimeFireLastPage(html: string, kind: string) {
 
 async function collectAnimeFireList(kind: 'legendados' | 'dublados') {
   const base = 'https://animefire.io';
-  const firstUrl = `${base}/lista-de-animes-${kind}/1`;
-  const first = await fetchHtml(firstUrl, base);
+  const rootUrl = `${base}/lista-de-animes-${kind}`;
+  const first = await fetchHtml(rootUrl, base);
   const lastPage = findAnimeFireLastPage(first, kind);
   const items = [...parseAnimeFireCards(first)];
   const remaining = Array.from({ length: Math.max(0, lastPage - 1) }, (_, index) => index + 2);
   for (let offset = 0; offset < remaining.length; offset += 6) {
     const batch = remaining.slice(offset, offset + 6);
-    const settled = await Promise.allSettled(batch.map(page => fetchHtml(`${base}/lista-de-animes-${kind}/${page}`, base)));
+    const settled = await Promise.allSettled(batch.map(page => fetchHtml(`${rootUrl}/${page}`, base)));
     settled.forEach(row => { if (row.status === 'fulfilled') items.push(...parseAnimeFireCards(row.value)); });
   }
   return items;
 }
 
 async function catalogAnimeFire() {
-  const settled = await Promise.allSettled([
-    collectAnimeFireList('legendados'),
-    collectAnimeFireList('dublados')
-  ]);
+  const settled = await Promise.allSettled([collectAnimeFireList('legendados'), collectAnimeFireList('dublados')]);
   const items: any[] = [];
   settled.forEach(row => { if (row.status === 'fulfilled') items.push(...row.value); });
   if (!items.length) {
     const base = 'https://animefire.io';
-    const fallback = await Promise.allSettled([1, 2, 3].map(page => fetchHtml(`${base}/top-animes/${page}`, base)));
+    const fallbackUrls = [`${base}/top-animes`, `${base}/em-lancamento`, `${base}/atualizados`];
+    const fallback = await Promise.allSettled(fallbackUrls.map(url => fetchHtml(url, base)));
     fallback.forEach(row => { if (row.status === 'fulfilled') items.push(...parseAnimeFireCards(row.value)); });
   }
   return dedupe(items).slice(0, 1800);
@@ -219,7 +220,6 @@ async function episodesDattebayo(rawUrl: string) {
   const seriesUrl = assertProviderUrl('dattebayobr', rawUrl).replace(/\/$/, '');
   const items: any[] = [];
   const seen = new Set<string>();
-
   for (let page = 1; page <= 12 && items.length < 500; page++) {
     const pageUrl = page === 1 ? seriesUrl : `${seriesUrl}/page/${page}`;
     const html = await fetchHtml(pageUrl, base);
@@ -229,7 +229,7 @@ async function episodesDattebayo(rawUrl: string) {
     let added = 0;
     rows.each((index, element) => {
       const root = $(element);
-      const anchor = root.find('a').first();
+      const anchor = root.find('a[href]').first();
       const href = absoluteUrl(base, anchor.attr('href') || '');
       if (!href || seen.has(href)) return;
       const rawNumber = cleanText(root.find('.ultimosEpisodiosHomeItemInfosNum').first().text(), 80).replace(/epis[oó]dio/i, '').trim();
@@ -241,7 +241,6 @@ async function episodesDattebayo(rawUrl: string) {
     });
     if (!added) break;
   }
-
   return items.sort((a, b) => Number(a.episode || 0) - Number(b.episode || 0));
 }
 
@@ -251,30 +250,25 @@ async function episodesAnimeFire(rawUrl: string) {
   const html = await fetchHtml(seriesUrl, base);
   const $ = load(html);
   const items: any[] = [];
-  $('div.div_video_list > a').each((index, element) => {
+  const seen = new Set<string>();
+  $('a.lEp.epT.divNumEp, div.div_video_list > a').each((index, element) => {
     const anchor = $(element);
     const href = absoluteUrl(base, anchor.attr('href') || '');
-    if (!href) return;
+    if (!href || seen.has(href)) return;
     const text = cleanText(anchor.text(), 300);
-    const lastPath = (() => { try { return new URL(href).pathname.split('/').filter(Boolean).pop() || ''; } catch { return ''; } })();
+    const lastPath = (() => {
+      try { return new URL(href).pathname.split('/').filter(Boolean).pop() || ''; } catch { return ''; }
+    })();
     const episode = Number(lastPath) || episodeNumberFromText(text, index + 1);
+    seen.add(href);
     items.push({ id: `animefire:${encodeURIComponent(href)}`, episode, episodeNum: episode, episode_num: episode, title: text || `Episódio ${episode}`, pageUrl: href, provider: 'animefire', providerName: 'Anime Fire' });
   });
   return items.sort((a, b) => Number(a.episode || 0) - Number(b.episode || 0));
 }
 
-const SEARCHERS: Record<string, (query: string, page: number) => Promise<any[]>> = {
-  dattebayobr: searchDattebayo,
-  animefire: searchAnimeFire
-};
-const CATALOGS: Record<string, () => Promise<any[]>> = {
-  dattebayobr: catalogDattebayo,
-  animefire: catalogAnimeFire
-};
-const EPISODES: Record<string, (url: string) => Promise<any[]>> = {
-  dattebayobr: episodesDattebayo,
-  animefire: episodesAnimeFire
-};
+const SEARCHERS: Record<string, (query: string, page: number) => Promise<any[]>> = { dattebayobr: searchDattebayo, animefire: searchAnimeFire };
+const CATALOGS: Record<string, () => Promise<any[]>> = { dattebayobr: catalogDattebayo, animefire: catalogAnimeFire };
+const EPISODES: Record<string, (url: string) => Promise<any[]>> = { dattebayobr: episodesDattebayo, animefire: episodesAnimeFire };
 
 function dedupe(items: any[]) {
   const seen = new Set<string>();
@@ -289,22 +283,14 @@ function dedupe(items: any[]) {
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
   if (request.method !== 'POST') return json({ error: 'Método não permitido.' }, 405);
-
   try {
     let body: any;
     try { body = await request.json(); } catch { return json({ error: 'JSON inválido.' }, 400); }
-
-    const db = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-      { auth: { persistSession: false } }
-    );
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
     const auth = await resolveAccount(db, body);
     if (auth.error) return auth.error;
-
     const action = cleanText(body?.action, 30).toLowerCase();
     const provider = cleanText(body?.provider || 'all', 40).toLowerCase();
-
     if (action === 'search') {
       const query = cleanText(body?.query, 120);
       if (query.length < 2) return json({ error: 'Digite pelo menos 2 caracteres.' }, 400);
@@ -320,7 +306,6 @@ Deno.serve(async (request: Request) => {
       });
       return json({ query, page, provider, results: dedupe(results), failures, supported: Object.keys(SEARCHERS) });
     }
-
     if (action === 'catalog') {
       const targets = provider === 'all' ? Object.keys(CATALOGS) : [provider];
       if (targets.some(id => !CATALOGS[id])) return json({ error: 'Provider ainda não suportado pelo catálogo.' }, 400);
@@ -333,7 +318,6 @@ Deno.serve(async (request: Request) => {
       });
       return json({ provider, results: dedupe(results), failures, supported: Object.keys(CATALOGS) });
     }
-
     if (action === 'episodes') {
       if (!EPISODES[provider]) return json({ error: 'Provider ainda não suportado para episódios.' }, 400);
       const url = cleanText(body?.url, 4000);
@@ -341,7 +325,6 @@ Deno.serve(async (request: Request) => {
       const episodes = await EPISODES[provider](url);
       return json({ provider, url, episodes, count: episodes.length });
     }
-
     return json({ error: 'Ação inválida.' }, 400);
   } catch (error: any) {
     console.error('provider-search:', error);
