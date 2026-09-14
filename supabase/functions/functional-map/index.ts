@@ -9,7 +9,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 // Segurança:
 // - functional_map_csv tem RLS e não concede acesso ao browser;
 // - service role existe somente nesta Edge Function;
-// - cada leitura valida usuário/senha e exige cargo=admin;
+// - cada leitura/escrita valida usuário/senha e exige cargo=admin;
 // - nenhum dado da tabela usuarios é devolvido além da autorização.
 //
 // Fonte de verdade:
@@ -161,7 +161,7 @@ Deno.serve(async (request) => {
     const username = clean(body?.username, 120);
     const password = clean(body?.password, 300);
 
-    if (action !== 'get') return json({ ok: false, error: 'Ação não permitida.' }, 400);
+    if (!['get', 'put'].includes(action)) return json({ ok: false, error: 'Ação não permitida.' }, 400);
     if (!username || !password) return json({ ok: false, error: 'Credenciais ausentes.' }, 401);
 
     const url = Deno.env.get('SUPABASE_URL');
@@ -182,6 +182,27 @@ Deno.serve(async (request) => {
     if (authError) throw authError;
     if (!account || String(account.cargo || '').trim().toLowerCase() !== 'admin') {
       return json({ ok: false, error: 'Acesso restrito ao administrador.' }, 403);
+    }
+
+    // [LUX-BACKEND-016] Importação administrativa de CSV. É útil para a migração
+    // inicial do Excel e também funciona como recuperação manual do mapa. O arquivo
+    // é validado antes de substituir a branch escolhida.
+    if (action === 'put') {
+      const incomingCsv = String(body?.csv || '');
+      if (!looksLikeMap(incomingCsv)) {
+        return json({ ok: false, error: 'CSV inválido: cabeçalho do mapa funcional não encontrado.' }, 400);
+      }
+      const encoded = await gzipBase64(incomingCsv);
+      const now = new Date().toISOString();
+      const { error: saveError } = await admin.from('functional_map_csv').upsert({
+        branch,
+        csv_text: encoded,
+        encoding: 'gzip-base64',
+        updated_at: now,
+        updated_by: username,
+      }, { onConflict: 'branch' });
+      if (saveError) throw saveError;
+      return json({ ok: true, branch, updatedAt: now });
     }
 
     const { data: record, error: mapError } = await admin
