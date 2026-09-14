@@ -166,7 +166,7 @@
 (() => {
   if (document.querySelector('script[data-lux-secondary-content-sources]')) return;
   const script = document.createElement('script');
-  script.src = 'js/secondary-content-sources.js?v=20260914-secondary-sources-1';
+  script.src = 'js/secondary-content-sources.js?v=20260914-secondary-sources-2';
   script.async = true;
   script.setAttribute('data-lux-secondary-content-sources', '1');
   document.head.appendChild(script);
@@ -214,7 +214,7 @@
   }
 })();
 
-// [LUX-IPTV-039] Não segura o splash/login enquanto M3Us externas são baixadas.
+// [LUX-IPTV-039] Não segura o splash/login enquanto complementos externos são preparados.
 (() => {
   const loadNonBlockingLayer = () => {
     if (document.querySelector('script[data-lux-secondary-background-loader]')) return;
@@ -241,7 +241,7 @@
   const loadProviderSearch = () => {
     if (window.LuxProviderSearch || document.querySelector('script[data-lux-provider-search-ui]')) return;
     const script = document.createElement('script');
-    script.src = 'js/provider-search-ui.js?v=20260914-provider-search-1';
+    script.src = 'js/provider-search-ui.js?v=20260914-provider-search-3';
     script.async = true;
     script.setAttribute('data-lux-provider-search-ui', '1');
     document.head.appendChild(script);
