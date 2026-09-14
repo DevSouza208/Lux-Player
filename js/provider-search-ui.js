@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-provider-search-3';
+  const VERSION = '20260914-provider-search-4-animefire-only';
   if (window.__luxProviderSearchUiInstalled === VERSION) return;
   window.__luxProviderSearchUiInstalled = VERSION;
 
@@ -15,7 +15,7 @@
 
   if (!window.LuxProviderCatalog && !document.querySelector('script[data-lux-provider-catalog-bridge]')) {
     const bridge = document.createElement('script');
-    bridge.src = 'js/provider-catalog-bridge.js?v=20260914-provider-catalog-1';
+    bridge.src = 'js/provider-catalog-bridge.js?v=20260914-provider-catalog-4-animefire-only';
     bridge.async = true;
     bridge.setAttribute('data-lux-provider-catalog-bridge', '1');
     document.head.appendChild(bridge);
@@ -39,10 +39,12 @@
     };
   }
 
-  async function searchProviders(query, provider = 'all', page = 1) {
+  async function searchProviders(query, provider = 'animefire', page = 1) {
     if (typeof supabaseClient === 'undefined' || !supabaseClient?.functions?.invoke) throw new Error('Serviço de nuvem indisponível.');
-    const { data, error } = await supabaseClient.functions.invoke(FUNCTION_NAME, { body: authBody({ action: 'search', query, provider, page }) });
-    if (error) throw new Error(data?.error || error.message || 'Falha ao pesquisar providers.');
+    const { data, error } = await supabaseClient.functions.invoke(FUNCTION_NAME, {
+      body: authBody({ action: 'search', query, provider: provider === 'animefire' ? 'animefire' : 'animefire', page })
+    });
+    if (error) throw new Error(data?.error || error.message || 'Falha ao pesquisar Anime Fire.');
     if (data?.error) throw new Error(data.error);
     return data || {};
   }
@@ -60,7 +62,7 @@
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <strong class="text-xs text-white">${escapeHtml(item?.title || 'Sem título')}</strong>
-            <span class="rounded-full border border-sky-800/50 bg-sky-950/40 px-2 py-0.5 text-[9px] font-bold text-sky-300">${escapeHtml(item?.providerName || item?.provider || 'Provider')}</span>
+            <span class="rounded-full border border-sky-800/50 bg-sky-950/40 px-2 py-0.5 text-[9px] font-bold text-sky-300">Anime Fire</span>
             <span class="rounded-full border border-emerald-800/40 bg-emerald-950/30 px-2 py-0.5 text-[9px] font-bold text-emerald-300">PT-BR</span>
             ${variant}
           </div>
@@ -77,12 +79,10 @@
     const status = document.getElementById('luxProviderSearchStatus');
     if (!root || !status) return;
     lastResults = Array.isArray(data?.results) ? data.results : [];
-    const failures = Array.isArray(data?.failures) ? data.failures : [];
     root.innerHTML = lastResults.length
       ? lastResults.map(resultCard).join('')
-      : '<p class="rounded-xl border border-sky-900/30 bg-[#0d0817] p-3 text-xs text-sky-200/70">Nenhum resultado encontrado nos providers suportados.</p>';
-    const failedText = failures.length ? ` · ${failures.length} provider(s) falharam: ${failures.map(item => `${item.provider}: ${item.error}`).join(' | ')}` : '';
-    status.textContent = `${lastResults.length} resultado(s) encontrado(s)${failedText}`;
+      : '<p class="rounded-xl border border-sky-900/30 bg-[#0d0817] p-3 text-xs text-sky-200/70">Nenhum resultado encontrado no Anime Fire.</p>';
+    status.textContent = `${lastResults.length} resultado(s) encontrado(s) no Anime Fire`;
   }
 
   async function syncResultsToCatalog(results) {
@@ -99,7 +99,6 @@
   async function handleSearch(event) {
     event?.preventDefault?.();
     const input = document.getElementById('luxProviderSearchInput');
-    const select = document.getElementById('luxProviderSearchSelect');
     const button = document.getElementById('luxProviderSearchButton');
     const status = document.getElementById('luxProviderSearchStatus');
     const root = document.getElementById('luxProviderSearchResults');
@@ -111,47 +110,63 @@
     }
 
     if (button) button.disabled = true;
-    if (status) status.textContent = `Pesquisando “${query}”...`;
-    if (root) root.innerHTML = '<p class="rounded-xl border border-sky-900/30 bg-[#0d0817] p-3 text-xs text-sky-200/70">Consultando providers PT-BR...</p>';
+    if (status) status.textContent = `Pesquisando “${query}” no Anime Fire...`;
+    if (root) root.innerHTML = '<p class="rounded-xl border border-sky-900/30 bg-[#0d0817] p-3 text-xs text-sky-200/70">Consultando o índice atual do Anime Fire...</p>';
     try {
-      const data = await searchProviders(query, String(select?.value || 'all'));
+      const data = await searchProviders(query, 'animefire');
       renderResults(data);
       if (Array.isArray(data?.results) && data.results.length) {
         const baseText = status?.textContent || '';
         try {
           const merged = await syncResultsToCatalog(data.results);
-          if (status && merged) status.textContent = `${baseText} · catálogo Lux atualizado: ${Number(merged.added || 0)} novo(s), ${Number(merged.merged || 0)} combinado(s)`;
+          if (status && merged) status.textContent = `${baseText} · catálogo Lux: ${Number(merged.added || 0)} novo(s), ${Number(merged.merged || 0)} combinado(s)`;
         } catch (mergeError) {
           console.warn('[LUX-IPTV-041] Busca funcionou, mas a mesclagem no catálogo falhou:', mergeError);
           if (status) status.textContent = `${baseText} · busca OK; catálogo será atualizado em segundo plano`;
         }
       }
     } catch (error) {
-      if (status) status.textContent = error?.message || 'Falha ao pesquisar providers.';
-      if (root) root.innerHTML = `<p class="rounded-xl border border-rose-900/40 bg-rose-950/10 p-3 text-xs text-rose-300">${escapeHtml(error?.message || 'Falha ao pesquisar providers.')}</p>`;
+      if (status) status.textContent = error?.message || 'Falha ao pesquisar Anime Fire.';
+      if (root) root.innerHTML = `<p class="rounded-xl border border-rose-900/40 bg-rose-950/10 p-3 text-xs text-rose-300">${escapeHtml(error?.message || 'Falha ao pesquisar Anime Fire.')}</p>`;
     } finally {
       if (button) button.disabled = false;
     }
   }
 
+  function enforceAnimeFireOnlyInSync() {
+    document.querySelectorAll('[data-provider-sync][value="dattebayobr"]').forEach(input => {
+      input.closest('label')?.remove();
+    });
+    document.querySelectorAll('[data-provider-sync][value="animefire"]').forEach(input => {
+      input.checked = true;
+      input.disabled = true;
+    });
+  }
+
   function installUi() {
     const card = document.getElementById('luxProviderLayerCard');
     if (!card) return false;
-    if (document.getElementById('luxProviderSearchBox')) return true;
+    const previous = document.getElementById('luxProviderSearchBox');
+    if (previous) {
+      if (previous.dataset.providerUiVersion === VERSION) return true;
+      previous.remove();
+    }
+
     const section = document.createElement('div');
     section.id = 'luxProviderSearchBox';
+    section.dataset.providerUiVersion = VERSION;
     section.className = 'mt-4 rounded-xl border border-sky-900/40 bg-[#0d0817] p-3';
     section.innerHTML = `
       <div class="flex flex-wrap items-start justify-between gap-3"><div>
-        <h5 class="text-xs font-bold uppercase text-sky-300">Buscar conteúdo nos providers</h5>
-        <p class="mt-1 text-[10px] text-sky-200/60">Anime Fire e Dattebayo BR. Os resultados também são mesclados ao catálogo do Lux; obras ausentes viram cards novos e versões da mesma obra ficam como fonte alternativa.</p>
+        <h5 class="text-xs font-bold uppercase text-sky-300">Buscar conteúdo no Anime Fire</h5>
+        <p class="mt-1 text-[10px] text-sky-200/60">Anime Fire está ativo como provider de teste. Dattebayo BR está temporariamente desativado. Resultados encontrados também podem ser mesclados ao catálogo do Lux.</p>
       </div></div>
       <form id="luxProviderSearchForm" class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
-        <select id="luxProviderSearchSelect" class="rounded-xl border border-sky-900/50 bg-[#120c1f] px-3 py-2 text-xs text-white"><option value="all">Todos suportados</option><option value="animefire">Anime Fire</option><option value="dattebayobr">Dattebayo BR</option></select>
+        <select id="luxProviderSearchSelect" disabled class="rounded-xl border border-sky-900/50 bg-[#120c1f] px-3 py-2 text-xs text-white opacity-80"><option value="animefire" selected>Anime Fire</option></select>
         <input id="luxProviderSearchInput" type="search" autocomplete="off" placeholder="Ex.: Naruto, Bleach, Sword Art Online..." class="rounded-xl border border-sky-900/50 bg-[#120c1f] px-3 py-2 text-xs text-white placeholder:text-sky-200/30">
         <button id="luxProviderSearchButton" type="submit" class="rounded-xl bg-sky-700 px-4 py-2 text-xs font-bold text-white hover:bg-sky-600 disabled:opacity-50">Buscar</button>
       </form>
-      <p id="luxProviderSearchStatus" class="mt-2 min-h-[18px] text-[10px] text-sky-300/80">Digite um anime para testar os providers.</p>
+      <p id="luxProviderSearchStatus" class="mt-2 min-h-[18px] text-[10px] text-sky-300/80">Digite um anime para testar o Anime Fire.</p>
       <div id="luxProviderSearchResults" class="mt-3 grid grid-cols-1 gap-2 xl:grid-cols-2"></div>`;
     const providerList = document.getElementById('luxProviderList');
     if (providerList) card.insertBefore(section, providerList); else card.appendChild(section);
@@ -166,8 +181,17 @@
   }
 
   window.LuxProviderSearch = { version: VERSION, search: searchProviders, getLastResults: () => [...lastResults] };
+
+  const observer = new MutationObserver(() => enforceAnimeFireOnlyInSync());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  enforceAnimeFireOnlyInSync();
+
   let attempts = 0;
   if (!installUi()) {
-    const timer = setInterval(() => { attempts += 1; if (installUi() || attempts >= 240) clearInterval(timer); }, 50);
+    const timer = setInterval(() => {
+      attempts += 1;
+      enforceAnimeFireOnlyInSync();
+      if (installUi() || attempts >= 240) clearInterval(timer);
+    }, 50);
   }
 })();
