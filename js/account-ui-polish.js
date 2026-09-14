@@ -8,19 +8,19 @@
   // Este módulo faz três tarefas visuais/administrativas sem alterar o catálogo:
   // 1. Exibe vencimento como DD/MM/AAAA no cabeçalho do usuário.
   // 2. No painel Admin, mostra "Streams: ativos/limite" ao lado de cada cliente.
-  // 3. Carrega o módulo isolado do dashboard "Funcionalidades".
+  // 3. Carrega o dashboard "Funcionalidades" e seu importador/exportador CSV.
   //
   // IMPORTANTE:
   // - O valor salvo no banco continua em ISO (AAAA-MM-DD), que é o formato correto
   //   para banco e comparações. Só a APRESENTAÇÃO é convertida para pt-BR.
   // - A quantidade ativa vem da Edge Function stream-sessions e representa apenas
   //   reproduções IPTV com heartbeat recente, não usuários logados.
-  // - O dashboard funcional vive em arquivo próprio para que esta camada permaneça
+  // - O dashboard funcional vive em arquivos próprios para que esta camada permaneça
   //   pequena e possa ser removida/testada sem tocar no núcleo de script.js.
   // ============================================================
 
   if (window.__luxAccountUiPolishInstalled) return;
-  window.__luxAccountUiPolishInstalled = '20260914-account-ui3';
+  window.__luxAccountUiPolishInstalled = '20260914-account-ui4';
 
   const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
   let streamStatusRequest = 0;
@@ -160,15 +160,27 @@
     }, 30_000);
   }
 
-  // [LUX-ADMIN-013] O dashboard é carregado sob demanda por um script separado.
-  // Não usamos import/module para manter compatibilidade com o bootstrap clássico do Lux.
-  function loadAdminFunctionalities() {
-    if (window.__luxAdminFunctionalitiesInstalled || document.querySelector('script[data-lux-admin-functionalities]')) return;
+  function loadScriptOnce(selector, src, datasetName) {
+    if (document.querySelector(selector)) return;
     const script = document.createElement('script');
-    script.src = 'js/admin-functionalities.js?v=20260914-functionalities1';
+    script.src = src;
     script.async = true;
-    script.dataset.luxAdminFunctionalities = '1';
+    script.dataset[datasetName] = '1';
     document.head.appendChild(script);
+  }
+
+  // [LUX-ADMIN-013] Dashboard + import/export ficam isolados do monólito principal.
+  function loadAdminFunctionalities() {
+    loadScriptOnce(
+      'script[data-lux-admin-functionalities]',
+      'js/admin-functionalities.js?v=20260914-functionalities1',
+      'luxAdminFunctionalities'
+    );
+    loadScriptOnce(
+      'script[data-lux-admin-functionalities-import]',
+      'js/admin-functionalities-import.js?v=20260914-functional-import1',
+      'luxAdminFunctionalitiesImport'
+    );
   }
 
   function install() {
