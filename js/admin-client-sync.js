@@ -153,10 +153,21 @@
     return true;
   };
 
-  if (install()) return;
-  let attempts = 0;
-  const timer = setInterval(() => {
-    attempts += 1;
-    if (install() || attempts >= 160) clearInterval(timer);
-  }, 50);
+  if (!install()) {
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (install() || attempts >= 160) clearInterval(timer);
+    }, 50);
+  }
+})();
+
+// [LUX-ADMIN-015] Carrega o módulo de fontes secundárias sem alterar o script principal.
+(() => {
+  if (document.querySelector('script[data-lux-secondary-content-sources]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/secondary-content-sources.js?v=20260914-secondary-sources-1';
+  script.async = true;
+  script.setAttribute('data-lux-secondary-content-sources', '1');
+  document.head.appendChild(script);
 })();
