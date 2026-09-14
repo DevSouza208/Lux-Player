@@ -2,22 +2,25 @@
   'use strict';
 
   // ============================================================
-  // [LUX-AUTH-DATE-001] + [LUX-IPTV-STREAM-002]
+  // [LUX-AUTH-DATE-001] + [LUX-IPTV-STREAM-002] + [LUX-ADMIN-013]
   // ACABAMENTO DE CONTA / PAINEL
   // ============================================================
-  // Este módulo faz duas coisas visuais, sem alterar a regra de autenticação:
+  // Este módulo faz três tarefas visuais/administrativas sem alterar o catálogo:
   // 1. Exibe vencimento como DD/MM/AAAA no cabeçalho do usuário.
   // 2. No painel Admin, mostra "Streams: ativos/limite" ao lado de cada cliente.
+  // 3. Carrega o módulo isolado do dashboard "Funcionalidades".
   //
   // IMPORTANTE:
   // - O valor salvo no banco continua em ISO (AAAA-MM-DD), que é o formato correto
   //   para banco e comparações. Só a APRESENTAÇÃO é convertida para pt-BR.
   // - A quantidade ativa vem da Edge Function stream-sessions e representa apenas
   //   reproduções IPTV com heartbeat recente, não usuários logados.
+  // - O dashboard funcional vive em arquivo próprio para que esta camada permaneça
+  //   pequena e possa ser removida/testada sem tocar no núcleo de script.js.
   // ============================================================
 
   if (window.__luxAccountUiPolishInstalled) return;
-  window.__luxAccountUiPolishInstalled = '20260913-account-ui2';
+  window.__luxAccountUiPolishInstalled = '20260914-account-ui3';
 
   const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
   let streamStatusRequest = 0;
@@ -157,11 +160,23 @@
     }, 30_000);
   }
 
+  // [LUX-ADMIN-013] O dashboard é carregado sob demanda por um script separado.
+  // Não usamos import/module para manter compatibilidade com o bootstrap clássico do Lux.
+  function loadAdminFunctionalities() {
+    if (window.__luxAdminFunctionalitiesInstalled || document.querySelector('script[data-lux-admin-functionalities]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/admin-functionalities.js?v=20260914-functionalities1';
+    script.async = true;
+    script.dataset.luxAdminFunctionalities = '1';
+    document.head.appendChild(script);
+  }
+
   function install() {
     observeExpiryBadge();
     installAdminObserver();
     formatExpiryBadge();
     refreshAdminStreamStatus();
+    loadAdminFunctionalities();
   }
 
   // O HTML já contém esses elementos, mas o polling curto também cobre carregamento
