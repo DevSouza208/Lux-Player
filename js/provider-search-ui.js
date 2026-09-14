@@ -1,9 +1,17 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-provider-search-2';
+  const VERSION = '20260914-provider-search-3';
   if (window.__luxProviderSearchUiInstalled === VERSION) return;
   window.__luxProviderSearchUiInstalled = VERSION;
+
+  if (!window.LuxCanonicalCatalog && !document.querySelector('script[data-lux-canonical-catalog-sync]')) {
+    const canonical = document.createElement('script');
+    canonical.src = 'js/canonical-catalog-sync.js?v=20260914-canonical-catalog-1';
+    canonical.async = true;
+    canonical.setAttribute('data-lux-canonical-catalog-sync', '1');
+    document.head.appendChild(canonical);
+  }
 
   if (!window.LuxProviderCatalog && !document.querySelector('script[data-lux-provider-catalog-bridge]')) {
     const bridge = document.createElement('script');
