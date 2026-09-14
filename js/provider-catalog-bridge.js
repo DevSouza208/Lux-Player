@@ -1,22 +1,20 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-provider-catalog-3';
+  const VERSION = '20260914-provider-catalog-4-animefire-only';
   if (window.__luxProviderCatalogBridgeInstalled === VERSION) return;
   window.__luxProviderCatalogBridgeInstalled = VERSION;
 
   const FUNCTION_NAME = 'provider-search';
-  const STREAM_FUNCTION = 'provider-stream';
   const SERIES_GROUP = 'Séries | Animes ⚡ PLUS';
-  const MOVIE_GROUP = 'Filmes | Anime ⚡ PLUS';
+  const MOVIE_GROUP = 'Filmes | Animes ⚡ PLUS';
   const providerDefs = [
-    { id: 'provider:animefire', slug: 'animefire', name: 'Anime Fire', priority: 10 },
-    { id: 'provider:dattebayobr', slug: 'dattebayobr', name: 'Dattebayo BR', priority: 20 }
+    { id: 'provider:animefire', slug: 'animefire', name: 'Anime Fire', priority: 10 }
   ];
+  const ACTIVE_SLUGS = new Set(providerDefs.map(def => def.slug));
   const extraResults = new Map();
   const catalogCache = new Map();
   const episodeCache = new Map();
-  const streamCache = new Map();
   let registered = false;
 
   const safeCurrentUser = () => {
@@ -44,18 +42,6 @@
     return data || {};
   }
 
-  async function invokeStream(payload = {}) {
-    if (typeof supabaseClient === 'undefined' || !supabaseClient?.functions?.invoke) {
-      throw new Error('Serviço de reprodução dos providers indisponível.');
-    }
-    const { data, error } = await supabaseClient.functions.invoke(STREAM_FUNCTION, {
-      body: authBody(payload)
-    });
-    if (error) throw new Error(data?.error || error.message || 'Falha ao resolver o vídeo do provider.');
-    if (data?.error) throw new Error(data.error);
-    return data || {};
-  }
-
   function stripDubTitle(value) {
     return String(value || '')
       .replace(/\s*[-–—:]?\s*\b(dublado|dub|legendado|sub)\b.*$/i, '')
@@ -77,16 +63,17 @@
     const title = String(raw?.title || '').trim();
     const variant = String(raw?.variant || 'default');
     const mediaType = inferType(raw);
+    const url = String(raw?.url || '');
     const item = {
-      id: `provider:${def.slug}:${encodeURIComponent(raw?.url || title)}`,
+      id: `provider:${def.slug}:${encodeURIComponent(url || title)}`,
       name: title,
       seriesName: mediaType === 'series' ? title : '',
       type: mediaType,
       group: mediaType === 'movies' ? MOVIE_GROUP : SERIES_GROUP,
       logo: String(raw?.poster || ''),
-      url: String(raw?.url || ''),
+      url,
       isAdult: false,
-      providerUrl: String(raw?.url || ''),
+      providerUrl: url,
       providerSlug: def.slug,
       providerName: def.name,
       providerVariant: variant,
@@ -118,6 +105,7 @@
   }
 
   async function fetchProviderEpisodes(provider, url, variant = 'default') {
+    if (!ACTIVE_SLUGS.has(String(provider || ''))) throw new Error('Provider desativado.');
     const key = `${provider}|${url}`;
     if (episodeCache.has(key)) return episodeCache.get(key);
     const promise = invokeProvider('episodes', { provider, url }).then(data => {
@@ -142,28 +130,8 @@
     return promise;
   }
 
-  async function resolveProviderStream(provider, pageUrl) {
-    const key = `${provider}|${pageUrl}`;
-    const cached = streamCache.get(key);
-    if (cached && cached.expiresAt > Date.now() && /^https?:\/\//i.test(String(cached.url || ''))) {
-      return cached;
-    }
-
-    const data = await invokeStream({ provider, url: pageUrl });
-    const streamUrl = String(data?.streamUrl || '');
-    if (!/^https?:\/\//i.test(streamUrl)) throw new Error('O provider não devolveu um vídeo reproduzível.');
-    const result = {
-      url: streamUrl,
-      quality: String(data?.quality || 'AUTO'),
-      alternatives: Array.isArray(data?.alternatives) ? data.alternatives : [],
-      expiresAt: Date.now() + (5 * 60 * 1000)
-    };
-    streamCache.set(key, result);
-    return result;
-  }
-
   function providerSlugFromSource(source) {
-    const id = String(source?.id || '');
+    const id = String(source?.id || source?.source_id || '');
     if (id.startsWith('provider:')) return id.slice('provider:'.length);
     return String(source?.providerSlug || '');
   }
@@ -172,7 +140,8 @@
     if (String(series?.type || '') !== 'series') return [];
     const refs = [];
     const push = (slug, name, url, variant = 'default') => {
-      if (!slug || !/^https?:\/\//i.test(String(url || ''))) return;
+      if (!ACTIVE_SLUGS.has(String(slug || ''))) return;
+      if (!/^https?:\/\//i.test(String(url || ''))) return;
       const key = `${slug}|${url}`;
       if (refs.some(ref => ref.key === key)) return;
       refs.push({ key, slug, name: name || slug, url: String(url), variant: variant || 'default' });
@@ -180,7 +149,7 @@
 
     if (String(series?.luxSourceRole || '') === 'provider') {
       const slug = String(series?.providerSlug || '').trim() || String(series?.luxSourceId || '').replace(/^provider:/, '');
-      push(slug, series?.providerName || series?.luxSourceName, series?.providerUrl || series?.url, series?.providerVariant || (String(series?.url || '').includes('dublado') ? 'dub' : 'default'));
+      push(slug, series?.providerName || series?.luxSourceName, series?.providerUrl || series?.url, series?.providerVariant || 'default');
     }
 
     (Array.isArray(series?.luxSources) ? series.luxSources : []).forEach(source => {
@@ -226,15 +195,13 @@
           const hydrated = await hydratedProviderSeries(series, refs[0]);
           return await originalOpen.call(this, hydrated, resumeState, autoPlayResume);
         } catch (error) {
-          console.warn('[LUX-IPTV-041] Falha ao carregar episódios do provider:', error);
+          console.warn('[LUX-IPTV-041] Falha ao carregar episódios do Anime Fire:', error);
           return await originalOpen.call(this, series, resumeState, autoPlayResume);
         }
       }
 
-      // Conteúdo principal sempre abre primeiro com temporadas/episódios originais intactos.
       const result = await originalOpen.call(this, series, resumeState, autoPlayResume);
       if (!refs.length) return result;
-
       const seasons = document.getElementById('seriesSeasonsContainer');
       if (!seasons || seasons.querySelector('[data-lux-provider-variants]')) return result;
       const bar = document.createElement('div');
@@ -254,7 +221,7 @@
             const hydrated = await hydratedProviderSeries(series, ref);
             await originalOpen.call(window, hydrated, null, false);
           } catch (error) {
-            alert(error?.message || 'Não foi possível carregar os episódios deste provider.');
+            alert(error?.message || 'Não foi possível carregar os episódios do Anime Fire.');
           } finally {
             button.disabled = false;
             button.textContent = oldText;
@@ -290,27 +257,13 @@
 
     const originalPlayer = window.openVodPlayer;
     if (typeof originalPlayer === 'function' && !originalPlayer.__luxProviderEpisodeWrapped) {
-      const wrappedPlayer = async function(item) {
+      const wrappedPlayer = function(item) {
         if (item?.luxProviderEpisode) {
           const pageUrl = String(item.providerPageUrl || item.url || '');
           const provider = String(item.providerSlug || '');
-          if (/^https?:\/\//i.test(pageUrl) && provider === 'dattebayobr') {
-            try {
-              const resolved = await resolveProviderStream(provider, pageUrl);
-              return await originalPlayer.call(this, {
-                ...item,
-                url: resolved.url,
-                providerPageUrl: pageUrl,
-                providerStreamQuality: resolved.quality,
-                providerStreamAlternatives: resolved.alternatives,
-                luxProviderEpisode: false,
-                luxProviderResolvedStream: true
-              });
-            } catch (error) {
-              console.warn('[LUX-IPTV-042] Falha ao resolver stream direto do provider:', error);
-              alert(error?.message || 'Não foi possível obter o vídeo deste episódio.');
-              return;
-            }
+          if (provider && !ACTIVE_SLUGS.has(provider)) {
+            alert('Este provider está desativado.');
+            return;
           }
           if (/^https?:\/\//i.test(pageUrl)) {
             window.open(pageUrl, '_blank', 'noopener,noreferrer');
@@ -327,6 +280,7 @@
   function registerAdapters() {
     if (registered) return true;
     if (!window.LuxProviderSources?.registerAdapter) return false;
+    try { window.LuxProviderSources.unregisterAdapter?.('provider:dattebayobr'); } catch (_) {}
     providerDefs.forEach(def => {
       try { window.LuxProviderSources.unregisterAdapter?.(def.id); } catch (_) {}
       window.LuxProviderSources.registerAdapter({
@@ -349,13 +303,12 @@
     const list = Array.isArray(items) ? items : [];
     list.forEach(item => {
       const slug = String(item?.provider || '');
-      if (!providerDefs.some(def => def.slug === slug)) return;
+      if (!ACTIVE_SLUGS.has(slug)) return;
       const bucket = extraResults.get(slug) || [];
       const key = String(item?.url || '');
       if (key && !bucket.some(existing => String(existing?.url || '') === key)) bucket.push(item);
       extraResults.set(slug, bucket);
     });
-
     if (!registerAdapters() || !window.LuxProviderSources?.mergeIntoCurrentCatalog) {
       return { added: 0, merged: 0, adapters: 0, skipped: true };
     }
@@ -374,11 +327,11 @@
 
   window.LuxProviderCatalog = {
     version: VERSION,
+    activeProviders: providerDefs.map(def => def.slug),
     mergeSearchResults,
     syncCatalogNow,
     fetchEpisodes: fetchProviderEpisodes,
-    resolveStream: resolveProviderStream,
-    clearCache: () => { catalogCache.clear(); episodeCache.clear(); streamCache.clear(); }
+    clearCache: () => { catalogCache.clear(); episodeCache.clear(); }
   };
 
   let attempts = 0;
@@ -393,10 +346,11 @@
 
   setTimeout(() => {
     try {
+      window.LuxProviderSources?.unregisterAdapter?.('provider:dattebayobr');
       if (registerAdapters() && typeof allMediaItems !== 'undefined' && Array.isArray(allMediaItems) && allMediaItems.length && window.LuxProviderSources?.mergeIntoCurrentCatalog) {
         window.LuxProviderSources.mergeIntoCurrentCatalog({ refreshUi: true })
           .then(() => routeCatalog())
-          .catch(error => console.warn('[LUX-IPTV-041] Catálogo inicial dos providers falhou:', error));
+          .catch(error => console.warn('[LUX-IPTV-041] Catálogo inicial do Anime Fire falhou:', error));
       }
     } catch (_) {}
   }, 2200);
