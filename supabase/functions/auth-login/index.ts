@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 // ============================================================
-// [LUX-AUTH-005] LOGIN SERVER-SIDE DO LUX PLAYER
+// [LUX-AUTH-006] LOGIN SERVER-SIDE DO LUX PLAYER
 // ============================================================
 // Objetivo:
 // - impedir que o navegador baixe a tabela inteira `usuarios` para validar login;
@@ -53,7 +53,7 @@ Deno.serve(async (request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // [LUX-AUTH-005]
+    // [LUX-AUTH-006]
     // A consulta filtra a própria credencial no PostgreSQL. Diferente do fluxo
     // antigo, nenhuma lista de clientes é entregue ao browser para comparação.
     const { data: account, error } = await admin
