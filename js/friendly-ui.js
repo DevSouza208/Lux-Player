@@ -92,7 +92,7 @@
 
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
 
-  // [LUX-AUTH-005] Instala a ponte que troca o SELECT * de usuários pela
+  // [LUX-AUTH-006] Instala a ponte que troca o SELECT * de usuários pela
   // requisição server-side `auth-login`. Carregamos cedo para que tanto login
   // manual quanto login automático usem a nova rota sempre que possível.
   const loadBackendAuth = () => {
