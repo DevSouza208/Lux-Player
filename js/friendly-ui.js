@@ -1,6 +1,6 @@
 (() => {
   const APP_VERSION = '1.6.3';
-  const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-21';
+  const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-22';
 
   const replacements = [
     [/Verificando dados no Supabase\.\.\./gi, 'Entrando na sua conta...'],
@@ -93,6 +93,111 @@
   const mobileMedia = () => window.matchMedia?.('(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)')?.matches;
 
   // ============================================================
+  // [LUX-ARCH-002] SENHA NÃO PERSISTENTE NO NAVEGADOR
+  // ============================================================
+  // O código legado ainda escreve `lux_auth_pass` no localStorage. Enquanto as
+  // demais Edge Functions não forem migradas para sessão/token, precisamos manter
+  // a senha disponível DURANTE a aba atual para não quebrar perfis, progresso,
+  // leitura, saves, VOD e controle de streams.
+  //
+  // Esta camada faz uma migração segura e compatível:
+  // - senha real fica somente em sessionStorage (morre ao fechar a aba/janela);
+  // - localStorage guarda apenas um marcador sem valor de autenticação;
+  // - qualquer escrita futura do legado em lux_auth_pass é interceptada e desviada
+  //   para sessionStorage automaticamente;
+  // - reload da mesma aba continua com login automático;
+  // - nova aba/sessão exige a senha novamente;
+  // - RLS de usuarios continua desligado por enquanto, como combinado.
+  //
+  // Próxima etapa (separada): migrar Edge Functions para token revogável e então
+  // remover totalmente a necessidade da senha reutilizável no runtime.
+  // ============================================================
+  const SESSION_PASS_KEY = 'lux_auth_session_pass';
+  const SESSION_USER_KEY = 'lux_auth_session_user';
+  const LOCAL_PASS_KEY = 'lux_auth_pass';
+  const LOCAL_USER_KEY = 'lux_auth_user';
+  const SESSION_MARKER = '__LUX_SESSION_ONLY__';
+
+  const nativeStorageSetItem = Storage.prototype.setItem;
+  const nativeStorageRemoveItem = Storage.prototype.removeItem;
+
+  function migrateLegacyStoredPassword() {
+    try {
+      const stored = localStorage.getItem(LOCAL_PASS_KEY);
+      const username = localStorage.getItem(LOCAL_USER_KEY) || '';
+
+      if (stored && stored !== SESSION_MARKER) {
+        sessionStorage.setItem(SESSION_PASS_KEY, stored);
+        if (username) sessionStorage.setItem(SESSION_USER_KEY, username);
+        nativeStorageSetItem.call(localStorage, LOCAL_PASS_KEY, SESSION_MARKER);
+        return;
+      }
+
+      // O marcador sozinho não autentica ninguém. Se a aba foi reaberta e o
+      // sessionStorage sumiu, removemos o marcador para o legado não tentar login
+      // automático com uma credencial falsa.
+      if (stored === SESSION_MARKER && !sessionStorage.getItem(SESSION_PASS_KEY)) {
+        nativeStorageRemoveItem.call(localStorage, LOCAL_PASS_KEY);
+      }
+    } catch (error) {
+      console.warn('[LUX-ARCH-002] Não foi possível migrar a credencial legada.', error);
+    }
+  }
+
+  function installEphemeralPasswordStorage() {
+    if (window.__luxEphemeralPasswordStorageInstalled) return true;
+    if (typeof Storage === 'undefined') return false;
+
+    migrateLegacyStoredPassword();
+
+    Storage.prototype.setItem = function (key, value) {
+      if (this === localStorage && key === LOCAL_PASS_KEY) {
+        const credential = String(value ?? '');
+        if (credential && credential !== SESSION_MARKER) {
+          nativeStorageSetItem.call(sessionStorage, SESSION_PASS_KEY, credential);
+          const username = localStorage.getItem(LOCAL_USER_KEY) || '';
+          if (username) nativeStorageSetItem.call(sessionStorage, SESSION_USER_KEY, username);
+        }
+        return nativeStorageSetItem.call(localStorage, LOCAL_PASS_KEY, SESSION_MARKER);
+      }
+      return nativeStorageSetItem.call(this, key, value);
+    };
+
+    Storage.prototype.removeItem = function (key) {
+      if (this === localStorage && key === LOCAL_PASS_KEY) {
+        nativeStorageRemoveItem.call(sessionStorage, SESSION_PASS_KEY);
+        nativeStorageRemoveItem.call(sessionStorage, SESSION_USER_KEY);
+      }
+      return nativeStorageRemoveItem.call(this, key);
+    };
+
+    window.__luxEphemeralPasswordStorageInstalled = '20260914-session-storage1';
+    return true;
+  }
+
+  function installSessionLoginBridge() {
+    if (window.__luxSessionLoginBridgeInstalled) return true;
+    if (typeof window.handleLogin !== 'function') return false;
+
+    const originalHandleLogin = window.handleLogin;
+    window.handleLogin = async function () {
+      const passInput = document.getElementById('authPass');
+      if (passInput?.value === SESSION_MARKER) {
+        const sessionPassword = sessionStorage.getItem(SESSION_PASS_KEY) || '';
+        if (sessionPassword) passInput.value = sessionPassword;
+        else {
+          nativeStorageRemoveItem.call(localStorage, LOCAL_PASS_KEY);
+          passInput.value = '';
+        }
+      }
+      return originalHandleLogin.apply(this, arguments);
+    };
+
+    window.__luxSessionLoginBridgeInstalled = '20260914-session-login1';
+    return true;
+  }
+
+  // ============================================================
   // [LUX-AUTH-006] LOGIN SERVER-SIDE — ÚNICO CAMINHO NO DEVELOP
   // ============================================================
   // A função legada fetchUsersFromSupabase() continua fisicamente em script.js
@@ -145,15 +250,15 @@
         throw new Error('auth_backend_invalid_response');
       }
 
-      // Compatibilidade temporária: algumas Edge Functions ainda autenticam com a
-      // senha digitada. Esta senha vem do próprio formulário/localStorage; NÃO é
-      // a senha do banco retornada pelo servidor.
+      // Compatibilidade temporária: Edge Functions antigas ainda validam com a
+      // senha digitada. Ela existe apenas na memória/sessionStorage desta aba e
+      // nunca mais fica persistida em localStorage.
       return [{ ...data.account, senha: password }];
     };
 
     window.fetchUsersFromSupabase.__luxBackendAuth = true;
-    window.__luxBackendAuthInstalled = '20260914-auth-backend3';
-    window.LuxBackendAuth = { version: '20260914-auth-backend3', mode: 'backend-only' };
+    window.__luxBackendAuthInstalled = '20260914-auth-backend4';
+    window.LuxBackendAuth = { version: '20260914-auth-backend4', mode: 'backend-only-session-password' };
 
     console.info('[Lux Play] Login backend-only instalado.');
     return true;
@@ -252,8 +357,17 @@
   });
 
   const start = () => {
+    installEphemeralPasswordStorage();
+    installSessionLoginBridge();
     installBackendAuthBridge();
     applyVersionEverywhere();
+
+    // Se a aba foi reaberta e não existe mais a senha efêmera, mantemos somente o
+    // usuário preenchido para facilitar um novo login manual.
+    const authUser = localStorage.getItem(LOCAL_USER_KEY) || '';
+    const authEmail = document.getElementById('authEmail');
+    if (authUser && authEmail && !authEmail.value) authEmail.value = authUser;
+
     loadRuntimeStabilityFix();
     loadStreamSessionGuard();
     loadAccountUiPolish();
@@ -273,7 +387,12 @@
     window.__luxAppVersion = APP_VERSION;
   };
 
+  // Instala antes do DOMContentLoaded para impedir que o fluxo legado persista a
+  // senha durante o login automático/manual.
+  installEphemeralPasswordStorage();
+  installSessionLoginBridge();
   installBackendAuthBridge();
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
