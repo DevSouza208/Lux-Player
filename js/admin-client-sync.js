@@ -213,3 +213,25 @@
     setTimeout(loadProviderLayer, 800);
   }
 })();
+
+// [LUX-IPTV-039] Não segura o splash/login enquanto M3Us externas são baixadas.
+(() => {
+  const loadNonBlockingLayer = () => {
+    if (document.querySelector('script[data-lux-secondary-background-loader]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/secondary-background-loader.js?v=20260914-secondary-background-1';
+    script.async = true;
+    script.setAttribute('data-lux-secondary-background-loader', '1');
+    document.head.appendChild(script);
+  };
+
+  const providerScript = document.querySelector('script[data-lux-provider-content-sources]');
+  if (window.LuxProviderSources) {
+    loadNonBlockingLayer();
+  } else if (providerScript) {
+    providerScript.addEventListener('load', loadNonBlockingLayer, { once: true });
+    setTimeout(loadNonBlockingLayer, 3500);
+  } else {
+    setTimeout(loadNonBlockingLayer, 1200);
+  }
+})();
