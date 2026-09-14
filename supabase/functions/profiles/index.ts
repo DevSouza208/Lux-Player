@@ -13,10 +13,7 @@ Deno.serve(async (request: Request) => {
     if(!body || typeof body.username !== 'string' || typeof body.password !== 'string' || !body.username || !body.password) return json({error:'Login necessário.'},401);
     const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
 
-    const {data:account,error:authError}=await db.rpc('lux_auth_resolve',{
-      p_username:body.username,
-      p_credential:body.password
-    });
+    const {data:account,error:authError}=await db.rpc('lux_auth_resolve',{p_username:body.username,p_credential:body.password});
     if(authError) throw authError;
     if(!account) return json({error:'Credencial inválida ou sessão expirada.'},401);
 
@@ -44,8 +41,12 @@ Deno.serve(async (request: Request) => {
       const {error}=await db.rpc('save_account_profile',{p_user:account.usuario,p_name:body.name.trim(),p_child:body.is_child,p_slot:body.slot??null,p_avatar:avatar,p_protected:body.password_protected});
       if(error) return json({error:'Não foi possível salvar. Confira o limite de 4 perfis e tente novamente.'},409);
     } else if(body.action==='delete') {
-      // A confirmação compara com a credencial atual (senha ou token da sessão).
-      if(![1,2,3,4].includes(body.slot) || typeof body.data_key!=='string' || body.confirmPassword!==body.password) return json({error:'Confirme a credencial da conta para excluir.'},400);
+      if(![1,2,3,4].includes(body.slot) || typeof body.data_key!=='string' || typeof body.confirmPassword!=='string' || !body.confirmPassword) return json({error:'Confirme a senha de login para excluir.'},400);
+      // [LUX-AUTH-007] Excluir perfil continua exigindo a SENHA digitada agora.
+      // O token autentica a sessão, mas não substitui esta confirmação sensível.
+      const {data:confirmation,error:confirmationError}=await db.from('usuarios').select('usuario').ilike('usuario',String(account.usuario)).eq('senha',body.confirmPassword).maybeSingle();
+      if(confirmationError)throw confirmationError;
+      if(!confirmation)return json({error:'Senha de confirmação incorreta.'},403);
       const {error}=await db.rpc('delete_account_profile',{p_user:account.usuario,p_slot:body.slot,p_data_key:body.data_key});
       if(error)return json({error:'Não foi possível excluir. Mantenha pelo menos um perfil e atualize a lista antes de tentar novamente.'},409);
     } else if(body.action!=='list') return json({error:'Ação inválida.'},400);
