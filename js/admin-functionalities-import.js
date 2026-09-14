@@ -8,18 +8,20 @@
   // Complemento do dashboard de Funcionalidades.
   //
   // Objetivo:
-  // - permitir a migração inicial dos CSVs MAIN/DEVELOP para o Supabase;
-  // - permitir baixar um snapshot CSV da branch exibida;
-  // - manter a gravação atrás da Edge Function functional-map, que revalida
-  //   usuário/senha e exige cargo=admin;
-  // - garantir que a lista e o painel de detalhes possam rolar dentro do modal
-  //   sem fazer o Painel Admin inteiro crescer além do limite da tela.
+  // - permitir importar/exportar os CSVs MAIN/DEVELOP no Supabase;
+  // - manter a gravação atrás da Edge Function functional-map;
+  // - manter cabeçalho, filtros e botões parados enquanto SOMENTE a área
+  //   inferior (lista + detalhes) possui rolagem própria.
   //
   // Este arquivo NÃO acessa functional_map_csv diretamente e não usa service role.
   // ============================================================
 
   if (window.__luxAdminFunctionalitiesImportInstalled) return;
-  window.__luxAdminFunctionalitiesImportInstalled = '20260914-functional-import2';
+  window.__luxAdminFunctionalitiesImportInstalled = '20260914-functional-import3';
+
+  let layoutObserver = null;
+  let modalObserver = null;
+  let resizeBound = false;
 
   const getClient = () => {
     try { return typeof supabaseClient !== 'undefined' ? supabaseClient : null; }
@@ -86,6 +88,7 @@
       await invoke('put', branch, { csv });
       setStatus(`${branch.toUpperCase()} importado com sucesso.`);
       await window.LuxFunctionalities?.loadBranch?.(branch, true);
+      scheduleFunctionalLayout();
     } catch (error) {
       console.warn('[Lux Play] Falha ao importar mapa funcional.', error);
       setStatus(error?.message || 'Não foi possível importar o CSV.', true);
@@ -117,26 +120,38 @@
   }
 
   // [LUX-ADMIN-014]
-  // O modal Admin usa flex + max-height + overflow-hidden. Dentro dele, o dashboard
-  // usa outro flex e um grid. Em CSS Grid/Flex, filhos têm min-height:auto por padrão;
-  // isso pode impedir o item de encolher e, consequentemente, o overflow-y:auto nunca
-  // recebe uma área menor para rolar. Forçamos min-height:0 em toda a cadeia até os
-  // dois painéis roláveis. Assim somente a lista/detalhes rolam, sem mover cabeçalho,
-  // filtros ou botões de importação.
-  function ensureFunctionalScroll() {
+  // O painel Admin possui altura máxima e overflow-hidden. Portanto não basta colocar
+  // overflow-y:auto na lista: é preciso dar à área inferior uma altura REAL menor do
+  // que seu conteúdo. Calculamos quanto espaço existe entre o início da lista e o
+  // fundo do card do Admin. Essa área vira o viewport rolável.
+  function sizeFunctionalViewport() {
     const panel = document.getElementById('adminTabFunctionalities');
     const rows = document.getElementById('functionalRows');
     const detail = document.getElementById('functionalDetail');
     const body = rows?.parentElement || null;
-    const root = body?.parentElement || panel?.firstElementChild || null;
-    if (!panel || !root || !body || !rows || !detail) return false;
+    const modal = document.getElementById('adminModal');
+    const adminCard = modal?.firstElementChild || null;
+    if (!panel || !rows || !detail || !body || !adminCard) return false;
 
-    panel.classList.add('min-h-0', 'overflow-hidden');
-    root.classList.add('min-h-0', 'overflow-hidden');
-    body.classList.add('min-h-0', 'overflow-hidden');
+    // Quando o modal está fechado os retângulos podem vir zerados. Nesse caso não
+    // congelamos uma altura errada; a MutationObserver recalcula assim que abrir.
+    if (modal.classList.contains('hidden')) return false;
+
+    const cardRect = adminCard.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    if (!cardRect.height || !bodyRect.top) return false;
+
+    const bottomGap = 18;
+    const available = Math.max(180, Math.floor(cardRect.bottom - bodyRect.top - bottomGap));
+
+    body.style.height = `${available}px`;
+    body.style.maxHeight = `${available}px`;
+    body.style.minHeight = '180px';
+    body.style.overflow = 'hidden';
 
     [rows, detail].forEach(element => {
-      element.classList.add('min-h-0', 'overflow-y-auto', 'overscroll-contain');
+      element.style.height = '100%';
+      element.style.maxHeight = '100%';
       element.style.minHeight = '0';
       element.style.overflowY = 'auto';
       element.style.overscrollBehavior = 'contain';
@@ -144,6 +159,54 @@
       element.style.webkitOverflowScrolling = 'touch';
     });
 
+    return true;
+  }
+
+  function scheduleFunctionalLayout() {
+    requestAnimationFrame(() => requestAnimationFrame(sizeFunctionalViewport));
+  }
+
+  function ensureFunctionalScroll() {
+    const panel = document.getElementById('adminTabFunctionalities');
+    const rows = document.getElementById('functionalRows');
+    const detail = document.getElementById('functionalDetail');
+    const body = rows?.parentElement || null;
+    const root = body?.parentElement || panel?.firstElementChild || null;
+    const modal = document.getElementById('adminModal');
+    const adminCard = modal?.firstElementChild || null;
+    if (!panel || !root || !body || !rows || !detail || !modal || !adminCard) return false;
+
+    panel.classList.add('min-h-0', 'overflow-hidden');
+    root.classList.add('min-h-0', 'overflow-hidden');
+    body.classList.add('min-h-0', 'overflow-hidden');
+    rows.classList.add('min-h-0', 'overflow-y-auto', 'overscroll-contain');
+    detail.classList.add('min-h-0', 'overflow-y-auto', 'overscroll-contain');
+
+    if (!resizeBound) {
+      resizeBound = true;
+      window.addEventListener('resize', scheduleFunctionalLayout, { passive: true });
+    }
+
+    if (!modalObserver) {
+      modalObserver = new MutationObserver(() => {
+        if (!modal.classList.contains('hidden')) scheduleFunctionalLayout();
+      });
+      modalObserver.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    if (!layoutObserver && typeof ResizeObserver !== 'undefined') {
+      layoutObserver = new ResizeObserver(scheduleFunctionalLayout);
+      layoutObserver.observe(adminCard);
+      layoutObserver.observe(panel);
+    }
+
+    const tab = document.querySelector('[data-admin-tab="functionalities"]');
+    if (tab && tab.dataset.luxScrollLayout !== '1') {
+      tab.dataset.luxScrollLayout = '1';
+      tab.addEventListener('click', scheduleFunctionalLayout);
+    }
+
+    scheduleFunctionalLayout();
     return true;
   }
 
@@ -185,7 +248,8 @@
   function install() {
     const scrollReady = ensureFunctionalScroll();
     const buttonsReady = installButtons();
-    return scrollReady && (buttonsReady || document.getElementById('functionalSearch')?.parentElement?.dataset?.luxFunctionalImport === '1');
+    const buttonsInstalled = document.getElementById('functionalSearch')?.parentElement?.dataset?.luxFunctionalImport === '1';
+    return scrollReady && (buttonsReady || buttonsInstalled);
   }
 
   let attempts = 0;
@@ -193,5 +257,6 @@
     attempts += 1;
     if (install() || attempts >= 120) clearInterval(timer);
   }, 100);
+
   install();
 })();
