@@ -191,3 +191,25 @@
   script.setAttribute('data-lux-secondary-locale-approval', '1');
   document.head.appendChild(script);
 })();
+
+// [LUX-IPTV-038] Providers ficam entre a lista principal e as M3Us secundárias.
+(() => {
+  const loadProviderLayer = () => {
+    if (window.LuxProviderSources || document.querySelector('script[data-lux-provider-content-sources]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/provider-content-sources.js?v=20260914-provider-layer-1';
+    script.async = true;
+    script.setAttribute('data-lux-provider-content-sources', '1');
+    document.head.appendChild(script);
+  };
+
+  const secondaryScript = document.querySelector('script[data-lux-secondary-content-sources]');
+  if (window.LuxSecondarySources) {
+    loadProviderLayer();
+  } else if (secondaryScript) {
+    secondaryScript.addEventListener('load', loadProviderLayer, { once: true });
+    setTimeout(loadProviderLayer, 3000);
+  } else {
+    setTimeout(loadProviderLayer, 800);
+  }
+})();
