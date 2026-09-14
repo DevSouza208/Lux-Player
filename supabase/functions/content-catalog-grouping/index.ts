@@ -7,7 +7,7 @@ const cors = {
   'Cache-Control': 'no-store'
 };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: cors });
-const GROUPING_VERSION = 'tmdb-v1';
+const GROUPING_VERSION = 'tmdb-v2';
 const TMDB_FALLBACK_KEY = '3fd2be6f0c70a2a598f084ddfb75487c';
 
 function cleanText(value: unknown, max = 500) {
@@ -22,6 +22,15 @@ function normalize(value: unknown) {
     .replace(/&/g, ' e ')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tmdbSearchTitle(value: unknown) {
+  return cleanText(value, 300)
+    .replace(/^\s*\d{1,3}\s*[xX]\s*\d{1,4}(?:\s*[\/-]\s*\d{1,4})?[A-Za-z]{0,3}\s+/i, '')
+    .replace(/^\s*S\s*\d{1,3}\s*E\s*\d{1,4}(?:\s*[\/-]\s*E?\s*\d{1,4})?[A-Za-z]{0,3}\s+/i, '')
+    .replace(/^\s*T\s*\d{1,3}\s*E\s*\d{1,4}(?:\s*[\/-]\s*E?\s*\d{1,4})?[A-Za-z]{0,3}\s+/i, '')
+    .replace(/\s*[:|]\s*.+$/, '')
     .trim();
 }
 
@@ -150,19 +159,20 @@ function chooseSearchResult(title: string, year: number | null, results: any[]) 
 
 async function classifyOne(db: any, row: any, categories: string[]) {
   const now = new Date().toISOString();
+  const searchTitle = tmdbSearchTitle(row?.canonical_title) || cleanText(row?.canonical_title, 300);
   let details: any = null;
   let tmdbId = Number(row?.tmdb_id) || 0;
   let confidence = 0;
 
   try {
     if (!tmdbId) {
-      const query = encodeURIComponent(cleanText(row?.canonical_title, 300));
+      const query = encodeURIComponent(searchTitle);
       const yearPart = row?.year ? `&first_air_date_year=${encodeURIComponent(String(row.year))}` : '';
       const search = await tmdbFetch(`/search/tv?include_adult=false&query=${query}${yearPart}`);
-      let picked = chooseSearchResult(row?.canonical_title || '', row?.year || null, search?.results || []);
+      let picked = chooseSearchResult(searchTitle, row?.year || null, search?.results || []);
       if (!picked.result && yearPart) {
         const retry = await tmdbFetch(`/search/tv?include_adult=false&query=${query}`);
-        picked = chooseSearchResult(row?.canonical_title || '', row?.year || null, retry?.results || []);
+        picked = chooseSearchResult(searchTitle, row?.year || null, retry?.results || []);
       }
       tmdbId = Number(picked?.result?.id) || 0;
       confidence = Number(picked?.score || 0);
@@ -186,6 +196,7 @@ async function classifyOne(db: any, row: any, categories: string[]) {
     grouping_source: details ? 'tmdb' : 'fallback',
     grouping_updated_at: now,
     grouping_confidence: Math.round(confidence * 100),
+    tmdb_search_title: searchTitle,
     tmdb_genres: genres,
     tmdb_networks: networks,
     imdb_id: imdbId
@@ -196,7 +207,7 @@ async function classifyOne(db: any, row: any, categories: string[]) {
   if (poster) update.poster = poster;
   const { error } = await db.from('lux_catalog_titles').update(update).eq('id', row.id);
   if (error) throw error;
-  return { id: row.id, title: row.canonical_title, group, tmdb_id: tmdbId || null, imdb_id: imdbId || null, matched: Boolean(details) };
+  return { id: row.id, title: row.canonical_title, search_title: searchTitle, group, tmdb_id: tmdbId || null, imdb_id: imdbId || null, matched: Boolean(details) };
 }
 
 async function runPool<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>) {
