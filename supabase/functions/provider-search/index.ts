@@ -32,6 +32,23 @@ function absoluteUrl(base: string, value: string) {
   try { return new URL(value, base).toString(); } catch { return ''; }
 }
 
+function normalizeTitle(value: string) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function detectVariant(title: string, url = '') {
+  const text = `${title} ${url}`.toLowerCase();
+  if (/\bdublad[oa]\b|\/anime-dublado\//i.test(text)) return 'dub';
+  if (/\blegendad[oa]\b|\bsub\b/i.test(text)) return 'sub';
+  return 'default';
+}
+
 async function fetchHtml(url: string, referer: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
@@ -55,10 +72,17 @@ async function fetchHtml(url: string, referer: string) {
   }
 }
 
-async function searchDattebayo(query: string, page: number) {
+function assertProviderUrl(provider: string, value: string) {
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { throw new Error('URL do provider inválida.'); }
+  const host = parsed.hostname.toLowerCase();
+  if (provider === 'dattebayobr' && !/(^|\.)dattebayo-br\.com$/.test(host)) throw new Error('URL não pertence ao Dattebayo BR.');
+  if (provider === 'animefire' && !/(^|\.)animefire\.io$/.test(host)) throw new Error('URL não pertence ao Anime Fire.');
+  return parsed.toString();
+}
+
+function parseDattebayoCards(html: string) {
   const base = 'https://www.dattebayo-br.com';
-  const url = `${base}/busca?busca=${encodeURIComponent(query)}&page=${page}`;
-  const html = await fetchHtml(url, base);
   const $ = load(html);
   const results: any[] = [];
   $('div.ultimosAnimesHomeItem').each((_, element) => {
@@ -69,9 +93,12 @@ async function searchDattebayo(query: string, page: number) {
     const img = root.find('.ultimosAnimesHomeItemImg img').first();
     const poster = absoluteUrl(base, img.attr('data-src') || img.attr('src') || '');
     if (!title || !href) return;
-    results.push({ provider: 'dattebayobr', providerName: 'Dattebayo BR', lang: 'pt-BR', type: 'series', title, url: href, poster });
+    results.push({
+      provider: 'dattebayobr', providerName: 'Dattebayo BR', lang: 'pt-BR', type: 'series',
+      title, url: href, poster, variant: detectVariant(title, href)
+    });
   });
-  return results.slice(0, 40);
+  return results;
 }
 
 function animeFireSeriesUrl(rawUrl: string) {
@@ -89,11 +116,8 @@ function animeFireSeriesUrl(rawUrl: string) {
   }
 }
 
-async function searchAnimeFire(query: string, page: number) {
+function parseAnimeFireCards(html: string) {
   const base = 'https://animefire.io';
-  const slug = query.trim().toLowerCase().replace(/\s+/g, '-');
-  const url = `${base}/pesquisar/${encodeURIComponent(slug)}/${page}`;
-  const html = await fetchHtml(url, base);
   const $ = load(html);
   const results: any[] = [];
   $('article.cardUltimosEps > a').each((_, element) => {
@@ -103,15 +127,121 @@ async function searchAnimeFire(query: string, page: number) {
     const img = anchor.find('img').first();
     const poster = absoluteUrl(base, img.attr('data-src') || img.attr('src') || '');
     if (!title || !href) return;
-    results.push({ provider: 'animefire', providerName: 'Anime Fire', lang: 'pt-BR', type: 'series', title, url: href, poster });
+    results.push({
+      provider: 'animefire', providerName: 'Anime Fire', lang: 'pt-BR', type: 'series',
+      title, url: href, poster, variant: detectVariant(title, href)
+    });
   });
-  return results.slice(0, 40);
+  return results;
+}
+
+async function searchDattebayo(query: string, page: number) {
+  const base = 'https://www.dattebayo-br.com';
+  const html = await fetchHtml(`${base}/busca?busca=${encodeURIComponent(query)}&page=${page}`, base);
+  return parseDattebayoCards(html).slice(0, 40);
+}
+
+async function searchAnimeFire(query: string, page: number) {
+  const base = 'https://animefire.io';
+  const slug = query.trim().toLowerCase().replace(/\s+/g, '-');
+  const html = await fetchHtml(`${base}/pesquisar/${encodeURIComponent(slug)}/${page}`, base);
+  return parseAnimeFireCards(html).slice(0, 40);
+}
+
+async function catalogDattebayo() {
+  const base = 'https://www.dattebayo-br.com';
+  const html = await fetchHtml(base, base);
+  return parseDattebayoCards(html).slice(0, 80);
+}
+
+async function catalogAnimeFire() {
+  const base = 'https://animefire.io';
+  const pages = [1, 2, 3];
+  const settled = await Promise.allSettled(pages.map(page => fetchHtml(`${base}/top-animes/${page}`, base)));
+  const items: any[] = [];
+  settled.forEach(row => {
+    if (row.status === 'fulfilled') items.push(...parseAnimeFireCards(row.value));
+  });
+  return items.slice(0, 120);
+}
+
+function episodeNumberFromText(value: string, fallback: number) {
+  const normalized = String(value || '').replace(',', '.');
+  const match = normalized.match(/(?:epis[oó]dio\s*)?(\d+(?:\.\d+)?)/i);
+  return match ? Number(match[1]) : fallback;
+}
+
+async function episodesDattebayo(rawUrl: string) {
+  const base = 'https://www.dattebayo-br.com';
+  const seriesUrl = assertProviderUrl('dattebayobr', rawUrl).replace(/\/$/, '');
+  const items: any[] = [];
+  const seen = new Set<string>();
+
+  for (let page = 1; page <= 8 && items.length < 300; page++) {
+    const pageUrl = page === 1 ? seriesUrl : `${seriesUrl}/page/${page}`;
+    const html = await fetchHtml(pageUrl, base);
+    const $ = load(html);
+    const rows = $('div.ultimosEpisodiosHomeItem');
+    if (!rows.length) break;
+    let added = 0;
+    rows.each((index, element) => {
+      const root = $(element);
+      const anchor = root.find('a').first();
+      const href = absoluteUrl(base, anchor.attr('href') || '');
+      if (!href || seen.has(href)) return;
+      const rawNumber = cleanText(root.find('.ultimosEpisodiosHomeItemInfosNum').first().text(), 80).replace(/epis[oó]dio/i, '').trim();
+      const title = cleanText(root.find('.ultimosEpisodiosHomeItemInfosNome').first().text(), 300) || `Episódio ${rawNumber || items.length + 1}`;
+      const episode = episodeNumberFromText(rawNumber || title, items.length + index + 1);
+      seen.add(href);
+      items.push({ id: `dattebayobr:${encodeURIComponent(href)}`, episode, episode_num: episode, title, pageUrl: href, provider: 'dattebayobr', providerName: 'Dattebayo BR' });
+      added++;
+    });
+    if (!added) break;
+  }
+
+  return items.sort((a, b) => Number(a.episode || 0) - Number(b.episode || 0));
+}
+
+async function episodesAnimeFire(rawUrl: string) {
+  const base = 'https://animefire.io';
+  const seriesUrl = assertProviderUrl('animefire', rawUrl);
+  const html = await fetchHtml(seriesUrl, base);
+  const $ = load(html);
+  const items: any[] = [];
+  $('div.div_video_list > a').each((index, element) => {
+    const anchor = $(element);
+    const href = absoluteUrl(base, anchor.attr('href') || '');
+    if (!href) return;
+    const text = cleanText(anchor.text(), 300);
+    const lastPath = (() => { try { return new URL(href).pathname.split('/').filter(Boolean).pop() || ''; } catch { return ''; } })();
+    const episode = Number(lastPath) || episodeNumberFromText(text, index + 1);
+    items.push({ id: `animefire:${encodeURIComponent(href)}`, episode, episode_num: episode, title: text || `Episódio ${episode}`, pageUrl: href, provider: 'animefire', providerName: 'Anime Fire' });
+  });
+  return items.sort((a, b) => Number(a.episode || 0) - Number(b.episode || 0));
 }
 
 const SEARCHERS: Record<string, (query: string, page: number) => Promise<any[]>> = {
   dattebayobr: searchDattebayo,
   animefire: searchAnimeFire
 };
+const CATALOGS: Record<string, () => Promise<any[]>> = {
+  dattebayobr: catalogDattebayo,
+  animefire: catalogAnimeFire
+};
+const EPISODES: Record<string, (url: string) => Promise<any[]>> = {
+  dattebayobr: episodesDattebayo,
+  animefire: episodesAnimeFire
+};
+
+function dedupe(items: any[]) {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const key = `${item.provider}|${normalizeTitle(item.title)}|${item.variant || 'default'}|${item.url || item.pageUrl || ''}`;
+    if (!normalizeTitle(item.title) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
@@ -130,36 +260,49 @@ Deno.serve(async (request: Request) => {
     if (auth.error) return auth.error;
 
     const action = cleanText(body?.action, 30).toLowerCase();
-    if (action !== 'search') return json({ error: 'Ação inválida.' }, 400);
-
-    const query = cleanText(body?.query, 120);
-    if (query.length < 2) return json({ error: 'Digite pelo menos 2 caracteres.' }, 400);
-    const page = Math.min(10, Math.max(1, Number(body?.page) || 1));
     const provider = cleanText(body?.provider || 'all', 40).toLowerCase();
-    const targets = provider === 'all' ? Object.keys(SEARCHERS) : [provider];
-    if (targets.some(id => !SEARCHERS[id])) return json({ error: 'Provider ainda não suportado pelo mecanismo de busca.' }, 400);
 
-    const settled = await Promise.allSettled(targets.map(async id => ({ id, items: await SEARCHERS[id](query, page) })));
-    const results: any[] = [];
-    const failures: { provider: string; error: string }[] = [];
-    settled.forEach((row, index) => {
-      if (row.status === 'fulfilled') results.push(...row.value.items);
-      else failures.push({ provider: targets[index] || 'desconhecido', error: row.reason?.message || 'Falha na consulta.' });
-    });
+    if (action === 'search') {
+      const query = cleanText(body?.query, 120);
+      if (query.length < 2) return json({ error: 'Digite pelo menos 2 caracteres.' }, 400);
+      const page = Math.min(10, Math.max(1, Number(body?.page) || 1));
+      const targets = provider === 'all' ? Object.keys(SEARCHERS) : [provider];
+      if (targets.some(id => !SEARCHERS[id])) return json({ error: 'Provider ainda não suportado pelo mecanismo de busca.' }, 400);
+      const settled = await Promise.allSettled(targets.map(async id => ({ id, items: await SEARCHERS[id](query, page) })));
+      const results: any[] = [];
+      const failures: { provider: string; error: string }[] = [];
+      settled.forEach((row, index) => {
+        if (row.status === 'fulfilled') results.push(...row.value.items);
+        else failures.push({ provider: targets[index] || 'desconhecido', error: row.reason?.message || 'Falha na consulta.' });
+      });
+      return json({ query, page, provider, results: dedupe(results), failures, supported: Object.keys(SEARCHERS) });
+    }
 
-    const seen = new Set<string>();
-    const deduped = results.filter(item => {
-      const normalized = String(item.title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-      const key = `${item.provider}|${normalized}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    if (action === 'catalog') {
+      const targets = provider === 'all' ? Object.keys(CATALOGS) : [provider];
+      if (targets.some(id => !CATALOGS[id])) return json({ error: 'Provider ainda não suportado pelo catálogo.' }, 400);
+      const settled = await Promise.allSettled(targets.map(async id => ({ id, items: await CATALOGS[id]() })));
+      const results: any[] = [];
+      const failures: { provider: string; error: string }[] = [];
+      settled.forEach((row, index) => {
+        if (row.status === 'fulfilled') results.push(...row.value.items);
+        else failures.push({ provider: targets[index] || 'desconhecido', error: row.reason?.message || 'Falha no catálogo.' });
+      });
+      return json({ provider, results: dedupe(results), failures, supported: Object.keys(CATALOGS) });
+    }
 
-    return json({ query, page, provider, results: deduped, failures, supported: Object.keys(SEARCHERS) });
+    if (action === 'episodes') {
+      if (!EPISODES[provider]) return json({ error: 'Provider ainda não suportado para episódios.' }, 400);
+      const url = cleanText(body?.url, 4000);
+      if (!url) return json({ error: 'Anime não informado.' }, 400);
+      const episodes = await EPISODES[provider](url);
+      return json({ provider, url, episodes, count: episodes.length });
+    }
+
+    return json({ error: 'Ação inválida.' }, 400);
   } catch (error: any) {
     console.error('provider-search:', error);
-    const message = error?.name === 'AbortError' ? 'O provider demorou demais para responder.' : (error?.message || 'Falha ao pesquisar providers.');
+    const message = error?.name === 'AbortError' ? 'O provider demorou demais para responder.' : (error?.message || 'Falha ao consultar providers.');
     return json({ error: message }, 500);
   }
 });
