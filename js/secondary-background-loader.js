@@ -1,9 +1,18 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-secondary-background-3';
+  const VERSION = '20260914-secondary-background-4';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
+
+  function loadGroupingModule() {
+    if (window.__luxSecondaryGroupingInstalled || document.querySelector('script[data-lux-secondary-grouping]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/secondary-grouping.js?v=20260914-1';
+    script.async = true;
+    script.dataset.luxSecondaryGrouping = '1';
+    document.head.appendChild(script);
+  }
 
   function unwrapLoadFunction(fn) {
     let current = fn;
@@ -141,10 +150,12 @@
   // depois deste arquivo. Reaplicamos a proteção por alguns segundos para garantir
   // que a camada mais externa continue não bloqueante antes e depois do login.
   let attempts = 0;
+  loadGroupingModule();
   install();
   installModalGuard();
   const timer = setInterval(() => {
     attempts += 1;
+    loadGroupingModule();
     install();
     installModalGuard();
     const modal = document.getElementById('luxCanonicalSyncModal');
