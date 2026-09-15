@@ -41,32 +41,62 @@ async function resolveAccount(db: any, body: any, adminOnly = false) {
   return { account, username };
 }
 
+function previewScore(row: any) {
+  const url = String(row?.url || row?.locator || '');
+  let score = 0;
+  if (/^https:/i.test(url)) score += 30;
+  if (/\.(mp4|m4v|webm)(?:$|[?#])/i.test(url)) score += 20;
+  if (/\.m3u8?(?:$|[?#])/i.test(url)) score += 15;
+  if (/blogger\.com\/video-play\.mp4/i.test(url)) score += 18;
+  const season = Number(row?.episode?.season) || 999;
+  const episode = Number(row?.episode?.episode) || 9999;
+  score += Math.max(0, 12 - Math.min(12, season - 1));
+  score += Math.max(0, 10 - Math.min(10, episode - 1));
+  return score;
+}
+
+function mapSample(row: any, review: any) {
+  const episode = row?.episode || {};
+  return {
+    url: String(row?.url || row?.locator || ''),
+    title: clean(review?.incoming_title || row?.metadata?.group, 300) || 'Amostra',
+    group: clean(review?.incoming_group || row?.metadata?.group, 300),
+    source_name: clean(review?.source_name || row?.source_name, 120),
+    season: Number(episode?.season) || null,
+    episode: Number(episode?.episode) || null,
+    episode_title: clean(episode?.episode_title || row?.metadata?.original_title, 300),
+    original_title: clean(row?.metadata?.original_title, 300),
+    locator_type: clean(row?.locator_type, 40)
+  };
+}
+
 async function buildPreview(db: any, review: any) {
   const sourceId = clean(review?.source_id, 80);
   const incomingGroup = clean(review?.incoming_group, 300);
   const incomingTitle = clean(review?.incoming_title, 300);
   if (!sourceId) throw new Error('A revisão não possui uma fonte associada.');
 
+  const selection = 'url,locator,locator_type,source_name,metadata,episode:lux_catalog_episodes(season,episode,episode_title)';
   let query = db
     .from('lux_catalog_sources')
-    .select('url,locator,locator_type,source_name,metadata,episode:lux_catalog_episodes(season,episode,episode_title)')
+    .select(selection)
     .eq('source_layer', 'secondary')
     .eq('source_id', sourceId)
     .eq('available', true);
 
   if (incomingGroup) query = query.contains('metadata', { group: incomingGroup });
-  let { data, error } = await query.limit(80);
+  let { data, error } = await query.limit(120);
   if (error) throw error;
 
   let candidates = Array.isArray(data) ? data : [];
   if (!candidates.length) {
     const fallback = await db
       .from('lux_catalog_sources')
-      .select('url,locator,locator_type,source_name,metadata,episode:lux_catalog_episodes(season,episode,episode_title)')
+      .select(selection)
       .eq('source_layer', 'secondary')
       .eq('source_id', sourceId)
       .eq('available', true)
-      .limit(800);
+      .limit(1400);
     if (fallback.error) throw fallback.error;
     const titleKey = normalize(incomingTitle);
     const groupKey = normalize(incomingGroup);
@@ -80,33 +110,24 @@ async function buildPreview(db: any, review: any) {
     });
   }
 
-  candidates = candidates.filter((row: any) => /^https?:\/\//i.test(String(row?.url || row?.locator || '')));
+  const seen = new Set<string>();
+  candidates = candidates
+    .filter((row: any) => /^https?:\/\//i.test(String(row?.url || row?.locator || '')))
+    .sort((a: any, b: any) => previewScore(b) - previewScore(a))
+    .filter((row: any) => {
+      const url = String(row?.url || row?.locator || '');
+      if (!url || seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    });
+
   if (!candidates.length) throw new Error('Nenhum episódio reproduzível foi encontrado para esta revisão.');
 
-  candidates.sort((a: any, b: any) => {
-    const ae = a?.episode || {};
-    const be = b?.episode || {};
-    const seasonDelta = (Number(ae.season) || 999) - (Number(be.season) || 999);
-    if (seasonDelta) return seasonDelta;
-    const episodeDelta = (Number(ae.episode) || 9999) - (Number(be.episode) || 9999);
-    if (episodeDelta) return episodeDelta;
-    const aHttps = /^https:/i.test(String(a?.url || a?.locator || '')) ? 0 : 1;
-    const bHttps = /^https:/i.test(String(b?.url || b?.locator || '')) ? 0 : 1;
-    return aHttps - bHttps;
-  });
-
-  const sample = candidates[0];
-  const episode = sample?.episode || {};
+  const samples = candidates.slice(0, 8).map((row: any) => mapSample(row, review));
   return {
-    url: String(sample?.url || sample?.locator || ''),
-    title: incomingTitle || clean(sample?.metadata?.group, 300) || 'Amostra',
-    group: incomingGroup || clean(sample?.metadata?.group, 300),
-    source_name: clean(review?.source_name || sample?.source_name, 120),
-    season: Number(episode?.season) || null,
-    episode: Number(episode?.episode) || null,
-    episode_title: clean(episode?.episode_title || sample?.metadata?.original_title, 300),
-    original_title: clean(sample?.metadata?.original_title, 300),
-    locator_type: clean(sample?.locator_type, 40)
+    ...samples[0],
+    samples,
+    sample_count: samples.length
   };
 }
 
