@@ -191,12 +191,12 @@
 
     catalogButton.textContent = 'Atualizar catálogo';
     catalogButton.className = 'min-w-[190px] bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2.5 px-5 rounded-xl text-xs transition-all disabled:opacity-50';
-    actions.appendChild(catalogButton);
+    if (catalogButton.parentElement !== actions) actions.appendChild(catalogButton);
 
     const catalogStatus = document.getElementById('adminPlaylistCatalogSyncStatus');
     if (catalogStatus) {
       catalogStatus.className = 'max-w-[260px] min-h-[18px] text-[11px] text-purple-300';
-      actions.appendChild(catalogStatus);
+      if (catalogStatus.parentElement !== actions) actions.appendChild(catalogStatus);
     }
 
     const duplicateCategoryButton = document.getElementById('adminCategorySyncButton');
