@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-home-series-2026-2';
+  const VERSION = '20260915-home-series-2026-3';
   if (window.__luxHomeSeries2026 === VERSION) return;
   window.__luxHomeSeries2026 = VERSION;
 
@@ -9,6 +9,9 @@
   const MAX_ITEMS = 12;
   const MAX_PAGES = 6;
   const CACHE_MS = 15 * 60 * 1000;
+  const VISIBLE_SECTION_ID = 'homeSeries2026ContainerSection';
+  const VISIBLE_CONTAINER_ID = 'homeSeries2026Container';
+  const LEGACY_SECTION_ID = 'homeSeriesLancamentosContainerSection';
   const $ = id => document.getElementById(id);
 
   const normalize = value => String(value || '')
@@ -201,18 +204,34 @@
     return card;
   }
 
+  function hideLegacySeriesSection() {
+    const legacy = $(LEGACY_SECTION_ID);
+    if (!legacy) return;
+    legacy.style.display = 'none';
+    legacy.setAttribute('aria-hidden', 'true');
+    legacy.dataset.luxLegacySeriesRail = '1';
+  }
+
   function ensureSection() {
-    let container = $('homeSeriesLancamentosContainer');
-    if (container) return container;
     const movieContainer = $('homeLancamentosContainer');
     const movieSection = movieContainer?.closest('.space-y-3');
     if (!movieSection?.parentElement) return null;
-    const section = document.createElement('div');
-    section.id = 'homeSeriesLancamentosContainerSection';
-    section.className = 'space-y-3';
-    section.innerHTML = `<h3 class="text-sm font-bold text-white tracking-wide uppercase">SÉRIES | LANÇAMENTOS ${YEAR}</h3><div id="homeSeriesLancamentosContainer" class="flex gap-4 overflow-x-auto pb-2 min-h-[220px] items-center"></div>`;
-    movieSection.insertAdjacentElement('afterend', section);
-    return $('homeSeriesLancamentosContainer');
+
+    hideLegacySeriesSection();
+
+    let section = $(VISIBLE_SECTION_ID);
+    if (!section) {
+      section = document.createElement('div');
+      section.id = VISIBLE_SECTION_ID;
+      section.className = 'space-y-3';
+      section.innerHTML = `<h3 class="text-sm font-bold text-white tracking-wide uppercase">SÉRIES | LANÇAMENTOS ${YEAR}</h3><div id="${VISIBLE_CONTAINER_ID}" class="flex gap-4 overflow-x-auto pb-2 min-h-[220px] items-center"></div>`;
+    }
+
+    if (section.previousElementSibling !== movieSection) {
+      movieSection.insertAdjacentElement('afterend', section);
+    }
+
+    return $(VISIBLE_CONTAINER_ID);
   }
 
   async function render(force = false) {
@@ -289,7 +308,7 @@
       container.dataset.luxSeries2026Rendering = '0';
       try { lucide.createIcons(); } catch (_) {}
     })().finally(() => {
-      const container = $('homeSeriesLancamentosContainer');
+      const container = $(VISIBLE_CONTAINER_ID);
       if (container) container.dataset.luxSeries2026Rendering = '0';
       renderPromise = null;
     });
@@ -308,7 +327,8 @@
   function installObserver() {
     if (observer) return;
     observer = new MutationObserver(mutations => {
-      const container = $('homeSeriesLancamentosContainer');
+      hideLegacySeriesSection();
+      const container = ensureSection();
       if (!container || container.dataset.luxSeries2026Rendering === '1') return;
       const changedInside = mutations.some(mutation => mutation.target === container || container.contains(mutation.target));
       if (!changedInside) return;
@@ -334,11 +354,20 @@
       let attempts = 0;
       const timer = setInterval(() => {
         attempts += 1;
+        hideLegacySeriesSection();
         if (tryInitialRender() || attempts >= 120) clearInterval(timer);
       }, 250);
     }
-    $('navHome')?.addEventListener('click', () => queueRender(false));
-    $('bNavHome')?.addEventListener('click', () => queueRender(false));
+    $('navHome')?.addEventListener('click', () => {
+      hideLegacySeriesSection();
+      ensureSection();
+      queueRender(false);
+    });
+    $('bNavHome')?.addEventListener('click', () => {
+      hideLegacySeriesSection();
+      ensureSection();
+      queueRender(false);
+    });
   }
 
   window.LuxHomeSeries2026 = { render: () => render(true) };
