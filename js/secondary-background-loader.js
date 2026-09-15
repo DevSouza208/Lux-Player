@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-secondary-background-6';
+  const VERSION = '20260914-secondary-background-7';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
@@ -162,12 +162,72 @@
     window.__luxSecondaryModalObserver = observer;
   }
 
+  // Mantém as ações globais de catálogo no topo do painel e deixa VODs/R2
+  // somente com ações relacionadas a VOD/R2.
+  function relocateAdminSyncControls() {
+    const catalogButton = document.getElementById('adminPlaylistCatalogSyncButton');
+    if (!catalogButton) return false;
+
+    const adminRoot = document.getElementById('adminModal') || document.body;
+    const heading = [...adminRoot.querySelectorAll('h2,h3,h4,strong')]
+      .find(node => /sincroniza[cç][aã]o e categorias/i.test(String(node.textContent || '').trim()));
+    if (!heading) return false;
+
+    const card = heading.closest('section, .rounded-2xl, .rounded-xl') || heading.parentElement?.parentElement;
+    if (!card) return false;
+
+    const categoryButton = [...card.querySelectorAll('button')]
+      .find(button => /sincronizar categorias/i.test(String(button.textContent || '').trim()));
+    if (!categoryButton) return false;
+
+    let actions = card.querySelector('[data-lux-global-sync-actions]');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.dataset.luxGlobalSyncActions = '1';
+      actions.className = 'flex shrink-0 flex-col gap-2';
+      categoryButton.parentElement?.insertBefore(actions, categoryButton);
+      actions.appendChild(categoryButton);
+    }
+
+    catalogButton.textContent = 'Atualizar catálogo';
+    catalogButton.className = 'min-w-[190px] bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2.5 px-5 rounded-xl text-xs transition-all disabled:opacity-50';
+    actions.appendChild(catalogButton);
+
+    const catalogStatus = document.getElementById('adminPlaylistCatalogSyncStatus');
+    if (catalogStatus) {
+      catalogStatus.className = 'max-w-[260px] min-h-[18px] text-[11px] text-purple-300';
+      actions.appendChild(catalogStatus);
+    }
+
+    const duplicateCategoryButton = document.getElementById('adminCategorySyncButton');
+    if (duplicateCategoryButton && duplicateCategoryButton !== categoryButton) {
+      duplicateCategoryButton.classList.add('hidden');
+      duplicateCategoryButton.setAttribute('aria-hidden', 'true');
+    }
+
+    const duplicateCategoryStatus = document.getElementById('adminCategorySyncStatus');
+    if (duplicateCategoryStatus && !card.contains(duplicateCategoryStatus)) {
+      duplicateCategoryStatus.classList.add('hidden');
+    }
+
+    return true;
+  }
+
+  function installAdminSyncLayout() {
+    relocateAdminSyncControls();
+    if (window.__luxAdminSyncLayoutObserver) return;
+    const observer = new MutationObserver(() => relocateAdminSyncControls());
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    window.__luxAdminSyncLayoutObserver = observer;
+  }
+
   let attempts = 0;
   loadGroupingModule();
   loadLocalePreviewModule();
   loadUiFixesModule();
   install();
   installModalGuard();
+  installAdminSyncLayout();
   const timer = setInterval(() => {
     attempts += 1;
     loadGroupingModule();
@@ -175,6 +235,7 @@
     loadUiFixesModule();
     install();
     installModalGuard();
+    installAdminSyncLayout();
     const modal = document.getElementById('luxCanonicalSyncModal');
     if (modal?.querySelector('#luxSyncSecondary')) protectCanonicalSyncModal(modal);
     if (attempts >= 120) clearInterval(timer);
