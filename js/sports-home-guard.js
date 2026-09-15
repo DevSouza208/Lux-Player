@@ -1,10 +1,19 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260913-guide-fast2') return;
-  window.__luxSportsHomeGuardInstalled = '20260913-guide-fast2';
+  if (window.__luxSportsHomeGuardInstalled === '20260914-guide-fixes1') return;
+  window.__luxSportsHomeGuardInstalled = '20260914-guide-fixes1';
 
   let observer = null;
   let attempts = 0;
+
+  function loadGuideFixes() {
+    if (document.querySelector('script[data-lux-sports-guide-fixes]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/sports-guide-fixes.js?v=20260914-1';
+    script.async = true;
+    script.dataset.luxSportsGuideFixes = '1';
+    document.head.appendChild(script);
+  }
 
   function loadLogoDecorator() {
     if (document.querySelector('script[data-lux-sports-logos]')) return;
@@ -30,9 +39,11 @@
     return true;
   }
 
+  loadGuideFixes();
   loadLogoDecorator();
   const timer = setInterval(() => {
     attempts += 1;
+    loadGuideFixes();
     if (ensureOwner() || attempts >= 240) clearInterval(timer);
   }, 50);
   document.addEventListener('visibilitychange', () => {
