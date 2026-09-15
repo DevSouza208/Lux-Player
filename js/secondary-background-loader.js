@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-secondary-background-5';
+  const VERSION = '20260914-secondary-background-6';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
@@ -15,11 +15,20 @@
   }
 
   function loadLocalePreviewModule() {
-    if (window.__luxSecondaryLocalePreviewInstalled || document.querySelector('script[data-lux-secondary-locale-preview]')) return;
+    if (window.__luxSecondaryLocalePreviewInstalled === '20260914-secondary-locale-preview2' || document.querySelector('script[data-lux-secondary-locale-preview]')) return;
     const script = document.createElement('script');
-    script.src = 'js/secondary-locale-preview.js?v=20260914-1';
+    script.src = 'js/secondary-locale-preview.js?v=20260914-2';
     script.async = true;
     script.dataset.luxSecondaryLocalePreview = '1';
+    document.head.appendChild(script);
+  }
+
+  function loadUiFixesModule() {
+    if (window.__luxSecondaryUiFixesInstalled === '20260914-secondary-ui-fixes2' || document.querySelector('script[data-lux-secondary-ui-fixes]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/secondary-ui-fixes.js?v=20260914-2';
+    script.async = true;
+    script.dataset.luxSecondaryUiFixes = '1';
     document.head.appendChild(script);
   }
 
@@ -54,10 +63,12 @@
           if (window.LuxSecondarySources?.mergeIntoCurrentCatalog) {
             await window.LuxSecondarySources.mergeIntoCurrentCatalog({ refreshUi: true });
           }
+          if (window.LuxSecondaryUiFixes?.repair) {
+            await window.LuxSecondaryUiFixes.repair({ refreshUi: true });
+          }
         } catch (error) {
           console.warn('[LUX-IPTV-039] Fontes secundárias falharam em segundo plano:', error);
         }
-
         // Providers estão desativados nesta fase. Não tentamos carregá-los em background.
       })
       .finally(() => { backgroundRun = null; });
@@ -73,7 +84,6 @@
     if (typeof base !== 'function') return false;
 
     const wrapped = async function () {
-      // A lista principal continua usando exatamente o carregador original.
       const principalLoaded = await base.apply(this, arguments);
       runComplementInBackground();
       return principalLoaded;
@@ -95,8 +105,6 @@
     const secondary = modal.querySelector('#luxSyncSecondary');
     const secondaryItems = [...modal.querySelectorAll('[data-secondary-sync]')];
 
-    // Nesta fase o sincronizador canônico serve somente para M3U secundária.
-    // A principal continua vindo do fluxo original e não é reprocessada aqui.
     if (principal) {
       principal.checked = false;
       principal.disabled = true;
@@ -143,7 +151,6 @@
     const observer = new MutationObserver(() => {
       const modal = document.getElementById('luxCanonicalSyncModal');
       if (modal) {
-        // As opções chegam depois de uma chamada async; aguardamos os controles existirem.
         if (modal.querySelector('#luxSyncSecondary')) protectCanonicalSyncModal(modal);
         else setTimeout(() => {
           const current = document.getElementById('luxCanonicalSyncModal');
@@ -155,18 +162,17 @@
     window.__luxSecondaryModalObserver = observer;
   }
 
-  // Secondary/provider modules chegam de forma assíncrona e podem embrulhar a função
-  // depois deste arquivo. Reaplicamos a proteção por alguns segundos para garantir
-  // que a camada mais externa continue não bloqueante antes e depois do login.
   let attempts = 0;
   loadGroupingModule();
   loadLocalePreviewModule();
+  loadUiFixesModule();
   install();
   installModalGuard();
   const timer = setInterval(() => {
     attempts += 1;
     loadGroupingModule();
     loadLocalePreviewModule();
+    loadUiFixesModule();
     install();
     installModalGuard();
     const modal = document.getElementById('luxCanonicalSyncModal');
