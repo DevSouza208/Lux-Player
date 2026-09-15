@@ -7,7 +7,7 @@ const cors = {
   'Cache-Control': 'no-store'
 };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: cors });
-const GROUPING_VERSION = 'tmdb-v2';
+const GROUPING_VERSION = 'tmdb-v3';
 const TMDB_FALLBACK_KEY = '3fd2be6f0c70a2a598f084ddfb75487c';
 
 function cleanText(value: unknown, max = 500) {
@@ -27,6 +27,7 @@ function normalize(value: unknown) {
 
 function tmdbSearchTitle(value: unknown) {
   return cleanText(value, 300)
+    .replace(/^[+\-–—\s]+/, '')
     .replace(/^\s*\d{1,3}\s*[xX]\s*\d{1,4}(?:\s*[\/-]\s*\d{1,4})?[A-Za-z]{0,3}\s+/i, '')
     .replace(/^\s*S\s*\d{1,3}\s*E\s*\d{1,4}(?:\s*[\/-]\s*E?\s*\d{1,4})?[A-Za-z]{0,3}\s+/i, '')
     .replace(/^\s*T\s*\d{1,3}\s*E\s*\d{1,4}(?:\s*[\/-]\s*E?\s*\d{1,4})?[A-Za-z]{0,3}\s+/i, '')
@@ -100,18 +101,18 @@ function chooseGroup(categories: string[], genres: string[], networks: string[])
 
   const normalizedGenres = genres.map(normalize);
   const genreRules: Array<[string[], string[]]> = [
-    [['reality'], ['reality']],
-    [['documentary'], ['documentario', 'documentarios']],
-    [['kids', 'family'], ['infantil', 'kids', 'familia']],
-    [['animation'], ['animacao', 'animation']],
-    [['crime'], ['crime', 'policial']],
-    [['sci fi fantasy', 'science fiction', 'fantasy'], ['ficcao cientifica', 'sci fi', 'fantasia']],
-    [['mystery', 'thriller'], ['suspense', 'misterio', 'thriller']],
-    [['action adventure', 'action', 'adventure'], ['acao', 'aventura']],
-    [['comedy'], ['comedia', 'comedy']],
-    [['soap'], ['novela', 'novelas']],
-    [['war politics'], ['guerra', 'politica']],
-    [['western'], ['faroeste', 'western']],
+    [['reality', 'reality show'], ['reality']],
+    [['documentary', 'documentario', 'documentarios'], ['documentario', 'documentarios']],
+    [['kids', 'family', 'familia'], ['infantil', 'kids', 'familia']],
+    [['animation', 'animacao'], ['animacao', 'animation']],
+    [['crime', 'policial'], ['crime', 'policial']],
+    [['sci fi fantasy', 'science fiction', 'fantasy', 'ficcao cientifica', 'fantasia'], ['ficcao cientifica', 'sci fi', 'fantasia']],
+    [['mystery', 'thriller', 'misterio', 'suspense'], ['suspense', 'misterio', 'thriller']],
+    [['action adventure', 'action', 'adventure', 'acao aventura', 'acao', 'aventura'], ['acao', 'aventura']],
+    [['comedy', 'comedia'], ['comedia', 'comedy']],
+    [['soap', 'novela'], ['novela', 'novelas']],
+    [['war politics', 'guerra politica', 'guerra', 'politica'], ['guerra', 'politica']],
+    [['western', 'faroeste'], ['faroeste', 'western']],
     [['drama'], ['drama']]
   ];
   for (const [genreNeedles, categoryNeedles] of genreRules) {
