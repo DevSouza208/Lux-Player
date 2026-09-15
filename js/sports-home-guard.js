@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data5') return;
-  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data5';
+  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data6') return;
+  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data6';
 
   const SPORTS_HOME_ENABLED = false;
 
@@ -32,12 +32,12 @@
     if (!window.__luxSportsGuideFixesInstalled) ensureScript('lux-sports-guide-fixes', 'js/sports-guide-fixes.js?v=20260914-1');
     if (!window.LuxSportsLogos) ensureScript('lux-sports-logo-data', 'js/sports-global-mapping.js?v=20260913-footy-fast2');
 
-    // Faixas personalizadas da Home (Filmes/Séries/Jogos/Livros).
     if (!window.LuxHomeRails) ensureScript('lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2');
 
-    // Série 2026: busca no TMDB, filtra pelo catálogo local e mantém os cards
-    // estáveis enquanto uma atualização roda para evitar o efeito de piscar.
-    if (!window.__luxHomeSeries2026) ensureScript('lux-home-series-2026', 'js/home-series-2026.js?v=20260915-2');
+    // A faixa de séries calcula a seleção uma vez por dia e depois reutiliza
+    // o cache local. Só refaz quando muda o dia, falta cache ou o Admin salva
+    // uma nova seleção de séries.
+    if (!window.__luxHomeSeries2026) ensureScript('lux-home-series-2026', 'js/home-series-2026.js?v=20260915-4');
   }
 
   function enrichHiddenSportsData() {
@@ -61,8 +61,6 @@
       observer.observe(document.documentElement, { childList: true, subtree: true });
     }
 
-    // A seção visual de esportes continua escondida, mas o parser do Guia de
-    // Jogos, escudos e as faixas da Home continuam disponíveis em background.
     let attempts = 0;
     const dataTimer = setInterval(() => {
       attempts += 1;
