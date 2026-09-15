@@ -1,11 +1,12 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-sport-banner-tags1';
+  const VERSION = '20260915-sport-banner-tags2';
   if (window.__luxSportBannerTagsInstalled === VERSION) return;
   window.__luxSportBannerTagsInstalled = VERSION;
 
   const CACHE_MS = 60_000;
+  const LIVE_AFTER_MS = 180 * 60_000;
   let cache = { at: 0, banners: [] };
   let pending = null;
   let scheduled = false;
@@ -143,7 +144,7 @@
     const kickoff = Date.parse(banner?.event_at || '');
     if (!Number.isFinite(kickoff)) return false;
     const delta = Date.now() - kickoff;
-    return delta >= -3 * 60_000 && delta <= 180 * 60_000;
+    return delta >= 0 && delta <= LIVE_AFTER_MS;
   }
 
   function phaseTags(value) {
@@ -177,11 +178,37 @@
     }).slice(0, 10);
   }
 
+  function restoreOverview() {
+    const overview = $('heroOverview');
+    if (overview) overview.classList.remove('hidden');
+  }
+
   function hideTags() {
     const box = $('heroSportMetaTags');
-    if (!box) return;
-    box.classList.add('hidden');
-    box.replaceChildren();
+    if (box) {
+      box.classList.add('hidden');
+      box.replaceChildren();
+    }
+    restoreOverview();
+  }
+
+  function syncSportActionState(banner, overview) {
+    const play = $('heroPlayBtn');
+    const live = isLive(banner);
+
+    // Antes do horário, o destaque é só informativo: nada de botão antecipado.
+    if (!live) {
+      overview?.classList.remove('hidden');
+      play?.classList.add('hidden');
+      return false;
+    }
+
+    // No horário do jogo, as tags assumem os metadados e a descrição sai para
+    // abrir espaço para a ação principal. O onclick/label continuam vindo do
+    // renderer original do banner.
+    overview?.classList.add('hidden');
+    if (play && banner?.cta_type && banner.cta_type !== 'none') play.classList.remove('hidden');
+    return true;
   }
 
   async function syncHero() {
@@ -203,6 +230,7 @@
 
     const description = String(banner.description || '').trim() || 'Jogo em destaque no Lux Play.';
     if (overview.textContent !== description) overview.textContent = description;
+    syncSportActionState(banner, overview);
 
     const tags = sportTags(banner);
     const box = ensureContainer(overview);
@@ -226,8 +254,16 @@
     const wrap = $('heroContentWrap') || $('homeSection') || document.body;
     if (!wrap) return false;
     const observer = new MutationObserver(scheduleSync);
-    observer.observe(wrap, { subtree: true, childList: true, characterData: true });
+    observer.observe(wrap, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
     scheduleSync();
+
+    // A passagem para AO VIVO pode acontecer sem qualquer mutação no DOM.
+    // Reavaliamos a cada 20 s para o botão aparecer sozinho no horário marcado.
+    const liveTimer = setInterval(() => {
+      if (!document.hidden) scheduleSync();
+    }, 20_000);
+
+    window.addEventListener('beforeunload', () => clearInterval(liveTimer), { once: true });
     window.LuxSportBannerTags = {
       version: VERSION,
       refresh() { cache.at = 0; scheduleSync(); }
