@@ -21,7 +21,7 @@ function normalizeTitle(value: unknown) {
     .replace(/\[[^\]]*(?:dublado|legendado|dual|4k|fhd|uhd|hd|sd|1080p|720p|480p)[^\]]*\]/gi, ' ')
     .replace(/\b(dublado|legendado|dual(?: audio)?|pt[- ]?br|4k|fhd|uhd|full\s*hd|hd|sd|h265|hevc|1080p|720p|480p)\b/gi, ' ')
     .replace(/\b(?:temporada|season)\s*\d+\b/gi, ' ')
-    .replace(/\b(?:s\s*\d+\s*e\s*\d+|t\s*\d+\s*e\s*\d+|\d+\s*x\s*\d+)\b/gi, ' ')
+    .replace(/\b(?:s\s*\d+\s*e\s*\d+(?:\s*[\/-]\s*e?\s*\d+)?|t\s*\d+\s*e\s*\d+(?:\s*[\/-]\s*e?\s*\d+)?|\d+\s*x\s*\d+(?:\s*[\/-]\s*\d+)?)\b/gi, ' ')
     .replace(/^[+\-–—\s]+/, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -63,28 +63,30 @@ function chooseEpisodeBase(rest: string, group: string) {
   return fromTitle;
 }
 
-type ParsedEpisode = { base: string; season: number; episode: number; marker: string };
+type ParsedEpisode = { base: string; season: number; episode: number; episodeEnd: number | null; marker: string };
 
 function parseEpisode(title: string, group = ''): ParsedEpisode | null {
   const raw = String(title || '').trim();
 
-  let m = raw.match(/^0*(\d{1,3})\s*[xX]\s*0*(\d{1,4})([A-Za-z]{0,3})\s+(.+)$/i);
+  let m = raw.match(/^0*(\d{1,3})\s*[xX]\s*0*(\d{1,4})(?:\s*[\/-]\s*0*(\d{1,4}))?([A-Za-z]{0,3})\s+(.+)$/i);
   if (m) {
     return {
-      base: chooseEpisodeBase(m[4], group),
+      base: chooseEpisodeBase(m[5], group),
       season: Number(m[1]) || 1,
       episode: Number(m[2]) || 1,
-      marker: String(m[3] || '').toUpperCase()
+      episodeEnd: m[3] ? (Number(m[3]) || null) : null,
+      marker: String(m[4] || '').toUpperCase()
     };
   }
 
-  m = raw.match(/^S\s*0*(\d{1,3})\s*E\s*0*(\d{1,4})([A-Za-z]{0,3})\s+(.+)$/i);
+  m = raw.match(/^S\s*0*(\d{1,3})\s*E\s*0*(\d{1,4})(?:\s*[\/-]\s*(?:E\s*)?0*(\d{1,4}))?([A-Za-z]{0,3})\s+(.+)$/i);
   if (m) {
     return {
-      base: chooseEpisodeBase(m[4], group),
+      base: chooseEpisodeBase(m[5], group),
       season: Number(m[1]) || 1,
       episode: Number(m[2]) || 1,
-      marker: String(m[3] || '').toUpperCase()
+      episodeEnd: m[3] ? (Number(m[3]) || null) : null,
+      marker: String(m[4] || '').toUpperCase()
     };
   }
 
@@ -95,11 +97,11 @@ function parseEpisode(title: string, group = ''): ParsedEpisode | null {
   ];
   for (const [re, seasonGroup, episodeGroup] of suffixPatterns) {
     const hit = raw.match(re);
-    if (hit) return { base: cleanText(hit[1], 500), season: Number(hit[seasonGroup]) || 1, episode: Number(hit[episodeGroup]) || 1, marker: '' };
+    if (hit) return { base: cleanText(hit[1], 500), season: Number(hit[seasonGroup]) || 1, episode: Number(hit[episodeGroup]) || 1, episodeEnd: null, marker: '' };
   }
 
   const simple = raw.match(/^(.*?)(?:\s*[-–—|:]?\s*)(?:ep(?:is[oó]dio|isode)?\.?|e)\s*0*(\d{1,4})(?:\D.*)?$/i);
-  if (simple?.[1]) return { base: cleanText(simple[1], 500), season: 1, episode: Number(simple[2]) || 1, marker: '' };
+  if (simple?.[1]) return { base: cleanText(simple[1], 500), season: 1, episode: Number(simple[2]) || 1, episodeEnd: null, marker: '' };
   return null;
 }
 
@@ -231,7 +233,8 @@ function parseM3U(text: string, hint = 'auto') {
         original_title: originalTitle,
         anime: isAnime,
         tvg_id: cleanText(info.attrs['tvg-id'] || '', 200),
-        episode_marker: ep?.marker || ''
+        episode_marker: ep?.marker || '',
+        episode_end: ep?.episodeEnd ?? null
       }
     };
 
@@ -250,7 +253,7 @@ async function fetchText(url: string, timeoutMs = 45000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { redirect: 'follow', signal: controller.signal, headers: { 'User-Agent': 'Lux-Canonical-Sync/1.6.3-secondary-fix' } });
+    const response = await fetch(url, { redirect: 'follow', signal: controller.signal, headers: { 'User-Agent': 'Lux-Canonical-Sync/1.6.3-secondary-fix2' } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     if (!text) throw new Error('Fonte vazia.');
@@ -318,12 +321,7 @@ Deno.serve(async (request: Request) => {
       const { data: secondary } = await db.from('secondary_content_sources').select('id,name,source_type,priority,enabled,last_status').order('priority');
       const { count: titleCount } = await db.from('lux_catalog_titles').select('id', { count: 'exact', head: true });
       const { count: sourceCount } = await db.from('lux_catalog_sources').select('id', { count: 'exact', head: true }).eq('available', true);
-      return json({
-        principal: { available: Boolean(accountRow?.lista_m3u_https || accountRow?.lista_m3u), name: 'Lista principal' },
-        providers: [],
-        secondary: secondary || [],
-        catalog: { titles: titleCount || 0, active_sources: sourceCount || 0 }
-      });
+      return json({ principal: { available: Boolean(accountRow?.lista_m3u_https || accountRow?.lista_m3u), name: 'Lista principal' }, providers: [], secondary: secondary || [], catalog: { titles: titleCount || 0, active_sources: sourceCount || 0 } });
     }
 
     if (action === 'begin') {
@@ -337,14 +335,7 @@ Deno.serve(async (request: Request) => {
       }
       if (!tasks.length) return json({ error: 'Selecione ao menos uma fonte principal ou secundária ativa.' }, 400);
       const requestedLayers = ['principal', 'secondary'].filter(k => Boolean(layers[k]));
-      const { data: run, error } = await db.from('lux_catalog_sync_runs').insert({
-        requested_by: auth.username,
-        requested_layers: requestedLayers,
-        status: 'running',
-        current_phase: 'preparando',
-        progress_total: tasks.length,
-        stats: { tasks: [] }
-      }).select('*').single();
+      const { data: run, error } = await db.from('lux_catalog_sync_runs').insert({ requested_by: auth.username, requested_layers: requestedLayers, status: 'running', current_phase: 'preparando', progress_total: tasks.length, stats: { tasks: [] } }).select('*').single();
       if (error) throw error;
       return json({ run_id: run.id, tasks });
     }
