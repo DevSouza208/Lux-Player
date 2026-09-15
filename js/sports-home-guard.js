@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data6') return;
-  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data6';
+  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data7') return;
+  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data7';
 
   const SPORTS_HOME_ENABLED = false;
 
@@ -28,6 +28,10 @@
   }
 
   function loadSportsDataEngine() {
+    if (!window.LuxSectionLoader && !window.__luxSectionTransitionLoaderInstalled) {
+      ensureScript('lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1');
+    }
+
     if (!window.LuxSports) ensureScript('lux-sports-data', 'js/sports.js?v=20260913-guide-fast1');
     if (!window.__luxSportsGuideFixesInstalled) ensureScript('lux-sports-guide-fixes', 'js/sports-guide-fixes.js?v=20260914-1');
     if (!window.LuxSportsLogos) ensureScript('lux-sports-logo-data', 'js/sports-global-mapping.js?v=20260913-footy-fast2');
