@@ -1,7 +1,33 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260914-guide-fixes1') return;
-  window.__luxSportsHomeGuardInstalled = '20260914-guide-fixes1';
+  if (window.__luxSportsHomeGuardInstalled === '20260914-sports-hidden1') return;
+  window.__luxSportsHomeGuardInstalled = '20260914-sports-hidden1';
+
+  const SPORTS_HOME_ENABLED = false;
+
+  function getSportsSection() {
+    const container = document.getElementById('homeJogosContainer');
+    return container?.closest('.space-y-3') || null;
+  }
+
+  function applySportsVisibility() {
+    const section = getSportsSection();
+    if (!section) return false;
+
+    section.style.display = SPORTS_HOME_ENABLED ? '' : 'none';
+    section.dataset.luxSportsHidden = SPORTS_HOME_ENABLED ? '0' : '1';
+    return true;
+  }
+
+  if (!SPORTS_HOME_ENABLED) {
+    if (!applySportsVisibility()) {
+      const observer = new MutationObserver(() => {
+        if (applySportsVisibility()) observer.disconnect();
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+    return;
+  }
 
   let observer = null;
   let attempts = 0;
