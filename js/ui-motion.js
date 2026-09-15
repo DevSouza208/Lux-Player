@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260915-sport-banner-tags1';
+  const RESET_VERSION = '20260915-auto-login-sport3';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -26,10 +26,13 @@
     './css/reader.css',
     './js/ui-motion.js',
     './js/friendly-ui.js',
+    './js/auto-login-resilience.js',
+    './js/section-transition-loader.js',
     './js/script.js',
     './js/synced-catalog.js',
     './js/admin-client-sync.js',
     './js/home-featured-banners.js',
+    './js/home-content-rails.js',
     './js/sport-banner-tags.js',
     './js/secondary-content-sources.js',
     './js/provider-content-sources.js',
@@ -161,19 +164,29 @@ function animateDashboardEntry() {
   ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
 })();
 
+// O login por sessão precisa estar instalado antes do listener legado de
+// DOMContentLoaded. ui-motion é parser-blocking e vem imediatamente antes de
+// script.js, então estes dois módulos entram de forma síncrona.
 (() => {
-  const modules = [
-    ['lux-friendly-ui', 'js/friendly-ui.js?v=20260912-v163-friendly-ui-15'],
-    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
-    ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
-    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
-    ['lux-synced-catalog', 'js/synced-catalog.js?v=20260912-xtream-sync-1'],
-    ['lux-secondary-background-loader', 'js/secondary-background-loader.js?v=20260914-secondary-background-2'],
-    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260914-admin-client-sync-2'],
-    ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260914-home-featured-1'],
-    ['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags1']
-  ];
-  modules.forEach(([name, src]) => {
+  const loadSync = (marker, src) => {
+    if (document.querySelector(`script[data-${marker}]`)) return;
+    if (document.readyState === 'loading') {
+      document.write(`<script src="${src}" data-${marker}="1"><\/script>`);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.setAttribute(`data-${marker}`, '1');
+    document.head.appendChild(script);
+  };
+
+  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260915-v163-friendly-ui-25');
+  loadSync('lux-auto-login-resilience', 'js/auto-login-resilience.js?v=20260915-auto-login-resilience1');
+})();
+
+(() => {
+  const loadModule = ([name, src]) => {
     if (document.querySelector(`script[data-${name}]`)) return;
     const script = document.createElement('script');
     script.src = src;
@@ -181,7 +194,30 @@ function animateDashboardEntry() {
     script.setAttribute(`data-${name}`, '1');
     script.async = true;
     document.head.appendChild(script);
-  });
+  };
+
+  // Só o que afeta a primeira navegação fica aquecido cedo. O resto espera o
+  // carregamento da página para não disputar rede/CPU com autenticação e perfis.
+  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260912-xtream-sync-1']);
+  loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
+  loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags2']);
+
+  const nonCritical = [
+    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
+    ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
+    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260912-landscape2'],
+    ['lux-secondary-background-loader', 'js/secondary-background-loader.js?v=20260914-secondary-background-2'],
+    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260914-admin-client-sync-2'],
+    ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260914-home-featured-1']
+  ];
+
+  const loadNonCritical = () => nonCritical.forEach(loadModule);
+  const schedule = () => {
+    if ('requestIdleCallback' in window) window.requestIdleCallback(loadNonCritical, { timeout: 1200 });
+    else setTimeout(loadNonCritical, 350);
+  };
+  if (document.readyState === 'complete') schedule();
+  else window.addEventListener('load', schedule, { once: true });
 })();
 
 (() => {
