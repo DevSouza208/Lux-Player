@@ -1,15 +1,17 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-home-content-rails-1';
+  const VERSION = '20260915-home-content-rails-2';
   if (window.__luxHomeContentRailsVersion === VERSION) return;
   window.__luxHomeContentRailsVersion = VERSION;
 
   const MAX_ITEMS = 12;
   const CACHE_MS = 60_000;
-  const IMDB_CACHE_MS = 15 * 60_000;
+  const SERIES_CACHE_MS = 15 * 60_000;
   const YEAR = new Date().getFullYear();
+  const RAILS = ['movies', 'series', 'games', 'books'];
   const $ = id => document.getElementById(id);
+
   const normalize = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
@@ -18,17 +20,18 @@
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 
   let publicCache = { at: 0, items: [] };
-  let imdbCache = { at: 0, year: YEAR, items: [] };
+  let seriesCache = { at: 0, year: YEAR, items: [] };
   const admin = {
     activeRail: 'movies',
-    saved: { movies: [], games: [], books: [] },
-    candidates: { movies: [], games: [], books: [] },
-    query: { movies: '', games: '', books: '' },
+    saved: { movies: [], series: [], games: [], books: [] },
+    candidates: { movies: [], series: [], games: [], books: [] },
+    query: { movies: '', series: '', games: '', books: '' },
     loading: false,
   };
 
@@ -63,12 +66,51 @@
     return publicCache.items;
   }
 
-  async function imdbSeries(force = false) {
+  async function tmdbSeriesFallback() {
+    if (typeof TMDB_API_KEY === 'undefined' || !TMDB_API_KEY) return [];
+    const url = 'https://api.themoviedb.org/3/discover/tv'
+      + '?api_key=' + encodeURIComponent(TMDB_API_KEY)
+      + '&language=pt-BR&include_adult=false&sort_by=popularity.desc'
+      + '&first_air_date.gte=' + YEAR + '-01-01'
+      + '&first_air_date.lte=' + YEAR + '-12-31&page=1';
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('TMDB HTTP ' + response.status);
+    const data = await response.json();
+    return (data.results || []).slice(0, MAX_ITEMS).map((item, index) => ({
+      id: 'tmdb-' + item.id,
+      tmdb_id: item.id,
+      title: item.name || item.original_name || 'Série',
+      image: item.poster_path ? 'https://image.tmdb.org/t/p/w500' + item.poster_path : '',
+      description: item.overview || '',
+      rating: Number(item.vote_average) || null,
+      release_year: Number(String(item.first_air_date || '').slice(0, 4)) || YEAR,
+      rank: index + 1,
+      source: 'TMDB',
+      url: item.id ? 'https://www.themoviedb.org/tv/' + item.id : ''
+    }));
+  }
+
+  async function popularSeries(force = false) {
     const now = Date.now();
-    if (!force && imdbCache.year === YEAR && now - imdbCache.at < IMDB_CACHE_MS && imdbCache.items.length) return imdbCache.items;
-    const data = await invoke('imdb_series', { year: YEAR });
-    imdbCache = { at: now, year: Number(data.year) || YEAR, items: Array.isArray(data.series) ? data.series.slice(0, MAX_ITEMS) : [] };
-    return imdbCache.items;
+    if (!force && seriesCache.year === YEAR && now - seriesCache.at < SERIES_CACHE_MS && seriesCache.items.length) {
+      return seriesCache.items;
+    }
+
+    let items = [];
+    try {
+      const data = await invoke('imdb_series', { year: YEAR });
+      items = Array.isArray(data.series) ? data.series.slice(0, MAX_ITEMS) : [];
+    } catch (error) {
+      console.warn('[Lux Home] IMDb indisponível; usando fallback de séries.', error);
+    }
+
+    if (!items.length) {
+      try { items = await tmdbSeriesFallback(); }
+      catch (error) { console.warn('[Lux Home] Fallback de séries indisponível:', error); }
+    }
+
+    seriesCache = { at: now, year: YEAR, items };
+    return items;
   }
 
   function mediaItems() {
@@ -76,11 +118,11 @@
     catch (_) { return []; }
   }
 
-  function sectionTemplate(id, title, accent = 'text-purple-300') {
+  function sectionTemplate(id, title) {
     const section = document.createElement('div');
     section.id = id + 'Section';
     section.className = 'space-y-3';
-    section.innerHTML = `<h3 class="text-sm font-bold text-white tracking-wide uppercase ${accent}">${esc(title)}</h3><div id="${id}" class="flex gap-4 overflow-x-auto pb-2 min-h-[220px] items-center"><p class="text-xs text-purple-400/60">Carregando destaques...</p></div>`;
+    section.innerHTML = `<h3 class="text-sm font-bold text-white tracking-wide uppercase">${esc(title)}</h3><div id="${id}" class="flex gap-4 overflow-x-auto pb-2 min-h-[220px] items-center"><p class="text-xs text-purple-400/60">Carregando destaques...</p></div>`;
     return section;
   }
 
@@ -94,15 +136,18 @@
 
     let anchor = movieSection;
     const definitions = [
-      ['homeSeriesLancamentosContainer', `SÉRIES | LANÇAMENTOS ${YEAR}`, 'text-purple-300'],
-      ['homeFeaturedGamesContainer', 'JOGOS EM DESTAQUE', 'text-indigo-300'],
-      ['homeFeaturedBooksContainer', 'LIVROS EM DESTAQUE', 'text-amber-300'],
+      ['homeSeriesLancamentosContainer', `SÉRIES | LANÇAMENTOS ${YEAR}`],
+      ['homeFeaturedGamesContainer', 'JOGOS EM DESTAQUE'],
+      ['homeFeaturedBooksContainer', 'LIVROS EM DESTAQUE'],
     ];
-    for (const [id, title, accent] of definitions) {
+    for (const [id, title] of definitions) {
       let section = $(id + 'Section');
       if (!section) {
-        section = sectionTemplate(id, title, accent);
+        section = sectionTemplate(id, title);
         anchor.insertAdjacentElement('afterend', section);
+      } else {
+        const heading = section.querySelector('h3');
+        if (heading) heading.textContent = title;
       }
       anchor = section;
     }
@@ -110,8 +155,7 @@
   }
 
   function emptyRail(container, message) {
-    if (!container) return;
-    container.innerHTML = `<p class="text-xs text-purple-400/60">${esc(message)}</p>`;
+    if (container) container.innerHTML = `<p class="text-xs text-purple-400/60">${esc(message)}</p>`;
   }
 
   function posterCard({ title, image, subtitle = '', sourceLabel = '', onClick = null, icon = 'sparkles' }) {
@@ -141,6 +185,18 @@
     return card;
   }
 
+  function uniqueByName(items) {
+    const seen = new Set();
+    const out = [];
+    for (const item of items) {
+      const key = normalize(item?.name || item?.title);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  }
+
   function localMovieForSelection(selection) {
     const movies = mediaItems().filter(item => item?.type === 'movies');
     const payload = selection?.payload || {};
@@ -158,18 +214,6 @@
       const group = String(item.group || '').toLowerCase();
       return group.includes(`lançamentos ${year}`) || group.includes(`lancamentos ${year}`) || group.includes(year);
     });
-  }
-
-  function uniqueByName(items) {
-    const seen = new Set();
-    const out = [];
-    for (const item of items) {
-      const key = normalize(item?.name || item?.title);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      out.push(item);
-    }
-    return out;
   }
 
   function renderMovieRail(selections) {
@@ -195,43 +239,89 @@
     })));
   }
 
+  function seriesItems() {
+    return mediaItems().filter(item => item?.type === 'series');
+  }
+
   function resolveLocalSeries(title) {
     const target = normalize(title);
     if (!target) return null;
-    const series = mediaItems().filter(item => item?.type === 'series');
-    return series.find(item => normalize(item.name) === target)
-      || series.find(item => normalize(item.name).startsWith(target + ' '))
+    return seriesItems().find(item => normalize(item.name) === target)
+      || seriesItems().find(item => normalize(item.name).startsWith(target + ' '))
       || null;
   }
 
-  async function renderSeriesRail() {
+  function localSeriesForSelection(selection) {
+    const payload = selection?.payload || {};
+    const key = String(selection?.source_key || '');
+    const all = seriesItems();
+    return all.find(item => String(item.id || '') === key)
+      || all.find(item => String(item.url || '') === key)
+      || all.find(item => payload.url && String(item.url || '') === String(payload.url))
+      || all.find(item => normalize(item.name) === normalize(selection?.title || payload.name));
+  }
+
+  function openSeriesItem(item) {
+    if (!item) return;
+    try {
+      if (typeof openSeriesModal === 'function') openSeriesModal(item);
+      else if (typeof openVodPlayer === 'function') openVodPlayer(item);
+    } catch (_) {}
+  }
+
+  async function renderSeriesRail(selections) {
     const container = $('homeSeriesLancamentosContainer');
     if (!container) return;
-    container.innerHTML = '<p class="text-xs text-purple-400/60">Buscando séries populares no IMDb...</p>';
-    try {
-      const series = await imdbSeries();
-      container.innerHTML = '';
-      if (!series.length) return emptyRail(container, 'Nenhum lançamento de série encontrado agora.');
-      series.slice(0, MAX_ITEMS).forEach(entry => {
-        const local = resolveLocalSeries(entry.title);
-        container.appendChild(posterCard({
-          title: entry.title,
-          image: entry.image,
-          subtitle: entry.rating ? `IMDb ${Number(entry.rating).toFixed(1)} · ${entry.release_year || YEAR}` : `IMDb · ${entry.release_year || YEAR}`,
-          sourceLabel: 'IMDb',
-          onClick: () => {
-            if (local) {
-              try { if (typeof openSeriesModal === 'function') return openSeriesModal(local); } catch (_) {}
-            }
-            if (entry.url) window.open(entry.url, '_blank', 'noopener');
-          },
-          icon: 'clapperboard'
-        }));
+    container.innerHTML = '<p class="text-xs text-purple-400/60">Preparando séries em destaque...</p>';
+
+    const pinned = selections.map(localSeriesForSelection).filter(Boolean);
+    const pinnedNames = new Set(pinned.map(item => normalize(item.name)));
+    let automatic = [];
+    try { automatic = await popularSeries(); } catch (_) {}
+
+    container.innerHTML = '';
+    const cards = [];
+
+    pinned.forEach(item => {
+      cards.push({
+        key: normalize(item.name),
+        title: item.name,
+        image: item.logo || '',
+        subtitle: item.group || 'Série selecionada',
+        sourceLabel: 'Lux',
+        onClick: () => openSeriesItem(item)
       });
-    } catch (error) {
-      console.warn('[Lux Home] Séries do IMDb indisponíveis:', error);
-      emptyRail(container, 'Não foi possível consultar os lançamentos de séries agora.');
+    });
+
+    for (const entry of automatic) {
+      const key = normalize(entry.title);
+      if (!key || pinnedNames.has(key) || cards.some(card => card.key === key)) continue;
+      const local = resolveLocalSeries(entry.title);
+      cards.push({
+        key,
+        title: entry.title,
+        image: entry.image || '',
+        subtitle: entry.rating
+          ? `${entry.source || 'IMDb'} ${Number(entry.rating).toFixed(1)} · ${entry.release_year || YEAR}`
+          : `${entry.source || 'IMDb'} · ${entry.release_year || YEAR}`,
+        sourceLabel: entry.source || 'IMDb',
+        onClick: local
+          ? () => openSeriesItem(local)
+          : (entry.url ? () => window.open(entry.url, '_blank', 'noopener') : null)
+      });
+      if (cards.length >= MAX_ITEMS) break;
     }
+
+    if (!cards.length) return emptyRail(container, 'Nenhuma série selecionada e a busca automática está indisponível agora.');
+
+    cards.slice(0, MAX_ITEMS).forEach(card => container.appendChild(posterCard({
+      title: card.title,
+      image: card.image,
+      subtitle: card.subtitle,
+      sourceLabel: card.sourceLabel,
+      onClick: card.onClick,
+      icon: 'clapperboard'
+    })));
   }
 
   function openSelectedGame(selection) {
@@ -310,22 +400,33 @@
     let items = [];
     try { items = await publicItems(force); }
     catch (error) { console.warn('[Lux Home] Seleções personalizadas indisponíveis:', error); }
-    const byRail = rail => items.filter(item => item.rail === rail).sort((a, b) => Number(a.position) - Number(b.position));
+
+    const byRail = rail => items
+      .filter(item => item.rail === rail)
+      .sort((a, b) => Number(a.position) - Number(b.position));
+
     renderMovieRail(byRail('movies'));
+    renderSeriesRail(byRail('series'));
     renderChosenRail('games', 'homeFeaturedGamesContainer', byRail('games'));
     renderChosenRail('books', 'homeFeaturedBooksContainer', byRail('books'));
-    renderSeriesRail();
     try { lucide.createIcons(); } catch (_) {}
   }
 
-  function movieCandidate(item) {
+  function mediaCandidate(item, typeLabel) {
     return {
       key: String(item.id || item.url || normalize(item.name)),
       source_key: String(item.id || item.url || normalize(item.name)),
       title: item.name || 'Sem título',
-      subtitle: item.group || 'Filme',
+      subtitle: item.group || typeLabel,
       image_url: item.logo || '',
-      payload: { id: item.id || '', url: item.url || '', name: item.name || '', group: item.group || '', logo: item.logo || '', type: 'movies' }
+      payload: {
+        id: item.id || '',
+        url: item.url || '',
+        name: item.name || '',
+        group: item.group || '',
+        logo: item.logo || '',
+        type: item.type || ''
+      }
     };
   }
 
@@ -334,39 +435,66 @@
       const autoGroup = automaticMovies();
       const allMovies = mediaItems().filter(item => item?.type === 'movies');
       const preferred = [...autoGroup, ...allMovies.filter(item => !autoGroup.includes(item))];
-      admin.candidates.movies = uniqueByName(preferred).map(movieCandidate);
+      admin.candidates.movies = uniqueByName(preferred).map(item => mediaCandidate(item, 'Filme'));
       return;
     }
+
+    if (rail === 'series') {
+      admin.candidates.series = uniqueByName(seriesItems()).map(item => mediaCandidate(item, 'Série'));
+      return;
+    }
+
     if (rail === 'games') {
-      let records = [];
-      if (typeof loadGamesCatalog === 'function') records = await loadGamesCatalog();
-      admin.candidates.games = (records || []).filter(game => game.status === 'approved').map(game => ({
-        key: String(game.id), source_key: String(game.id), title: game.title || 'Sem título',
+      const { data, error } = await supabaseClient
+        .from('games')
+        .select('id,title,console,release_year,cover_url,cover_path,synopsis,status')
+        .eq('status', 'approved')
+        .order('title', { ascending: true });
+      if (error) throw error;
+      admin.candidates.games = (data || []).map(game => ({
+        key: String(game.id),
+        source_key: String(game.id),
+        title: game.title || 'Sem título',
         subtitle: [game.console, game.release_year].filter(Boolean).join(' · '),
         image_url: game.cover_url || (typeof gameStorageUrl === 'function' ? gameStorageUrl(game.cover_path) : ''),
-        payload: { id: game.id, title: game.title, console: game.console, release_year: game.release_year, cover_url: game.cover_url || '', cover_path: game.cover_path || '', synopsis: game.synopsis || '' }
+        payload: {
+          id: game.id, title: game.title, console: game.console, release_year: game.release_year,
+          cover_url: game.cover_url || '', cover_path: game.cover_path || '', synopsis: game.synopsis || ''
+        }
       }));
       return;
     }
+
     if (rail === 'books') {
       const records = await window.LuxReaderCloud?.catalog?.(true) || [];
-      admin.candidates.books = records.filter(book => book.status === 'approved' && book.upload_complete).map(book => ({
-        key: String(book.content_hash), source_key: String(book.content_hash), title: book.title || 'Sem título',
-        subtitle: [book.authors, book.category].filter(Boolean).join(' · '), image_url: book.cover_url || '',
-        payload: {
-          content_hash: book.content_hash, title: book.title, authors: book.authors || '', description: book.description || '',
-          cover_url: book.cover_url || '', category: book.category || 'Livros', format: book.format || 'pdf', url: book.url || '',
-          language_code: book.language_code || '', collection_path: book.collection_path || '', status: book.status, upload_complete: book.upload_complete
-        }
-      }));
+      admin.candidates.books = records
+        .filter(book => book.status === 'approved' && book.upload_complete)
+        .map(book => ({
+          key: String(book.content_hash),
+          source_key: String(book.content_hash),
+          title: book.title || 'Sem título',
+          subtitle: [book.authors, book.category].filter(Boolean).join(' · '),
+          image_url: book.cover_url || '',
+          payload: {
+            content_hash: book.content_hash, title: book.title, authors: book.authors || '',
+            description: book.description || '', cover_url: book.cover_url || '',
+            category: book.category || 'Livros', format: book.format || 'pdf', url: book.url || '',
+            language_code: book.language_code || '', collection_path: book.collection_path || '',
+            status: book.status, upload_complete: book.upload_complete
+          }
+        }));
     }
   }
 
   function adminHtml() {
     return `<section id="homeRailAdminRoot" class="rounded-3xl border border-purple-900/60 bg-[#120c1f] p-5 md:p-6 space-y-4">
-      <div><h3 class="text-base font-bold text-white">Faixas da Home</h3><p class="mt-1 text-xs text-purple-300">Séries são preenchidas automaticamente com 12 lançamentos populares do IMDb. Em Filmes, os escolhidos aqui entram primeiro e o Lux completa até 12 com os lançamentos da lista. Jogos e Livros mostram apenas o que você selecionar.</p></div>
+      <div>
+        <h3 class="text-base font-bold text-white">Faixas da Home</h3>
+        <p class="mt-1 text-xs text-purple-300">Em Filmes e Séries, os itens escolhidos entram primeiro e o Lux completa até 12 automaticamente. Jogos e Livros mostram somente o que você selecionar.</p>
+      </div>
       <div class="flex flex-wrap gap-2" data-home-rail-tabs>
         <button type="button" data-home-rail-tab="movies" class="rounded-xl px-3 py-2 text-xs font-bold">Filmes</button>
+        <button type="button" data-home-rail-tab="series" class="rounded-xl px-3 py-2 text-xs font-bold">Séries</button>
         <button type="button" data-home-rail-tab="games" class="rounded-xl px-3 py-2 text-xs font-bold">Jogos</button>
         <button type="button" data-home-rail-tab="books" class="rounded-xl px-3 py-2 text-xs font-bold">Livros</button>
       </div>
@@ -375,7 +503,10 @@
         <button id="homeRailRefresh" type="button" class="rounded-xl border border-purple-800/60 bg-purple-950/60 px-4 py-2 text-xs font-bold text-purple-200 hover:bg-purple-900">Atualizar catálogo</button>
         <button id="homeRailSave" type="button" class="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white">Salvar seleção</button>
       </div>
-      <div class="flex items-center justify-between gap-3"><p id="homeRailHint" class="text-[11px] text-purple-400"></p><span id="homeRailCount" class="rounded-full bg-purple-950 px-2.5 py-1 text-[10px] font-mono text-purple-300">0 / 12</span></div>
+      <div class="flex items-center justify-between gap-3">
+        <p id="homeRailHint" class="text-[11px] text-purple-400"></p>
+        <span id="homeRailCount" class="rounded-full bg-purple-950 px-2.5 py-1 text-[10px] font-mono text-purple-300">0 / 12</span>
+      </div>
       <p id="homeRailStatus" class="min-h-[18px] text-xs text-purple-300"></p>
       <div id="homeRailPicker" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"></div>
     </section>`;
@@ -397,16 +528,20 @@
   }
 
   function selectedKeys(rail = admin.activeRail) {
-    return admin.saved[rail].map(item => String(item.source_key));
+    return (admin.saved[rail] || []).map(item => String(item.source_key));
   }
 
   function setSelectedKeys(rail, keys) {
-    const map = new Map(admin.candidates[rail].map(candidate => [String(candidate.source_key), candidate]));
-    admin.saved[rail] = keys.map(key => map.get(String(key))).filter(Boolean).map((candidate, index) => ({ ...candidate, position: index }));
+    const map = new Map((admin.candidates[rail] || []).map(candidate => [String(candidate.source_key), candidate]));
+    admin.saved[rail] = keys
+      .map(key => map.get(String(key)))
+      .filter(Boolean)
+      .map((candidate, index) => ({ ...candidate, position: index }));
   }
 
   function railHint(rail) {
-    if (rail === 'movies') return 'Os filmes marcados ficam no começo. O restante até 12 continua automático, igual hoje.';
+    if (rail === 'movies') return 'Os filmes marcados ficam no começo; o Lux completa o restante até 12 com os lançamentos da lista.';
+    if (rail === 'series') return 'As séries marcadas ficam no começo; o Lux tenta completar o restante até 12 com lançamentos populares do IMDb.';
     if (rail === 'games') return 'Escolha até 12 jogos do catálogo Lux para aparecerem na Home.';
     return 'Escolha até 12 livros do catálogo compartilhado para aparecerem na Home.';
   }
@@ -418,10 +553,8 @@
         ? 'rounded-xl bg-purple-600 px-3 py-2 text-xs font-bold text-white'
         : 'rounded-xl bg-[#180f29] px-3 py-2 text-xs font-bold text-purple-200 hover:bg-[#23153b]';
     });
-    const hint = $('homeRailHint');
-    if (hint) hint.textContent = railHint(admin.activeRail);
-    const search = $('homeRailSearch');
-    if (search) search.value = admin.query[admin.activeRail] || '';
+    if ($('homeRailHint')) $('homeRailHint').textContent = railHint(admin.activeRail);
+    if ($('homeRailSearch')) $('homeRailSearch').value = admin.query[admin.activeRail] || '';
   }
 
   function renderAdminPicker() {
@@ -429,6 +562,7 @@
     const picker = $('homeRailPicker');
     const count = $('homeRailCount');
     if (!picker || !count) return;
+
     const selected = new Set(selectedKeys(rail));
     count.textContent = `${selected.size} / ${MAX_ITEMS}`;
     const query = normalize(admin.query[rail]);
@@ -437,18 +571,25 @@
     const ordered = [
       ...filtered.filter(candidate => selected.has(String(candidate.source_key))),
       ...filtered.filter(candidate => !selected.has(String(candidate.source_key)))
-    ].slice(0, 80);
+    ].slice(0, 100);
 
     if (!ordered.length) {
       picker.innerHTML = '<p class="col-span-full py-6 text-center text-xs text-purple-400/70">Nenhum item encontrado.</p>';
       return;
     }
+
     picker.innerHTML = ordered.map(candidate => {
       const checked = selected.has(String(candidate.source_key));
       return `<label class="relative overflow-hidden rounded-2xl border ${checked ? 'border-emerald-500/70 bg-emerald-950/20' : 'border-purple-900/50 bg-[#180f29]'} cursor-pointer transition hover:border-purple-500/70">
         <input type="checkbox" data-home-rail-key="${esc(candidate.source_key)}" class="sr-only" ${checked ? 'checked' : ''}>
-        <div class="aspect-[2/3] bg-[#0c0814] relative overflow-hidden">${candidate.image_url ? `<img src="${esc(candidate.image_url)}" class="h-full w-full object-cover" loading="lazy" referrerpolicy="no-referrer" alt="">` : '<div class="absolute inset-0 flex items-center justify-center text-purple-700"><i data-lucide="image" class="h-8 w-8"></i></div>'}${checked ? '<span class="absolute right-2 top-2 rounded-full bg-emerald-500 p-1 text-white"><i data-lucide="check" class="h-3.5 w-3.5"></i></span>' : ''}</div>
-        <div class="p-2.5"><strong class="block truncate text-[11px] text-white" title="${esc(candidate.title)}">${esc(candidate.title)}</strong><span class="mt-1 block truncate text-[9px] text-purple-400">${esc(candidate.subtitle || '')}</span></div>
+        <div class="aspect-[2/3] bg-[#0c0814] relative overflow-hidden">
+          ${candidate.image_url ? `<img src="${esc(candidate.image_url)}" class="h-full w-full object-cover" loading="lazy" referrerpolicy="no-referrer" alt="">` : '<div class="absolute inset-0 flex items-center justify-center text-purple-700"><i data-lucide="image" class="h-8 w-8"></i></div>'}
+          ${checked ? '<span class="absolute right-2 top-2 rounded-full bg-emerald-500 p-1 text-white"><i data-lucide="check" class="h-3.5 w-3.5"></i></span>' : ''}
+        </div>
+        <div class="p-2.5">
+          <strong class="block truncate text-[11px] text-white" title="${esc(candidate.title)}">${esc(candidate.title)}</strong>
+          <span class="mt-1 block truncate text-[9px] text-purple-400">${esc(candidate.subtitle || '')}</span>
+        </div>
       </label>`;
     }).join('');
 
@@ -463,7 +604,9 @@
             return;
           }
           if (!keys.includes(key)) keys.push(key);
-        } else keys = keys.filter(value => value !== key);
+        } else {
+          keys = keys.filter(value => value !== key);
+        }
         setSelectedKeys(rail, keys);
         setAdminStatus('');
         renderAdminPicker();
@@ -476,8 +619,10 @@
   async function loadSavedAdminSelections() {
     const data = await invoke('list_admin', {}, true);
     const rows = Array.isArray(data.items) ? data.items : [];
-    for (const rail of ['movies', 'games', 'books']) {
-      admin.saved[rail] = rows.filter(item => item.rail === rail).sort((a, b) => Number(a.position) - Number(b.position));
+    for (const rail of RAILS) {
+      admin.saved[rail] = rows
+        .filter(item => item.rail === rail)
+        .sort((a, b) => Number(a.position) - Number(b.position));
     }
   }
 
@@ -487,15 +632,18 @@
     admin.loading = true;
     setAdminStatus('Carregando catálogo e seleção...');
     try {
-      if (force || !admin.saved.movies.length && !admin.saved.games.length && !admin.saved.books.length) await loadSavedAdminSelections();
+      const hasAnySaved = RAILS.some(rail => admin.saved[rail]?.length);
+      if (force || !hasAnySaved) await loadSavedAdminSelections();
+
       await loadAdminCandidates(admin.activeRail);
-      const currentKeys = admin.saved[admin.activeRail].map(item => String(item.source_key));
-      const candidateMap = new Map(admin.candidates[admin.activeRail].map(item => [String(item.source_key), item]));
+      const currentKeys = selectedKeys(admin.activeRail);
+      const candidateMap = new Map((admin.candidates[admin.activeRail] || []).map(item => [String(item.source_key), item]));
       admin.saved[admin.activeRail] = currentKeys.map((key, index) => {
         const fresh = candidateMap.get(key);
         const previous = admin.saved[admin.activeRail].find(item => String(item.source_key) === key);
         return fresh ? { ...fresh, position: index } : previous;
       }).filter(Boolean);
+
       renderAdminTabs();
       renderAdminPicker();
       setAdminStatus('Pronto. Marque os itens que devem aparecer na Home.');
@@ -513,7 +661,7 @@
     if (button) button.disabled = true;
     setAdminStatus('Salvando seleção...');
     try {
-      const items = admin.saved[rail].slice(0, MAX_ITEMS).map((item, index) => ({
+      const items = (admin.saved[rail] || []).slice(0, MAX_ITEMS).map((item, index) => ({
         source_key: item.source_key,
         title: item.title,
         subtitle: item.subtitle,
@@ -523,6 +671,7 @@
       }));
       await invoke('replace', { rail, items }, true);
       publicCache.at = 0;
+      if (rail === 'series') seriesCache.at = 0;
       await loadSavedAdminSelections();
       await renderHome(true);
       renderAdminPicker();
@@ -538,14 +687,22 @@
     const root = $('homeRailAdminRoot');
     if (!root || root.dataset.wired === '1') return;
     root.dataset.wired = '1';
+
     root.querySelectorAll('[data-home-rail-tab]').forEach(button => {
       button.addEventListener('click', async () => {
         admin.activeRail = button.dataset.homeRailTab || 'movies';
         renderAdminTabs();
-        await loadAdminCandidates(admin.activeRail).catch(error => setAdminStatus(error.message, true));
-        renderAdminPicker();
+        setAdminStatus('Carregando catálogo...');
+        try {
+          await loadAdminCandidates(admin.activeRail);
+          renderAdminPicker();
+          setAdminStatus('Pronto. Marque os itens que devem aparecer na Home.');
+        } catch (error) {
+          setAdminStatus(error.message || 'Não foi possível carregar este catálogo.', true);
+        }
       });
     });
+
     $('homeRailSearch')?.addEventListener('input', event => {
       admin.query[admin.activeRail] = event.target.value || '';
       renderAdminPicker();
@@ -596,6 +753,7 @@
     wrapAdminTab();
     wrapHomeDashboard();
     renderHome(false);
+
     $('navHome')?.addEventListener('click', () => setTimeout(() => renderHome(false), 0));
     $('bNavHome')?.addEventListener('click', () => setTimeout(() => renderHome(false), 0));
 
@@ -606,11 +764,19 @@
       ensureAdminArea();
       const homeReady = wrapHomeDashboard();
       const adminReady = wrapAdminTab();
-      if ((homeReady || window.renderHomeDashboard?.__luxHomeRailsWrapped) && (adminReady || window.switchAdminTab?.__luxHomeRailsWrapped) || attempts >= 160) clearInterval(timer);
+      if (((homeReady || window.renderHomeDashboard?.__luxHomeRailsWrapped)
+        && (adminReady || window.switchAdminTab?.__luxHomeRailsWrapped)) || attempts >= 160) {
+        clearInterval(timer);
+      }
     }, 50);
   }
 
-  window.LuxHomeRails = { render: renderHome, refreshAdmin: () => refreshAdmin(true), imdbSeries: () => imdbSeries(true) };
+  window.LuxHomeRails = {
+    render: renderHome,
+    refreshAdmin: () => refreshAdmin(true),
+    series: () => popularSeries(true)
+  };
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
 })();
