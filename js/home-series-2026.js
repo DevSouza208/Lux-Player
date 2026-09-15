@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-home-series-2026-1';
+  const VERSION = '20260915-home-series-2026-2';
   if (window.__luxHomeSeries2026 === VERSION) return;
   window.__luxHomeSeries2026 = VERSION;
 
@@ -29,6 +29,7 @@
   let renderPromise = null;
   let rerenderQueued = false;
   let observer = null;
+  let started = false;
   const detailCache = new Map();
 
   function localSeries() {
@@ -143,9 +144,7 @@
     const now = Date.now();
     if (!force && candidateCache.rows.length && now - candidateCache.at < CACHE_MS) return candidateCache.rows;
     const rows = [];
-    for (let page = 1; page <= MAX_PAGES; page++) {
-      rows.push(...await tmdbPage(page));
-    }
+    for (let page = 1; page <= MAX_PAGES; page++) rows.push(...await tmdbPage(page));
     candidateCache = { at: now, rows };
     return rows;
   }
@@ -225,10 +224,18 @@
       const heading = section.querySelector('h3');
       if (heading) heading.textContent = `SÉRIES | LANÇAMENTOS ${YEAR}`;
 
-      container.dataset.luxSeries2026Rendering = '1';
-      container.innerHTML = '<p class="text-xs text-purple-400/60">Buscando lançamentos disponíveis no Lux...</p>';
-
       const index = localIndex();
+      const hadOwnCards = !!container.querySelector('[data-lux-series-2026="1"]');
+      if (!index.items.length) {
+        if (!hadOwnCards) container.innerHTML = '<p class="text-xs text-purple-400/60">Aguardando o catálogo de séries...</p>';
+        return;
+      }
+
+      container.dataset.luxSeries2026Rendering = '1';
+      if (!hadOwnCards) {
+        container.innerHTML = '<p class="text-xs text-purple-400/60">Buscando lançamentos disponíveis no Lux...</p>';
+      }
+
       const chosen = [];
       const used = new Set();
       const pinned = await publicPinned();
@@ -272,14 +279,20 @@
         }
       }
 
-      container.innerHTML = '';
-      chosen.slice(0, MAX_ITEMS).forEach(row => container.appendChild(posterCard(row.entry, row.local, row.manual)));
-      if (!chosen.length) {
+      const fragment = document.createDocumentFragment();
+      chosen.slice(0, MAX_ITEMS).forEach(row => fragment.appendChild(posterCard(row.entry, row.local, row.manual)));
+      if (chosen.length) {
+        container.replaceChildren(fragment);
+      } else if (!hadOwnCards) {
         container.innerHTML = `<p class="text-xs text-purple-400/60">Nenhum lançamento de ${YEAR} disponível no catálogo do Lux.</p>`;
       }
       container.dataset.luxSeries2026Rendering = '0';
       try { lucide.createIcons(); } catch (_) {}
-    })().finally(() => { renderPromise = null; });
+    })().finally(() => {
+      const container = $('homeSeriesLancamentosContainer');
+      if (container) container.dataset.luxSeries2026Rendering = '0';
+      renderPromise = null;
+    });
     return renderPromise;
   }
 
@@ -289,7 +302,7 @@
     setTimeout(() => {
       rerenderQueued = false;
       render(force);
-    }, 80);
+    }, 100);
   }
 
   function installObserver() {
@@ -297,24 +310,35 @@
     observer = new MutationObserver(mutations => {
       const container = $('homeSeriesLancamentosContainer');
       if (!container || container.dataset.luxSeries2026Rendering === '1') return;
-      const ownCards = container.querySelectorAll('[data-lux-series-2026="1"]').length;
       const changedInside = mutations.some(mutation => mutation.target === container || container.contains(mutation.target));
-      if (changedInside && ownCards === 0) queueRender(false);
+      if (!changedInside) return;
+      const ownCards = container.querySelectorAll('[data-lux-series-2026="1"]').length;
+      if (ownCards === 0 && localSeries().length) queueRender(false);
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  function tryInitialRender() {
+    const container = ensureSection();
+    if (!container || !localSeries().length) return false;
+    if (!started) {
+      started = true;
+      queueRender(false);
+    }
+    return true;
+  }
+
   function boot() {
     installObserver();
-    queueRender(false);
+    if (!tryInitialRender()) {
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts += 1;
+        if (tryInitialRender() || attempts >= 120) clearInterval(timer);
+      }, 250);
+    }
     $('navHome')?.addEventListener('click', () => queueRender(false));
     $('bNavHome')?.addEventListener('click', () => queueRender(false));
-    let attempts = 0;
-    const timer = setInterval(() => {
-      attempts += 1;
-      if (ensureSection()) queueRender(false);
-      if (attempts >= 100) clearInterval(timer);
-    }, 100);
   }
 
   window.LuxHomeSeries2026 = { render: () => render(true) };
