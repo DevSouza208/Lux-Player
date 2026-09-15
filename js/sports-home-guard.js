@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data1') return;
-  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data1';
+  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data2') return;
+  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data2';
 
   const SPORTS_HOME_ENABLED = false;
 
@@ -29,6 +29,7 @@
 
   function loadSportsDataEngine() {
     if (!window.LuxSports) ensureScript('lux-sports-data', 'js/sports.js?v=20260913-guide-fast1');
+    if (!window.__luxSportsGuideFixesInstalled) ensureScript('lux-sports-guide-fixes', 'js/sports-guide-fixes.js?v=20260914-1');
     if (!window.LuxSportsLogos) ensureScript('lux-sports-logo-data', 'js/sports-global-mapping.js?v=20260913-footy-fast2');
   }
 
@@ -53,8 +54,9 @@
       observer.observe(document.documentElement, { childList: true, subtree: true });
     }
 
-    // A seção visual continua escondida, mas o parser do Guia de Jogos e o
-    // resolvedor de escudos permanecem ativos para o construtor de banners Admin.
+    // A seção visual continua escondida, mas o parser do Guia de Jogos,
+    // normalização de horários e resolvedor de escudos ficam ativos para o
+    // construtor de banners no painel Admin.
     let attempts = 0;
     const dataTimer = setInterval(() => {
       attempts += 1;
