@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-secondary-background-7';
+  const VERSION = '20260915-secondary-background-8';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
@@ -29,6 +29,15 @@
     script.src = 'js/secondary-ui-fixes.js?v=20260914-2';
     script.async = true;
     script.dataset.luxSecondaryUiFixes = '1';
+    document.head.appendChild(script);
+  }
+
+  function loadResumeGridControls() {
+    if (window.__luxResumeGridControlsInstalled || document.querySelector('script[data-lux-resume-grid-controls]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/resume-grid-controls.js?v=20260915-1';
+    script.async = true;
+    script.dataset.luxResumeGridControls = '1';
     document.head.appendChild(script);
   }
 
@@ -225,6 +234,7 @@
   loadGroupingModule();
   loadLocalePreviewModule();
   loadUiFixesModule();
+  loadResumeGridControls();
   install();
   installModalGuard();
   installAdminSyncLayout();
@@ -233,6 +243,7 @@
     loadGroupingModule();
     loadLocalePreviewModule();
     loadUiFixesModule();
+    loadResumeGridControls();
     install();
     installModalGuard();
     installAdminSyncLayout();
