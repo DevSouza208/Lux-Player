@@ -66,7 +66,7 @@
     }));
   }
 
-  async function get(game) {
+  async function getBlob(game) {
     const key = gameKey(game);
     if (!key) return null;
     await cleanupExpired().catch(() => {});
@@ -75,6 +75,17 @@
 
     record.lastUsedAt = Date.now();
     await transaction('readwrite', store => store.put(record));
+    return {
+      blob: record.blob,
+      size: record.size || record.blob.size,
+      savedAt: record.savedAt,
+      lastUsedAt: record.lastUsedAt
+    };
+  }
+
+  async function get(game) {
+    const record = await getBlob(game);
+    if (!record) return null;
     return {
       url: URL.createObjectURL(record.blob),
       size: record.size,
@@ -145,5 +156,13 @@
     await transaction('readwrite', store => store.delete(key));
   }
 
-  window.LuxRomCache = { get, status, download, remove, cleanupExpired };
+  window.LuxRomCache = { get, getBlob, status, download, remove, cleanupExpired };
+
+  if (!document.querySelector('script[data-lux-sm64-compat]')) {
+    const script = document.createElement('script');
+    script.src = 'js/n64-sm64-compat.js?v=20260915-sm64-compat1';
+    script.async = true;
+    script.dataset.luxSm64Compat = '1';
+    document.head.appendChild(script);
+  }
 })();
