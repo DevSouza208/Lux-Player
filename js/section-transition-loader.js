@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-section-loader1';
+  const VERSION = '20260915-section-loader2';
   if (window.__luxSectionTransitionLoaderInstalled === VERSION) return;
 
   const MIN_DURATION = 1000;
@@ -259,4 +259,13 @@
       if (install() || attempts >= 240) clearInterval(timer);
     }, 25);
   }
+})();
+
+(() => {
+  if (document.querySelector('script[data-lux-sports-admin-source]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/sports-admin-source-bridge.js?v=20260915-sports-admin-source1';
+  script.async = true;
+  script.dataset.luxSportsAdminSource = '1';
+  document.head.appendChild(script);
 })();
