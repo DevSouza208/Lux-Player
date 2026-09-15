@@ -1,16 +1,14 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-n64-performance3';
+  const VERSION = '20260915-n64-performance4';
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isPhone = /iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent || '') ||
     (navigator.maxTouchPoints > 1 && Math.min(screen.width || 9999, screen.height || 9999) <= 768);
-  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent || '') ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
   if (!document.querySelector('script[data-lux-n64-local-session]')) {
     const script = document.createElement('script');
-    script.src = 'js/n64-local-session.js?v=20260915-n64-local-session1';
+    script.src = 'js/n64-local-session.js?v=20260915-n64-local-session2';
     script.async = false;
     script.dataset.luxN64LocalSession = '1';
     document.head.appendChild(script);
@@ -189,16 +187,8 @@
       const game = activePendingGame();
       const n64 = isN64Game(game);
       warmEmulatorCdn();
-      const result = original.apply(this, args);
-
-      if (n64) {
-        window.EJS_core = isIOS ? 'parallel-n64' : 'mupen64plus_next';
-        window.EJS_forceLegacyCores = false;
-
-        const threadsAvailable = window.crossOriginIsolated === true && typeof SharedArrayBuffer === 'function';
-        window.EJS_threads = threadsAvailable;
-      }
-      return result;
+      if (n64) window.EJS_forceLegacyCores = false;
+      return original.apply(this, args);
     };
 
     patched.__luxN64PerformancePatched = VERSION;
