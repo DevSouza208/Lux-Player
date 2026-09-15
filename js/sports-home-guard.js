@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data2') return;
-  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data2';
+  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data3') return;
+  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data3';
 
   const SPORTS_HOME_ENABLED = false;
 
@@ -33,6 +33,10 @@
     if (!window.LuxSportsLogos) ensureScript('lux-sports-logo-data', 'js/sports-global-mapping.js?v=20260913-footy-fast2');
   }
 
+  function loadHomeContentRails() {
+    if (!window.LuxHomeRails) ensureScript('lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-1');
+  }
+
   function enrichHiddenSportsData() {
     const games = window.LuxSports?.state?.games;
     const footyUrl = window.LuxSportsLogos?.footyUrl;
@@ -45,6 +49,7 @@
   }
 
   loadSportsDataEngine();
+  loadHomeContentRails();
 
   if (!SPORTS_HOME_ENABLED) {
     if (!applySportsVisibility()) {
@@ -61,6 +66,7 @@
     const dataTimer = setInterval(() => {
       attempts += 1;
       loadSportsDataEngine();
+      loadHomeContentRails();
       enrichHiddenSportsData();
       if (attempts >= 240) clearInterval(dataTimer);
     }, 250);
@@ -108,6 +114,7 @@
   const timer = setInterval(() => {
     attempts += 1;
     loadGuideFixes();
+    loadHomeContentRails();
     enrichHiddenSportsData();
     if (ensureOwner() || attempts >= 240) clearInterval(timer);
   }, 50);
