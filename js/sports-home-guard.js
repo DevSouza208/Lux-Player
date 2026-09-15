@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data4') return;
-  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data4';
+  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data5') return;
+  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data5';
 
   const SPORTS_HOME_ENABLED = false;
 
@@ -35,9 +35,9 @@
     // Faixas personalizadas da Home (Filmes/Séries/Jogos/Livros).
     if (!window.LuxHomeRails) ensureScript('lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2');
 
-    // Série 2026: usa a busca/discover do TMDB, mas só exibe títulos que
-    // realmente existem no catálogo carregado do Lux e abre tudo internamente.
-    if (!window.__luxHomeSeries2026) ensureScript('lux-home-series-2026', 'js/home-series-2026.js?v=20260915-1');
+    // Série 2026: busca no TMDB, filtra pelo catálogo local e mantém os cards
+    // estáveis enquanto uma atualização roda para evitar o efeito de piscar.
+    if (!window.__luxHomeSeries2026) ensureScript('lux-home-series-2026', 'js/home-series-2026.js?v=20260915-2');
   }
 
   function enrichHiddenSportsData() {
