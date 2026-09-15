@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  if (window.__luxSportsHomeGuardInstalled === '20260914-sports-hidden1') return;
-  window.__luxSportsHomeGuardInstalled = '20260914-sports-hidden1';
+  if (window.__luxSportsHomeGuardInstalled === '20260915-sports-hidden-data1') return;
+  window.__luxSportsHomeGuardInstalled = '20260915-sports-hidden-data1';
 
   const SPORTS_HOME_ENABLED = false;
 
@@ -13,11 +13,37 @@
   function applySportsVisibility() {
     const section = getSportsSection();
     if (!section) return false;
-
     section.style.display = SPORTS_HOME_ENABLED ? '' : 'none';
     section.dataset.luxSportsHidden = SPORTS_HOME_ENABLED ? '0' : '1';
     return true;
   }
+
+  function ensureScript(marker, src) {
+    if (document.querySelector(`script[data-${marker}]`)) return;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.setAttribute(`data-${marker}`, '1');
+    document.head.appendChild(script);
+  }
+
+  function loadSportsDataEngine() {
+    if (!window.LuxSports) ensureScript('lux-sports-data', 'js/sports.js?v=20260913-guide-fast1');
+    if (!window.LuxSportsLogos) ensureScript('lux-sports-logo-data', 'js/sports-global-mapping.js?v=20260913-footy-fast2');
+  }
+
+  function enrichHiddenSportsData() {
+    const games = window.LuxSports?.state?.games;
+    const footyUrl = window.LuxSportsLogos?.footyUrl;
+    if (!Array.isArray(games) || typeof footyUrl !== 'function') return false;
+    games.forEach(game => {
+      if (!game.home_logo && game.home) game.home_logo = footyUrl(game.home);
+      if (!game.away_logo && game.away) game.away_logo = footyUrl(game.away);
+    });
+    return true;
+  }
+
+  loadSportsDataEngine();
 
   if (!SPORTS_HOME_ENABLED) {
     if (!applySportsVisibility()) {
@@ -26,6 +52,16 @@
       });
       observer.observe(document.documentElement, { childList: true, subtree: true });
     }
+
+    // A seção visual continua escondida, mas o parser do Guia de Jogos e o
+    // resolvedor de escudos permanecem ativos para o construtor de banners Admin.
+    let attempts = 0;
+    const dataTimer = setInterval(() => {
+      attempts += 1;
+      loadSportsDataEngine();
+      enrichHiddenSportsData();
+      if (attempts >= 240) clearInterval(dataTimer);
+    }, 250);
     return;
   }
 
@@ -70,6 +106,7 @@
   const timer = setInterval(() => {
     attempts += 1;
     loadGuideFixes();
+    enrichHiddenSportsData();
     if (ensureOwner() || attempts >= 240) clearInterval(timer);
   }, 50);
   document.addEventListener('visibilitychange', () => {
