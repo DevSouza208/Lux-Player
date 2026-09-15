@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260915-series-rail-stable4';
+  const RESET_VERSION = '20260915-competition-logo1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -166,9 +166,6 @@ function animateDashboardEntry() {
   ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
 })();
 
-// O login por sessão precisa estar instalado antes do listener legado de
-// DOMContentLoaded. ui-motion é parser-blocking e vem imediatamente antes de
-// script.js, então estes dois módulos entram de forma síncrona.
 (() => {
   const loadSync = (marker, src) => {
     if (document.querySelector(`script[data-${marker}]`)) return;
@@ -198,11 +195,9 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  // Só o que afeta a primeira navegação fica aquecido cedo. O resto espera o
-  // carregamento da página para não disputar rede/CPU com autenticação e perfis.
   loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260912-xtream-sync-1']);
   loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
-  loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags3']);
+  loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags4']);
   loadModule(['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5']);
 
   const nonCritical = [
