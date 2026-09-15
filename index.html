@@ -6,14 +6,1009 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link rel="icon" href="lux.ico" type="image/x-icon">
   <title>LUX Play</title>
+
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- HLS.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- CSS Externo Modularizado -->
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/reader.css">
 </head>
 <body class="bg-[#09060e] text-slate-100 font-sans h-screen flex flex-col overflow-hidden select-none">
-<script>location.replace('index.html?lux-recovery=1');</script>
+
+  <!-- ================= TELA DE LOGIN ================= -->
+  <div id="authScreen" class="fixed inset-0 z-50 bg-[#06040a] flex items-center justify-center p-4 screen-transition screen-visible">
+    <div class="bg-[#120c1f] border border-purple-900/40 rounded-3xl p-8 max-w-md w-full lux-glow relative">
+      <div class="flex flex-col items-center justify-center gap-2 mb-8">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-900 p-0.5 lux-glow-sm flex items-center justify-center animate-lux-pulse">
+          <svg class="w-10 h-10 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+            <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+          </svg>
+        </div>
+        <h1 class="text-3xl font-black tracking-widest text-white mt-1">LUX<span class="text-purple-400 font-light">PLAY</span></h1>
+        <p class="text-xs text-purple-300/60 uppercase tracking-widest font-medium">Sua Central de Streaming</p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-purple-300 font-medium">Usuário</label>
+          <input id="authEmail" type="text" placeholder="Digite seu usuário..." class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition-all">
+        </div>
+        <div>
+          <label class="text-xs text-purple-300 font-medium">Senha</label>
+          <input id="authPass" type="password" placeholder="••••••••" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition-all">
+        </div>
+
+        <button id="loginBtn" onclick="handleLogin()" class="w-full mt-2 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
+          <span>Entrar</span>
+        </button>
+
+        <p id="authStatusText" class="text-xs text-center font-medium"></p>
+      </div>
+
+      <div class="absolute bottom-3 right-4 text-[10px] text-purple-400/40 font-mono pointer-events-none">versão 1.4.0</div>
+    </div>
+  </div>
+
+  <!-- ================= SPLASH SCREEN DE CARREGAMENTO ================= -->
+  <div id="loadingSplash" class="fixed inset-0 z-40 bg-[#06040a] flex flex-col items-center justify-center p-6 screen-transition screen-hidden-up hidden">
+    <div class="splash-ambient" aria-hidden="true"></div>
+    <div class="splash-content">
+      <div class="splash-emblem">
+        <div class="splash-orbit" aria-hidden="true"></div>
+        <div class="splash-logo">
+      <svg class="w-12 h-12 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+        <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+      </svg>
+    </div>
+      </div>
+      <p class="splash-eyebrow">SEU MOMENTO LUX PLAY</p>
+      <h2 class="splash-greeting">Olá, <span id="splashUserName">Usuário</span>!</h2>
+      <p id="splashStatusMessage" role="status" aria-live="polite" class="splash-status">Preparando seu catálogo...</p>
+      <div class="splash-progress" role="progressbar" aria-label="Carregando seu perfil"><span></span></div>
+      <div class="splash-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      <p class="splash-footnote">Seus favoritos. Suas histórias. Do seu jeito.</p>
+    </div>
+  </div>
+
+<!-- ================= HEADER PRINCIPAL ================= -->
+  <header id="appHeader" class="h-16 bg-[#100a1c] border-b border-purple-950/70 px-4 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-900 flex items-center justify-center lux-glow-sm">
+        <svg class="w-5 h-5 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+          <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+        </svg>
+      </div>
+      <span class="text-xl font-black tracking-widest text-white">LUX<span class="text-purple-400 font-light">PLAY</span></span>
+    </div>
+
+    <!-- Navegação Superior Integrada (Abas + Botão de Busca) -->
+    <nav id="desktopNav" class="relative hidden md:flex items-center bg-[#180f29] p-1 rounded-2xl border border-purple-900/40">
+      <div id="navSlider" class="absolute top-1 bottom-1 bg-purple-600 rounded-xl shadow-md transition-all duration-300 ease-out pointer-events-none z-0"></div>
+      
+      <button onclick="setSection('home')" id="navHome" class="relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-white">
+        <i data-lucide="home" class="w-3.5 h-3.5"></i> Início
+      </button>
+      <button onclick="setSection('live')" id="navLive" class="relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
+        <i data-lucide="tv" class="w-3.5 h-3.5"></i> TV
+      </button>
+      <button onclick="setSection('movies')" id="navMovies" class="relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
+        <i data-lucide="film" class="w-3.5 h-3.5"></i> Filmes
+      </button>
+      <button onclick="setSection('series')" id="navSeries" class="relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
+        <i data-lucide="clapperboard" class="w-3.5 h-3.5"></i> Séries
+      </button>
+      <button onclick="setSection('games')" id="navGames" class="relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
+        <i data-lucide="gamepad-2" class="w-3.5 h-3.5"></i> Jogos
+      </button>
+      <button onclick="setSection('reading')" id="navReading" class="relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white">
+        <i data-lucide="book-open" class="w-3.5 h-3.5"></i> Leitura
+      </button>
+      
+      <!-- Botão de Busca integrado perfeitamente na pílula -->
+      <button onclick="openSearchModal()" class="relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors text-purple-300 hover:text-white cursor-pointer border-l border-purple-950/60 ml-0.5 pl-3">
+        <i data-lucide="search" class="w-3.5 h-3.5 text-purple-400"></i> Buscar
+      </button>
+    </nav>
+
+    <div class="flex items-center gap-3">
+      <button id="adminPanelBtn" onclick="toggleAdminModal()" title="Administração de clientes" aria-label="Administração de clientes" class="hidden bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 p-2 rounded-xl transition-all">
+        <i data-lucide="users" class="w-4 h-4"></i>
+      </button>
+
+      <button id="gameUploadBtn" onclick="toggleGameUploadModal()" title="Enviar jogo" aria-label="Enviar jogo" class="hidden bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 p-2 rounded-xl transition-all">
+        <i data-lucide="upload" class="w-4 h-4"></i>
+      </button>
+
+      <button id="connectionConfigBtn" onclick="toggleConfigModal()" title="Adicionar / Trocar Lista" aria-label="Adicionar ou trocar lista" class="hidden bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
+        <i data-lucide="link" class="w-4 h-4"></i>
+      </button>
+
+      <button id="notificationBellBtn" onclick="reopenNotifications()" title="Ver Avisos" class="relative bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
+        <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+        <span id="notificationBadge" class="absolute top-1 right-1 w-2.5 h-2.5 bg-purple-500 rounded-full ring-2 ring-[#100a1c] hidden"></span>
+      </button>
+
+      <button onclick="reloadUserData()" title="Recarregar Dados" class="bg-[#180f29] hover:bg-[#23153b] text-purple-200 p-2 rounded-xl border border-purple-900/50 transition-all">
+        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+      </button>
+
+      <div class="flex items-center gap-2 pl-2 border-l border-purple-950">
+        <div class="flex flex-col text-right">
+          <span id="userNameBadge" class="text-xs font-bold text-white truncate max-w-[100px] md:max-w-[120px]">Usuário</span>
+          <span id="userExpiryBadge" class="text-[10px] text-purple-400 font-mono">Val: --</span>
+        </div>
+        <button id="headerProfileButton" onclick="openProfilePicker()" class="text-purple-300 hover:text-white p-2 rounded-full bg-purple-800/40 transition-all" title="Perfis e conta" aria-label="Abrir perfis e conta">
+          <i data-lucide="user-round" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= CORPO PRINCIPAL ================= -->
+  <div id="mainDashboard" class="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden relative pb-14 md:pb-0">
+    
+    <aside id="desktopSidebar" class="hidden lg:flex w-80 bg-[#0d0817] border-r border-purple-950/70 flex-col p-3 shrink-0 relative">
+      <div class="sidebar-toggle-tab" onclick="toggleSidebar()" title="Recolher Menu">
+        <i data-lucide="chevron-left" id="sidebarToggleIcon" class="w-3.5 h-3.5"></i>
+      </div>
+
+      <div class="flex items-center justify-between px-2 mb-2">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400">GÊNEROS</span>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleSortMode()" id="sortModeBtn" title="Organizar Gêneros" class="text-[10px] bg-purple-950 hover:bg-purple-900 text-purple-300 p-1.5 rounded-md transition-all flex items-center justify-center">
+            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+          </button>
+          <span id="mediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-full font-mono">0 itens</span>
+        </div>
+      </div>
+      <div id="categoriesList" class="flex flex-col gap-1.5 overflow-y-auto pr-1"></div>
+    </aside>
+
+    <div id="sidebarOpenTab" onclick="toggleSidebar()" title="Expandir Gêneros" class="hidden fixed left-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-[#2e1d47] hover:bg-[#a855f7] text-purple-200 hover:text-white rounded-r-lg z-30 cursor-pointer items-center justify-center transition-colors">
+      <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+    </div>
+
+    <!-- TELA DE INÍCIO (HOME DASHBOARD) -->
+    <section id="homeSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex flex-col overflow-y-auto p-4 md:p-6 space-y-6 hidden">
+      <div class="flex items-center justify-between shrink-0 mb-1">
+        <h2 class="text-xl font-black text-white tracking-wide flex items-center gap-2.5">
+          <span class="w-1.5 h-6 bg-purple-600 rounded-full inline-block"></span>
+          <span>Início</span>
+        </h2>
+      </div>
+
+      <!-- Banner Em Alta -->
+      <div id="homeHeroBanner" class="w-full bg-[#120c1f] border border-purple-900/40 rounded-3xl p-6 md:p-8 relative overflow-hidden lux-glow min-h-[280px] flex items-center">
+        <div class="absolute inset-0 bg-cover bg-center opacity-25 filter blur-sm transition-all duration-700 ease-in-out" id="heroBgImage"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-[#120c1f] via-[#120c1f]/80 to-transparent z-0"></div>
+        
+        <div class="relative z-10 w-full flex items-center justify-between gap-6 transition-opacity duration-500" id="heroContentWrap">
+          <div class="max-w-xl space-y-4">
+            <span class="text-[10px] bg-purple-600 text-white px-2.5 py-1 rounded-md font-bold uppercase tracking-wider">Em alta 🔥</span>
+            <h3 id="heroTitle" class="text-2xl md:text-4xl font-extrabold text-white">Buscando Tendências...</h3>
+            <p id="heroOverview" class="text-xs md:text-sm text-slate-300 line-clamp-3 md:line-clamp-4 leading-relaxed">Cruzando dados globais com o seu catálogo...</p>
+            <div class="flex items-center gap-3 pt-2">
+              <button id="heroPlayBtn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all shadow-lg shadow-purple-900/40 cursor-pointer hidden">
+                <i data-lucide="play" class="w-4 h-4 fill-white"></i> Assistir Agora
+              </button>
+            </div>
+          </div>
+          <div class="hidden sm:block shrink-0">
+            <img id="heroPosterImage" src="" alt="Poster" class="w-32 md:w-40 rounded-xl shadow-2xl border border-purple-900/40 hidden transition-transform hover:scale-105 object-cover aspect-[2/3]">
+          </div>
+        </div>
+      </div>
+
+      <!-- Continuar Assistindo -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-white tracking-wide uppercase text-purple-300">Continuar Assistindo</h3>
+        <div id="homeResumeContainer" class="flex gap-4 overflow-x-auto pb-2 min-h-[140px] items-center">
+          <p class="text-xs text-purple-400/60">Nenhuma mídia em andamento.</p>
+        </div>
+      </div>
+
+      <!-- Jogos do Dia -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-white tracking-wide uppercase text-emerald-400">Jogos e Esportes Ao Vivo</h3>
+        <div id="homeJogosContainer" class="flex gap-4 overflow-x-auto pb-2 min-h-[100px] items-center">
+          <p class="text-xs text-purple-400/60">Carregando jogos...</p>
+        </div>
+      </div>
+
+      <!-- Filmes Lançamentos -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-white tracking-wide uppercase text-purple-300">Filmes | Lançamentos 2026</h3>
+        <div id="homeLancamentosContainer" class="flex gap-4 overflow-x-auto pb-2 min-h-[220px] items-center">
+          <p class="text-xs text-purple-400/60">Carregando lançamentos...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEÇÃO: JOGOS (GBA / SNES / MEGA DRIVE / MASTER SYSTEM / PSP) -->
+    <section id="gamesSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex flex-col overflow-hidden hidden">
+      <!-- O conteúdo será injetado dinamicamente pela função renderGamesSection() -->
+    </section>
+
+    <!-- NOVA SEÇÃO: LEITURA (HQ / E-BOOKS) -->
+    <section id="readingSection" class="flex-1 min-h-0 h-full hidden">
+      <div class="reading-library">
+        <header class="reading-hero">
+          <div><span class="reading-eyebrow">LUX LEITURA · 1.4.0</span><h1>Entre páginas e ideias.</h1><p>Livros, quadrinhos e descobertas. Um espaço para ler no seu ritmo.</p><span id="readingCount">Sua biblioteca pessoal</span></div>
+          <div class="reading-hero-symbol" aria-hidden="true">¶<span>MAIS UM CAPÍTULO.</span></div>
+        </header>
+        <div class="reading-tools">
+          <label class="reading-search"><span aria-hidden="true">⌕</span><input id="readingSearch" type="search" placeholder="Buscar na biblioteca" aria-label="Buscar na biblioteca"></label>
+          <select id="readingCategory" aria-label="Filtrar gênero ou categoria"><option value="">Todos os gêneros</option></select>
+          <select id="readingAuthor" aria-label="Filtrar autor"><option value="">Todos os autores</option></select>
+          <select id="readingSort" aria-label="Ordenar biblioteca"><option value="recent">Mais recentes</option><option value="title">Título</option><option value="author">Autor</option><option value="year">Ano de publicação</option></select>
+          <div class="reading-import-actions"><label>Importar como<select id="readingImportCategory"><option value="">Automático</option><option>Livros</option><option>HQs</option><option>Artigos científicos</option><option>Revistas</option><option>Outros</option></select></label><button id="readingImportFile" type="button" class="reading-primary">＋ Importar arquivos</button><button id="readingImportFolder" type="button">Importar pasta</button></div>
+        </div>
+        <input id="readingFiles" type="file" accept=".pdf,.epub,.cbr,.cbz" multiple hidden>
+        <input id="readingFolder" type="file" accept="image/jpeg,image/png" webkitdirectory multiple hidden>
+        <p id="readingStatus" class="reading-status" role="status" aria-live="polite"></p>
+        <p id="readingCloudStatus" class="reading-cloud-status" role="status">Notas, comentários e preferências sincronizam por perfil. Arquivos pessoais ficam neste PC.</p>
+        <div id="readingGrid" class="reading-grid"></div>
+        <div id="readingEmpty" class="reading-empty"><span aria-hidden="true">▤</span><h2 id="readingEmptyTitle">Sua próxima leitura começa aqui</h2><p>Importe livros em PDF ou EPUB, HQs em CBR/CBZ ou uma pasta com páginas JPG e PNG.</p><small>Seus arquivos pessoais ficam neste computador. Progresso e anotações acompanham seu perfil na nuvem.</small></div>
+      </div>
+    </section>
+
+    <!-- Sessões Originais -->
+    <section id="mobileCategoriesSection" class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col lg:hidden hidden">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <div>
+          <h3 class="text-sm font-bold text-white">Selecione uma Categoria</h3>
+          <p class="text-[11px] text-purple-400/70" id="mobileCatSubtitle">Escolha o gênero para navegar</p>
+        </div>
+        <span id="mobileMediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2.5 py-1 rounded-full font-mono font-bold">0 itens</span>
+      </div>
+      <div id="mobileCategoryGrid" class="grid grid-cols-2 gap-3 pb-8"></div>
+    </section>
+
+    <section id="liveChannelsSection" class="w-full lg:w-80 bg-[#120c1f] border-b lg:border-b-0 lg:border-r border-purple-950/70 flex flex-col flex-1 lg:flex-initial shrink-0 overflow-hidden hidden">
+      <div class="p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#150d24]">
+        <div class="flex items-center gap-2 min-w-0">
+          <button onclick="backToMobileCategories()" class="lg:hidden bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+            <span>Gêneros</span>
+          </button>
+          <span id="liveCategoryTitle" class="text-xs font-semibold text-purple-300 truncate">Grade de Canais</span>
+        </div>
+        <span id="liveChannelCount" class="text-[10px] bg-purple-950 text-purple-400 px-2 py-0.5 rounded-full font-mono shrink-0">0</span>
+      </div>
+      <div id="liveItemsContainer" class="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 pb-20 lg:pb-2"></div>
+    </section>
+
+    <main id="livePlayerSection" class="hidden flex-1 bg-black flex-col justify-between overflow-hidden relative">
+      <div class="flex-1 flex items-center justify-center bg-[#06040a] relative">
+        <video id="videoPlayerLive" controls class="w-full h-full max-h-[82vh] object-contain"></video>
+        <div id="noStreamAlertLive" class="absolute inset-0 flex flex-col items-center justify-center bg-[#06040a] p-6 text-center">
+          <div class="w-16 h-16 rounded-full bg-purple-950/50 border border-purple-800/30 flex items-center justify-center mb-3 animate-lux-pulse">
+            <i data-lucide="tv" class="w-8 h-8 text-purple-400"></i>
+          </div>
+          <h3 class="text-purple-200 font-bold text-base">Nenhum canal ativo</h3>
+          <p class="text-purple-400/60 text-xs mt-1">Selecione uma transmissão na grade ao lado para assistir.</p>
+        </div>
+      </div>
+      <div class="h-16 bg-[#100a1c] border-t border-purple-950/80 px-6 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3.5">
+          <div id="liveCurrentLogo" class="w-10 h-10 rounded-xl bg-[#180f29] border border-purple-900/50 flex items-center justify-center text-purple-400 overflow-hidden">
+            <i data-lucide="tv" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 id="liveCurrentName" class="text-sm font-bold text-white">Nenhum canal ativo</h2>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="text-[10px] bg-purple-900/50 border border-purple-700/50 px-2 py-0.2 rounded text-purple-300 font-semibold uppercase">AO VIVO</span>
+              <span id="liveCurrentGroup" class="text-xs text-purple-400">LUX Play</span>
+            </div>
+          </div>
+        </div>
+        <button onclick="openEpgModal()" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5">
+          <i data-lucide="calendar" class="w-4 h-4"></i> Guia EPG
+        </button>
+      </div>
+    </main>
+
+    <section id="vodGridSection" class="flex-1 min-h-0 h-full bg-[#09060e] flex flex-col overflow-hidden hidden">
+      <div class="lg:hidden p-2.5 border-b border-purple-950 flex items-center justify-between shrink-0 bg-[#120c1f]">
+        <div class="flex items-center gap-2 min-w-0">
+          <button onclick="backToMobileCategories()" class="bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+            <span>Gêneros</span>
+          </button>
+          <span id="vodCategoryTitle" class="text-xs font-semibold text-purple-300 truncate">Catálogo</span>
+        </div>
+        <span id="vodItemCountBadgeMobile" class="text-[10px] bg-purple-950 text-purple-400 px-2 py-0.5 rounded-full font-mono shrink-0">0</span>
+      </div>
+
+      <div class="hidden lg:flex items-center justify-between px-6 pt-5 pb-2 shrink-0">
+        <h2 class="text-lg font-black text-white tracking-wide flex items-center gap-2.5">
+          <span class="w-1.5 h-5 bg-purple-600 rounded-full inline-block"></span>
+          <span id="activeCategoryHeading">Categoria</span>
+        </h2>
+        <span id="vodItemCountBadge" class="text-xs bg-purple-950/80 border border-purple-900/50 text-purple-300 px-3 py-1 rounded-full font-mono">0 itens</span>
+      </div>
+
+      <div id="vodGridContainer" class="flex-1 min-h-0 h-full overflow-y-auto p-3.5 md:p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 md:gap-5 content-start auto-rows-max pb-20 lg:pb-6 transition-all duration-300"></div>
+    </section>
+  </div>
+
+  <button id="floatingSearchBtn" onclick="openSearchModal()" class="md:hidden fixed bottom-20 right-4 z-40 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-xl lux-glow transition-all active:scale-95">
+    <i data-lucide="search" class="w-6 h-6"></i>
+  </button>
+
+<!-- MODAL DE BUSCA GLOBAL -->
+  <div id="searchModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex flex-col p-4 justify-start pt-16">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-2xl p-4 w-full max-w-md mx-auto lux-glow relative">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i data-lucide="search" class="w-4 h-4 text-purple-400"></i> Buscar Conteúdo
+        </h3>
+        <button onclick="closeSearchModal()" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+      
+      <!-- Input e Botão de Busca lado a lado -->
+      <div class="relative mb-3 flex gap-2">
+        <div class="relative flex-1">
+          <input id="searchInput" onkeydown="handleSearchKey(event)" type="text" placeholder="Digite e aperte Enter..." class="w-full bg-[#1a122c] border border-purple-900/50 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+          <i data-lucide="search" class="w-4 h-4 text-purple-400/50 absolute left-3 top-3"></i>
+        </div>
+        <button onclick="executeSearch()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md shrink-0 flex items-center gap-1.5">
+          <i data-lucide="search" class="w-3.5 h-3.5"></i> Pesquisar
+        </button>
+      </div>
+
+      <!-- Container de Pesquisas Recentes -->
+      <div id="recentSearchesContainer" class="mb-3 space-y-1.5 hidden">
+        <div class="flex items-center justify-between text-[11px] text-purple-300/70 px-1 mb-1 font-semibold">
+          <span>Buscas Recentes</span>
+          <button onclick="clearRecentSearches()" class="hover:text-purple-300 text-[10px]">Limpar tudo</button>
+        </div>
+        <div id="recentSearchesList" class="flex flex-col gap-1 max-h-36 overflow-y-auto pr-1"></div>
+      </div>
+
+      <button onclick="closeSearchModal()" class="w-full bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-semibold py-2 rounded-xl text-xs transition-all border border-purple-900/40">
+        Fechar
+      </button>
+    </div>
+  </div>
+  
+  <!-- Outros Modais (Admin, Config, Player, etc) -->
+  <div id="adminModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-6xl w-full max-h-[90vh] flex flex-col lux-glow overflow-hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-purple-950 mb-4 shrink-0">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400"></i> Painel de Administração
+        </h3>
+        <button onclick="toggleAdminModal()" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mb-4 shrink-0">
+        <button data-admin-tab="clientes" onclick="switchAdminTab('clientes')" class="admin-tab-btn bg-purple-600 text-white px-3 py-2 rounded-xl text-[11px] font-bold">Clientes</button>
+        <button data-admin-tab="games" onclick="switchAdminTab('games')" class="admin-tab-btn bg-[#180f29] text-purple-200 hover:bg-[#23153b] px-3 py-2 rounded-xl text-[11px] font-bold">Jogos</button>
+        <button data-admin-tab="books" onclick="switchAdminTab('books')" class="admin-tab-btn bg-[#180f29] text-purple-200 hover:bg-[#23153b] px-3 py-2 rounded-xl text-[11px] font-bold">Livros</button>
+        <button data-admin-tab="avatars" onclick="switchAdminTab('avatars')" class="admin-tab-btn bg-[#180f29] text-purple-200 px-3 py-2 rounded-xl text-[11px] font-bold">Fotos de perfil</button>
+        <button data-admin-tab="vods" onclick="switchAdminTab('vods')" class="admin-tab-btn bg-[#180f29] text-purple-200 hover:bg-[#23153b] px-3 py-2 rounded-xl text-[11px] font-bold">VODs / R2</button>
+      </div>
+
+      <div id="adminTabAvatars" class="admin-tab-panel hidden overflow-y-auto space-y-4">
+        <h3 class="font-bold text-purple-200">Galeria de fotos de perfil</h3>
+        <p class="text-sm text-purple-300">Estas fotos ficam disponíveis para todos. Remover da galeria mantém a foto de quem já a escolheu.</p>
+        <form onsubmit="saveGalleryAvatar(event)" class="space-y-3">
+          <input id="galleryAvatarName" required maxlength="40" placeholder="Nome da foto" aria-label="Nome da foto" class="w-full rounded-xl bg-[#120c1f] p-3 text-white">
+          <label class="avatar-upload-zone admin-avatar-upload" for="galleryAvatarFile">
+            <span id="galleryAvatarPreview" class="gallery-avatar-preview" aria-hidden="true">↑</span>
+            <strong>Clique para escolher uma foto</strong>
+            <span id="galleryAvatarFilename">Escolha uma imagem nos arquivos do seu dispositivo</span>
+            <small>JPG, PNG ou WebP · Até 8 MB · Recorte central</small>
+            <input id="galleryAvatarFile" required type="file" accept="image/jpeg,image/png,image/webp" aria-label="Foto para a galeria" onchange="previewGalleryAvatar(event)">
+          </label>
+          <button id="galleryAvatarSave" class="rounded-xl bg-purple-600 px-4 py-2 text-white">Adicionar à galeria</button>
+        </form>
+        <p id="adminGalleryStatus" role="status" class="text-sm text-purple-300"></p>
+        <div id="adminAvatarGallery" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
+      </div>
+      <div id="adminTabClientes" class="admin-tab-panel space-y-4 overflow-y-auto pr-1">
+        <div class="bg-[#180f29] border border-purple-900/40 rounded-2xl p-4">
+          <h4 id="adminUserFormTitle" class="text-xs font-bold uppercase text-purple-300 mb-3">Cadastrar Novo Cliente</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Nome</label>
+              <input id="adminNewName" type="text" placeholder="Nome do cliente" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Usuário (Login)</label>
+              <input id="adminNewUser" type="text" placeholder="usuario123" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Senha</label>
+              <input id="adminNewPass" type="text" placeholder="senha123" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Vencimento (ex: 31/12/2026)</label>
+              <input id="adminNewDue" type="text" placeholder="31/12/2026" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="text-[11px] text-purple-300 font-medium">Link da Lista M3U / Servidor</label>
+              <input id="adminNewM3u" type="text" placeholder="https://..." class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+              <label for="adminNewM3uFile" class="block mt-3 text-xs text-purple-200">Ou enviar arquivo M3U / M3U8 (até 200 MB)</label>
+              <input id="adminNewM3uFile" type="file" accept=".m3u,.m3u8" class="mt-2 block w-full text-xs text-purple-200 file:mr-3 file:rounded-lg file:border-0 file:bg-purple-600 file:px-3 file:py-2 file:text-white">
+              <button id="adminM3uAttach" type="button" onclick="adminAttachPlaylist()" class="mt-3 inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 px-4 py-2 text-xs font-bold text-white disabled:opacity-50 disabled:cursor-wait"><i data-lucide="upload" class="w-4 h-4"></i> Enviar e anexar</button>
+              <p class="mt-1 text-xs text-purple-400">Escolha o arquivo e clique em Enviar e anexar para preencher o campo da lista. Depois, salve o cliente.</p>
+              <p id="adminM3uUploadStatus" role="status" class="mt-1 text-xs text-purple-200"></p>
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Usuário XC (Opcional)</label>
+              <input id="adminNewUserXc" type="text" placeholder="userxc" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Senha XC (Opcional)</label>
+              <input id="adminNewPassXc" type="text" placeholder="senhaxc" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="text-[11px] text-purple-300 font-medium">URL Servidor XC (Opcional)</label>
+              <input id="adminNewUrlXc" type="text" placeholder="http://servidor.com:80" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">PIN Adulto (+18)</label>
+              <input id="adminNewAdultPin" type="text" placeholder="0000" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Cargo</label>
+              <select id="adminNewRole" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+                <option value="user">Usuário Comum</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+          </div>
+          <p id="adminUserEditHint" class="hidden mt-2 text-[11px] text-purple-300">O login é mantido para preservar os perfis, favoritos e saves desta conta.</p>
+          <button id="adminUserCancelEdit" type="button" onclick="resetAdminUserForm()" class="hidden mt-3 w-full border border-purple-800 rounded-xl py-2 text-xs text-purple-200">Cancelar edição</button>
+          <button id="adminUserSubmit" onclick="adminCreateUser()" class="mt-3 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-purple-900/40">
+            Salvar Cliente na Nuvem
+          </button>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold uppercase text-purple-300 mb-2">Clientes Cadastrados</h4>
+          <div id="adminUsersListContainer" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <p class="text-xs text-purple-400/60 text-center py-4">Carregando clientes...</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="adminTabGames" class="admin-tab-panel hidden overflow-y-auto pr-1">
+        <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6">
+          <h3 class="text-base font-bold text-white">Gerenciar jogos</h3>
+          <p class="mt-2 text-xs text-purple-300">Envie ROMs ou revise os jogos pendentes antes de publicá-los.</p>
+          <div class="mt-4 flex flex-wrap gap-3">
+            <button type="button" onclick="toggleGameUploadModal()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs">Enviar jogos</button>
+            <button type="button" onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 text-rose-200 font-bold px-4 py-2.5 rounded-xl text-xs">Revisar não aprovados</button>
+          </div>
+        </div>
+        <div class="mt-4 bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-base font-bold text-white">Status dos cores</h3>
+              <p class="mt-1 text-xs text-purple-300">Escolha quais emuladores já foram testados e aprovados. Verde aparecerá para os usuários; vermelho significa não testado.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="toggleAdminCoreStatusPanel()" class="bg-purple-950/70 hover:bg-purple-900/80 border border-purple-800/60 text-purple-200 font-bold px-3 py-2.5 rounded-xl text-xs"><span id="adminCoreStatusToggleLabel">Mostrar cores</span></button>
+              <button id="adminCoreStatusSave" type="button" onclick="saveAdminCoreStatuses()" disabled class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs disabled:opacity-50">Publicar status</button>
+            </div>
+          </div>
+          <div id="adminCoreStatusContent" class="hidden">
+            <div id="adminCoreStatusList" class="mt-5 space-y-2"></div>
+            <p id="adminCoreStatusMessage" class="mt-3 min-h-[18px] text-xs text-purple-300"></p>
+          </div>
+        </div>
+      </div>
+      <div id="adminTabBooks" class="admin-tab-panel hidden overflow-y-auto pr-1">
+        <div id="readingAdminRoot"></div>
+        <details class="reading-legacy-links"><summary>Links locais anteriores</summary>
+        <div class="bg-[#180f29] border border-purple-900/40 rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-bold uppercase text-purple-300">Configurar livros / HQs</h4>
+            <button onclick="adminAddBookEntry()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-[11px] font-bold">Adicionar item</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="md:col-span-2">
+              <label class="text-[11px] text-purple-300 font-medium">URL pública do livro / HQ</label>
+              <input id="adminBookUrl" type="url" placeholder="https://.../arquivo.pdf" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Título</label>
+              <input id="adminBookTitle" type="text" placeholder="Nome do livro" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Categoria</label>
+              <input id="adminBookCategory" type="text" placeholder="Quadrinhos, Romance, E-book" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div class="md:col-span-2">
+              <label class="text-[11px] text-purple-300 font-medium">URL da capa</label>
+              <input id="adminBookCover" type="url" placeholder="https://.../cover.jpg" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+          </div>
+          <div id="adminBooksList" class="mt-4 space-y-2"></div>
+        </div>
+        </details>
+      </div>
+
+      <div id="adminTabVods" class="admin-tab-panel hidden overflow-y-auto pr-1">
+        <div class="bg-[#180f29] border border-purple-900/40 rounded-2xl p-4 space-y-4">
+          <div class="relative rounded-2xl">
+          <div id="adminR2ConfigContent" inert style="filter: blur(6px); pointer-events: none; user-select: none;" class="space-y-4 min-h-[260px]">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-bold uppercase text-purple-300">Configuração do R2 / VOD</h4>
+            <button id="adminR2Save" disabled onclick="adminSaveR2Config()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-[11px] font-bold">Salvar configuração</button>
+          </div>
+          <button id="adminR2Lock" type="button" onclick="lockAdminR2Config()" class="hidden text-xs text-purple-300">Bloquear configurações</button>
+          <fieldset id="adminR2Fields" disabled class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="md:col-span-2">
+              <label class="text-[11px] text-purple-300 font-medium">URL pública do bucket / domínio</label>
+              <input id="adminR2Domain" type="text" readonly placeholder="https://media.seudominio.com" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+                <p class="mt-1 text-[10px] text-purple-400">É o endereço base de acesso aos arquivos do R2. O app usa esse domínio para formar os links públicos dos vídeos.</p>
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Nome do bucket</label>
+              <input id="adminR2Bucket" type="text" value="luxvod" readonly class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="text-[11px] text-purple-300 font-medium">Prefixo / pasta</label>
+              <input id="adminR2Prefix" type="text" placeholder="vods/" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+            </div>
+          </fieldset>
+          </div>
+          <form id="adminR2UnlockForm" onsubmit="event.preventDefault(); unlockAdminR2Config()" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-2xl bg-[#120c1f]/50 p-4 text-center">
+            <label for="adminR2Password" class="text-xs text-purple-300">Configurações bloqueadas — use sua senha de login</label>
+            <input id="adminR2Password" type="password" autocomplete="current-password" required placeholder="Senha de login" class="w-full max-w-xs bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white">
+            <button type="submit" class="bg-purple-600 text-white px-3 py-2 rounded-xl text-xs font-bold">Desbloquear</button>
+            <p id="adminR2UnlockStatus" role="status" class="text-xs text-rose-300"></p>
+          </form>
+          </div>
+
+          <div class="rounded-2xl border border-purple-900/40 bg-[#120c1f] p-3">
+            <h5 class="text-[11px] font-bold uppercase text-purple-300 mb-3">Adicionar VOD ao catálogo</h5>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="text-[11px] text-purple-300 font-medium">Título</label>
+                <input id="adminVodTitle" type="text" placeholder="Nome da VOD" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+              </div>
+              <div>
+                <label class="text-[11px] text-purple-300 font-medium">Categoria</label>
+                <input id="adminVodCategory" type="text" list="adminVodCategories" onfocus="renderAdminVodCategories()" placeholder="Escolha uma categoria ou digite uma nova" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+                <datalist id="adminVodCategories"></datalist>
+                <p class="mt-1 text-[10px] text-purple-400">Digite para buscar categorias existentes ou criar uma nova.</p>
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] text-purple-300 font-medium">Arquivo da VOD</label>
+                <input id="adminVodFile" type="file" accept="video/*,.mp4,.mkv,.webm" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-purple-200 file:mr-3 file:border-0 file:rounded-lg file:bg-purple-600 file:px-3 file:py-1 file:text-xs file:font-bold file:text-white hover:file:bg-purple-500">
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] text-purple-300 font-medium">URL pública do vídeo</label>
+                <input id="adminVodUrl" type="url" placeholder="https://.../arquivo.mp4" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+                <p class="mt-1 text-[10px] text-purple-400">É o link direto usado pelo player para reproduzir o vídeo. Ao enviar para o R2, ele é preenchido automaticamente. Para adicionar sem enviar, cole aqui o link de um vídeo já hospedado.</p>
+              </div>
+              <div class="md:col-span-2">
+                <label class="text-[11px] text-purple-300 font-medium">URL da capa / poster</label>
+                <input id="adminVodPoster" type="url" placeholder="https://.../poster.jpg" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
+              </div>
+            </div>
+            <p id="adminVodUploadStatus" class="mt-3 text-[11px] text-purple-400 min-h-[18px]"></p>
+            <div class="mt-3 flex gap-2">
+              <button id="adminVodUploadButton" onclick="adminUploadVodToR2()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Enviar para o R2 e adicionar ao catálogo</button>
+              <button onclick="adminAddVodCatalogEntry()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Adicionar ao catálogo sem enviar ao R2</button>
+              <button onclick="adminSyncR2CatalogToPlayer()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Publicar pendentes e atualizar</button>
+              <button id="adminCategorySyncButton" onclick="adminSendCategoriesToUsers()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all disabled:opacity-50">Enviar categorias para usuários</button>
+            </div>
+            <p id="adminCategorySyncStatus" class="mt-3 min-h-[18px] text-[11px] text-purple-300" role="status"></p>
+          </div>
+
+          <div>
+            <h5 class="text-[11px] font-bold uppercase text-purple-300 mb-2">Catálogo compartilhado de VODs</h5>
+            <div id="adminR2VodList" class="space-y-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameUploadModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto lux-glow">
+      <div class="flex items-center justify-between pb-3 border-b border-purple-950 mb-4">
+        <h3 class="text-base font-bold text-white flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 text-indigo-300"></i> Enviar jogo</h3>
+        <button onclick="cancelGameAdminForm()" title="Fechar" aria-label="Fechar" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="sm:col-span-2">
+          <label class="text-[11px] text-purple-300 font-medium">Arquivo da ROM</label>
+          <input id="gameAdminRom" type="file" multiple accept=".gba,.gb,.gbc,.sfc,.smc,.zip,.md,.gen,.bin,.nes,.n64,.z64" onchange="fillGameTitleFromRom()" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-purple-200 file:mr-3 file:border-0 file:rounded-lg file:bg-purple-600 file:px-3 file:py-1 file:text-xs file:font-bold file:text-white hover:file:bg-purple-500">
+          <div id="gameAdminSourceFile" class="hidden mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"></div>
+        </div>
+        <div><div class="flex items-center justify-between gap-2"><label class="text-[11px] text-purple-300 font-medium">Título</label><button type="button" onclick="searchGameMetadata()" class="text-[10px] font-bold text-indigo-300 hover:text-white transition-colors flex items-center gap-1"><i data-lucide="search" class="w-3 h-3"></i> Buscar dados</button></div><input id="gameAdminTitle" type="text" placeholder="Nome do jogo" onkeydown="if(event.key === 'Enter') { event.preventDefault(); searchGameMetadata(); }" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
+        <div><label class="text-[11px] text-purple-300 font-medium">Console</label><select id="gameAdminConsole" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"><option value="gba">Game Boy Advance</option><option value="gb">Game Boy</option><option value="gbc">Game Boy Color</option><option value="snes">SNES</option><option value="megadrive">Mega Drive</option><option value="mastersystem">Master System</option><option value="psp">PlayStation Portable</option><option value="nes">NES</option><option value="n64">Nintendo 64</option></select></div>
+        <div><label class="text-[11px] text-purple-300 font-medium">Ano (opcional)</label><input id="gameAdminYear" type="number" min="1950" max="2100" placeholder="1994" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
+        <div><label class="text-[11px] text-purple-300 font-medium">Gêneros (opcional)</label><input id="gameAdminGenres" type="text" placeholder="Ação, Plataforma" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
+        <div><label for="gameAdminPlayers" class="text-[11px] text-purple-300 font-medium">Máximo de jogadores</label><input id="gameAdminPlayers" type="number" min="1" max="8" step="1" value="1" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
+        <div><label for="gameAdminCoop" class="text-[11px] text-purple-300 font-medium">Modo cooperativo</label><select id="gameAdminCoop" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white"><option value="">Não informado</option><option value="yes">Sim — cooperativo</option><option value="no">Não</option></select></div>
+        <div class="sm:col-span-2"><label class="text-[11px] text-purple-300 font-medium">URL da capa (opcional)</label><input id="gameAdminCoverUrl" type="url" placeholder="https://..." class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
+        <div class="sm:col-span-2"><label class="text-[11px] text-purple-300 font-medium">Sinopse (opcional)</label><textarea id="gameAdminSynopsis" rows="3" placeholder="Descrição do jogo" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></textarea></div>
+        <div id="gameMetadataResults" class="sm:col-span-2 empty:hidden"></div>
+      </div>
+      <p class="text-[10px] text-purple-400/80 mt-2">Você pode selecionar várias ROMs. Em lote, o título será criado pelo nome de cada arquivo; duplicados são ignorados e falhas não interrompem os demais envios.</p>
+      <div class="mt-4 flex gap-2"><button onclick="adminImportGame('approved')" id="gameAdminSubmit" data-game-admin-action class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Publicar</button><button onclick="adminImportGame('pending')" id="gameAdminDraft" data-game-admin-action class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Rascunho</button><button onclick="cancelGameAdminForm()" class="px-4 bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-semibold rounded-xl text-xs border border-purple-900/40">Cancelar</button></div>
+      <p id="gameAdminStatus" aria-live="polite" class="mt-3 text-xs text-purple-400"></p>
+    </div>
+  </div>
+
+  <div id="movieModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-xl w-full max-h-[85vh] flex flex-col lux-glow overflow-y-auto">
+      <div class="flex items-start justify-between pb-4 border-b border-purple-950">
+        <div class="flex items-center gap-3 md:gap-4 min-w-0">
+          <div id="movieModalCover" class="w-20 h-28 md:w-24 md:h-36 rounded-xl bg-[#0c0814] border border-purple-900/50 overflow-hidden shrink-0 flex items-center justify-center shadow-lg">
+            <i data-lucide="film" class="w-8 h-8 text-purple-700"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 id="movieModalTitle" class="text-base md:text-xl font-bold text-white truncate">Título do Filme</h2>
+            <p id="movieModalCategory" class="text-xs text-purple-400 mt-1 truncate">Gênero</p>
+            <div class="flex items-center gap-2 mt-2">
+              <span id="movieModalYear" class="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded font-mono">--</span>
+              <button id="movieModalFavBtn" onclick="toggleFavoriteCurrentMovie(event)" class="text-purple-300 hover:text-rose-400 p-1 rounded-lg transition-all flex items-center gap-1 text-xs">
+                <i data-lucide="heart" class="w-4 h-4"></i> <span id="movieModalFavText">Favoritar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <button onclick="closeMovieModal()" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0">✕</button>
+      </div>
+      <div class="py-4 space-y-3">
+        <div>
+          <h4 class="text-[11px] font-bold uppercase text-purple-400 mb-1">Sinopse</h4>
+          <p id="movieModalPlot" class="text-xs text-slate-300 leading-relaxed">Carregando sinopse...</p>
+        </div>
+      </div>
+      <div class="pt-3 border-t border-purple-950 flex gap-3 mt-auto">
+        <button id="movieModalPlayBtn" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-xs transition-all shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
+          <i data-lucide="play" class="w-4 h-4 fill-white"></i> Assistir Filme
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="seriesModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-2xl w-full max-h-[85vh] flex flex-col lux-glow">
+      <div class="flex items-start justify-between pb-4 border-b border-purple-950">
+        <div class="flex items-center gap-3 md:gap-4 min-w-0">
+          <div id="seriesModalCover" class="w-20 h-28 md:w-24 md:h-36 rounded-xl bg-[#0c0814] border border-purple-900/50 overflow-hidden shrink-0 flex items-center justify-center shadow-lg">
+            <i data-lucide="clapperboard" class="w-8 h-8 text-purple-700"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 id="seriesModalTitle" class="text-base md:text-lg font-bold text-white truncate">Nome da Série</h2>
+            <p id="seriesModalCategory" class="text-xs text-purple-400 mt-0.5 truncate">Gênero</p>
+            <div class="flex items-center gap-2 mt-1">
+              <span id="seriesModalStats" class="text-[10px] md:text-[11px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-md font-mono">Carregando...</span>
+              <button id="seriesModalFavBtn" onclick="toggleFavoriteCurrentSeries(event)" class="text-purple-300 hover:text-rose-400 p-1 rounded-lg transition-all flex items-center gap-1 text-xs">
+                <i data-lucide="heart" class="w-4 h-4"></i> <span id="seriesModalFavText">Favoritar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <button onclick="closeSeriesModal()" class="text-purple-400 hover:text-white p-1 rounded-lg shrink-0">✕</button>
+      </div>
+      <div class="py-2">
+        <p id="seriesModalPlot" class="text-xs text-slate-300 leading-relaxed line-clamp-3">Carregando sinopse...</p>
+      </div>
+      <div class="py-2">
+        <span class="text-[11px] font-bold uppercase text-purple-400 mb-1.5 block">Temporada:</span>
+        <div id="seriesSeasonsContainer" class="flex gap-2 overflow-x-auto pb-1"></div>
+      </div>
+      <div class="flex-1 overflow-y-auto pr-1 space-y-1.5" id="seriesEpisodesContainer"></div>
+    </div>
+  </div>
+
+  <div id="epgModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 md:p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-lg w-full max-h-[80vh] flex flex-col lux-glow">
+      <div class="flex items-center justify-between pb-3 border-b border-purple-950">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i data-lucide="calendar" class="w-4 h-4 text-purple-400"></i> Guia de Programação (EPG)
+        </h3>
+        <button onclick="closeEpgModal()" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+      <div id="epgContainer" class="flex-1 overflow-y-auto py-3 space-y-2">
+        <p class="text-xs text-purple-300/70 text-center py-8">Selecione um canal para ver a programação ou aguarde carregamento...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navegação Mobile -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-[#100a1c]/95 backdrop-blur-md border-t border-purple-950/80 flex items-center justify-around z-30 px-2">
+    <button onclick="setSection('home')" id="bNavHome" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-300 transition-all">
+      <div class="p-1 rounded-xl bg-purple-600 text-white shadow-md shadow-purple-900/60">
+        <i data-lucide="home" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Início</span>
+    </button>
+    <button onclick="setSection('live')" id="bNavLive" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
+        <i data-lucide="tv" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">TV</span>
+    </button>
+    <button onclick="setSection('movies')" id="bNavMovies" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
+        <i data-lucide="film" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Filmes</span>
+    </button>
+    <button onclick="setSection('series')" id="bNavSeries" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
+        <i data-lucide="clapperboard" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Séries</span>
+    </button>
+    <button onclick="setSection('games')" id="bNavGames" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
+        <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Jogos</span>
+    </button>
+    <button onclick="setSection('reading')" id="bNavReading" class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1 text-purple-400/60 hover:text-purple-300 transition-all">
+      <div class="p-1 rounded-xl text-purple-400/60">
+        <i data-lucide="book-open" class="w-4 h-4"></i>
+      </div>
+      <span class="text-[10px] font-bold">Leitura</span>
+    </button>
+  </nav>
+
+  <div id="vodPlayerModal" class="fixed inset-0 z-50 bg-black flex flex-col hidden">
+    <div class="h-14 bg-[#100a1c]/95 backdrop-blur-md border-b border-purple-950 px-3 md:px-4 flex items-center justify-between shrink-0 z-10">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <button onclick="closeVodPlayer()" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Voltar</span>
+        </button>
+        <span id="vodPlayerType" class="text-[9px] md:text-[10px] bg-purple-900 text-purple-300 px-2 py-0.5 rounded font-bold uppercase shrink-0">AO VIVO</span>
+        <h2 id="vodPlayerTitle" class="text-xs md:text-sm font-bold text-white truncate max-w-[180px] sm:max-w-md">Título da Transmissão</h2>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openEpgModal()" class="md:hidden bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+          <i data-lucide="calendar" class="w-4 h-4"></i>
+        </button>
+        <button onclick="togglePlayerFullscreen()" title="Alternar Tela Cheia" class="bg-purple-900/40 hover:bg-purple-600 text-purple-200 hover:text-white p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
+          <i data-lucide="maximize" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+    <div id="playerVideoContainer" class="flex-1 bg-black flex items-center justify-center relative overflow-hidden">
+      <video id="videoPlayerVod" class="w-full h-full max-h-[92vh] object-contain" playsinline autoPlay></video>
+      <div id="vodLoadingOverlay" class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-[#08050d] transition-opacity duration-500">
+        <div class="vod-loading-mark mb-5 flex h-20 w-20 items-center justify-center rounded-3xl">
+          <svg class="h-11 w-11 text-white" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M26 20 C26 14, 34 11, 40 15 L82 44 C88 48, 88 56, 82 60 L40 89 C34 93, 26 90, 26 84 Z" />
+            <path d="M42 66 V36 C42 30, 60 30, 60 44 C60 58, 42 58, 42 58" />
+          </svg>
+        </div>
+        <p class="text-lg font-black tracking-[0.24em] text-white">LUX<span class="font-light text-purple-400">PLAY</span></p>
+        <p id="vodLoadingText" class="mt-2 text-xs font-medium text-purple-300/75">Preparando sua sessão...</p>
+        <div class="mt-5 h-1.5 w-56 overflow-hidden rounded-full bg-purple-950/80">
+          <div class="vod-loading-progress h-full rounded-full"></div>
+        </div>
+      </div>
+      <div id="vodCustomControls" class="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black via-black/90 to-transparent px-3 pb-3 pt-14 transition-all duration-300 md:px-6 md:pb-5">
+        <div class="mx-auto w-full max-w-7xl">
+          <input id="vodProgress" type="range" min="0" max="0" value="0" step="0.1" aria-label="Progresso do vídeo" oninput="seekVodPlayer(this.value)" class="mb-3 block h-1.5 w-full cursor-pointer appearance-none rounded-full accent-purple-500">
+          <div class="flex items-center justify-between gap-2 text-white">
+            <div class="flex min-w-0 items-center gap-1 sm:gap-2">
+              <button id="vodPreviousEpisode" onclick="playRelativeEpisode(-1)" title="Episódio anterior" aria-label="Episódio anterior" class="vod-control-button hidden"><i data-lucide="skip-back" class="h-5 w-5 fill-current"></i></button>
+              <button onclick="seekVodBy(-10)" title="Voltar 10 segundos (←)" aria-label="Voltar 10 segundos" class="vod-control-button vod-skip-button"><span class="vod-skip-icon"><i data-lucide="rotate-ccw" class="h-5 w-5"></i><b>10</b></span><span class="vod-skip-label">Voltar</span></button>
+              <button onclick="toggleVodPlayback()" title="Reproduzir ou pausar (Espaço)" aria-label="Reproduzir ou pausar" class="vod-control-button vod-play-button"><i id="vodPlayIcon" data-lucide="play" class="h-5 w-5 fill-current"></i></button>
+              <button onclick="seekVodBy(10)" title="Avançar 10 segundos (→)" aria-label="Avançar 10 segundos" class="vod-control-button vod-skip-button"><span class="vod-skip-icon"><i data-lucide="rotate-cw" class="h-5 w-5"></i><b>10</b></span><span class="vod-skip-label">Avançar</span></button>
+              <button id="vodNextEpisode" onclick="playRelativeEpisode(1)" title="Próximo episódio" aria-label="Próximo episódio" class="vod-control-button hidden"><i data-lucide="skip-forward" class="h-5 w-5 fill-current"></i></button>
+              <span id="vodTimeDisplay" class="ml-1 whitespace-nowrap text-xs font-semibold tabular-nums text-white sm:text-sm">0:00 / 0:00</span>
+            </div>
+            <div class="flex shrink-0 items-center gap-1 sm:gap-2">
+              <div class="relative">
+                <button id="vodAudioButton" onclick="togglePlayerTrackMenu('audio')" title="Idioma do áudio" aria-label="Escolher idioma do áudio" class="vod-control-button hidden"><i data-lucide="languages" class="h-5 w-5"></i></button>
+                <div id="vodAudioMenu" class="absolute bottom-12 right-0 hidden w-60 overflow-hidden rounded-2xl border border-purple-700/70 bg-[#120c1f]/95 p-2 shadow-2xl backdrop-blur-md"></div>
+              </div>
+              <div class="relative">
+                <button id="vodSubtitleButton" onclick="togglePlayerTrackMenu('subtitle')" title="Legendas" aria-label="Escolher legendas" class="vod-control-button hidden"><i data-lucide="captions" class="h-5 w-5"></i></button>
+                <div id="vodSubtitleMenu" class="absolute bottom-12 right-0 hidden w-60 overflow-hidden rounded-2xl border border-purple-700/70 bg-[#120c1f]/95 p-2 shadow-2xl backdrop-blur-md"></div>
+              </div>
+              <div class="relative">
+                <button onclick="toggleVodSpeedMenu()" title="Velocidade de reprodução" aria-label="Escolher velocidade de reprodução" class="vod-control-button"><i data-lucide="gauge" class="h-5 w-5"></i><span id="vodSpeedLabel" class="ml-0.5 text-[10px] font-black">1x</span></button>
+                <div id="vodSpeedMenu" class="absolute bottom-12 right-0 hidden w-44 overflow-hidden rounded-2xl border border-purple-700/70 bg-[#120c1f]/95 p-2 shadow-2xl backdrop-blur-md"></div>
+              </div>
+              <button onclick="toggleVodPictureInPicture()" title="Picture in Picture" aria-label="Abrir Picture in Picture" class="vod-control-button"><i data-lucide="picture-in-picture-2" class="h-5 w-5"></i></button>
+              <button onclick="downloadVod()" title="Baixar este VOD" aria-label="Baixar este VOD" class="vod-control-button"><i data-lucide="download" class="h-5 w-5"></i></button>
+              <button onclick="toggleVodMute()" title="Ativar ou desativar som (M)" aria-label="Ativar ou desativar som" class="vod-control-button"><i id="vodVolumeIcon" data-lucide="volume-2" class="h-5 w-5"></i></button>
+              <input id="vodVolume" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" oninput="setVodVolume(this.value)" class="hidden w-20 cursor-pointer accent-purple-500 sm:block">
+              <button onclick="togglePlayerFullscreen()" title="Tela cheia (F)" aria-label="Alternar tela cheia" class="vod-control-button"><i data-lucide="maximize" class="h-5 w-5"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="nextEpOverlay" class="absolute inset-0 bg-black/85 backdrop-blur-md z-30 hidden flex flex-col items-center justify-center p-6 text-center">
+        <div class="max-w-md w-full bg-[#120c1f] border border-purple-900/60 rounded-3xl p-6 lux-glow space-y-4 shadow-2xl">
+          <div class="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-500/40 text-purple-400 flex items-center justify-center mx-auto animate-pulse">
+            <i data-lucide="play" class="w-6 h-6 fill-current"></i>
+          </div>
+          <div>
+            <span class="text-[10px] bg-purple-600 text-white px-2.5 py-1 rounded-md font-bold uppercase tracking-wider">Próximo Episódio em instantes</span>
+            <h3 id="nextEpSeriesName" class="text-base font-bold text-white mt-2">Nome da Série</h3>
+            <p id="nextEpTitle" class="text-xs text-purple-300 mt-1">T1:E2 - Título do Episódio</p>
+          </div>
+          <div class="w-full h-1.5 bg-[#1a122c] rounded-full overflow-hidden border border-purple-900/40">
+            <div id="nextEpProgressBar" class="h-full bg-purple-500 rounded-full w-full transition-all duration-300"></div>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button onclick="cancelNextEpisode()" class="flex-1 py-2.5 text-xs font-semibold text-slate-400 hover:bg-purple-900/20 rounded-xl transition-all">Cancelar</button>
+            <button onclick="playNextEpisodeNow()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-purple-900/40">Assistir Agora</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="adultPinModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#120c1f] border border-rose-900/50 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-950/60 border border-rose-800/40 flex items-center justify-center mb-3 text-rose-400">
+        <i data-lucide="lock" class="w-7 h-7"></i>
+      </div>
+      <h3 class="text-base font-bold text-white">Conteúdo Protegido (+18)</h3>
+      <p class="text-xs text-slate-400 mt-1 mb-4">Insira o PIN de controle parental para desbloquear.</p>
+      <input id="adultPinInput" type="password" placeholder="Digite o PIN..." class="w-full bg-[#1a122c] border border-rose-900/50 rounded-xl px-4 py-2.5 text-center text-lg text-white font-mono focus:outline-none focus:border-rose-500 mb-2" maxlength="10">
+      <p id="adultPinError" class="text-xs text-rose-400 mb-3 hidden font-medium">PIN incorreto!</p>
+      <div class="flex gap-2">
+        <button onclick="closeAdultPinModal()" class="flex-1 py-2 text-xs font-semibold text-slate-400 hover:bg-purple-900/20 rounded-xl">Cancelar</button>
+        <button onclick="verifyAdultPin()" class="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2 rounded-xl text-xs transition-all shadow-lg shadow-rose-950/40">Desbloquear</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="configModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-6 max-w-lg w-full lux-glow">
+      <h2 class="text-lg font-bold mb-3 text-white">Conectar Fonte de Vídeo</h2>
+      <div class="flex bg-[#1a122c] p-1 rounded-xl mb-4 border border-purple-900/40">
+        <button onclick="setConnectionTab('xc')" id="tabXc" class="flex-1 py-1.5 text-xs font-bold bg-purple-600 text-white rounded-lg transition-all">Xtream Codes (XC)</button>
+        <button onclick="setConnectionTab('m3u')" id="tabM3u" class="flex-1 py-1.5 text-xs font-bold text-purple-300 rounded-lg transition-all">Link M3U</button>
+      </div>
+      <div id="formXc" class="space-y-3">
+        <div>
+          <label class="text-[11px] text-purple-300 font-medium">URL do Servidor / DNS</label>
+          <input id="manualXcServer" type="text" placeholder="http://servidor.com:80" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Usuário XC</label>
+            <input id="manualXcUser" type="text" placeholder="usuario" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+          </div>
+          <div>
+            <label class="text-[11px] text-purple-300 font-medium">Senha XC</label>
+            <input id="manualXcPass" type="password" placeholder="••••••••" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+          </div>
+        </div>
+      </div>
+      <div id="formM3u" class="space-y-3 hidden">
+        <div>
+          <label class="text-[11px] text-purple-300 font-medium">Link M3U / M3U8 Completo</label>
+          <input id="manualM3uInput" type="text" placeholder="https://exemplo.com/lista.m3u8" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-purple-500">
+        </div>
+      </div>
+      <div class="mt-4 border-t border-purple-900/50 pt-4">
+        <label for="localM3uFile" class="block text-xs font-bold text-purple-200">Importar arquivo M3U do dispositivo</label>
+        <input id="localM3uFile" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" onchange="importLocalM3u(this)" class="mt-2 block w-full text-xs text-purple-200 file:mr-3 file:rounded-lg file:border-0 file:bg-purple-600 file:px-3 file:py-2 file:text-white">
+        <p class="mt-2 text-[11px] text-purple-400">Abre a lista nesta sessão, sem enviar o arquivo. Canais com endereço HTTP ainda podem ser bloqueados pelo navegador.</p>
+        <p id="localM3uStatus" role="status" class="mt-2 text-xs text-purple-200"></p>
+      </div>
+      <div class="flex justify-end gap-2 mt-5">
+        <button onclick="toggleConfigModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-purple-300 hover:bg-purple-900/30">Cancelar</button>
+        <button onclick="saveManualConnection()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-lg shadow-purple-900/40">Conectar e Carregar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="notificationContainer" class="fixed bottom-16 md:bottom-6 right-4 z-[60] flex flex-col gap-2.5 max-w-xs sm:max-w-sm w-[calc(100%-2rem)] sm:w-80 pointer-events-none"></div>
+
+  <button id="appUpdateNotification" onclick="installDownloadedUpdate()" class="hidden fixed bottom-5 right-4 z-[70] w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-emerald-400/50 bg-[#120c1f] p-4 text-left shadow-2xl shadow-emerald-950/40 transition-all hover:-translate-y-0.5 sm:w-96">
+    <span class="flex items-start gap-3">
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300"><i data-lucide="download" class="w-5 h-5"></i></span>
+      <span class="min-w-0 flex-1"><span id="appUpdateTitle" class="block text-sm font-bold text-white">Atualização disponível</span><span id="appUpdateMessage" class="mt-0.5 block text-xs leading-relaxed text-purple-300">Clique aqui para instalar a nova versão.</span></span>
+      <i data-lucide="chevron-right" class="mt-2 h-4 w-4 shrink-0 text-emerald-300"></i>
+    </span>
+  </button>
+
+
+  <div id="profilePicker" class="fixed inset-0 z-[80] hidden flex items-center justify-center bg-[#0d0818]/95 backdrop-blur-xl p-4 overflow-y-auto">
+    <div role="dialog" aria-modal="true" aria-labelledby="profilePickerTitle" class="w-full max-w-2xl rounded-3xl border border-purple-800/40 bg-[#180f29] p-6 md:p-10 text-center max-h-[95vh] overflow-y-auto">
+      <h2 id="profilePickerTitle" class="text-2xl md:text-3xl font-bold text-white">Quem está assistindo?</h2>
+      <p class="mt-2 text-sm text-purple-300">Até 4 perfis para compartilhar sua conta.</p>
+      <div id="profileChoices" class="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+      <button id="profileAdd" onclick="editAccountProfile()" class="mt-6 rounded-xl border border-purple-600 px-5 py-2 text-sm font-bold text-purple-200 hover:bg-purple-900">+ Criar perfil</button>
+
+      <form id="profileAdultGate" onsubmit="unlockAdultProfile(event)" class="hidden mt-5 space-y-3 rounded-2xl border border-purple-800/50 p-4">
+        <input id="profileAdultSlot" type="hidden">
+        <label class="block text-sm text-purple-200">Use a senha da conta para entrar no perfil adulto<input id="profileAdultPassword" type="password" autocomplete="current-password" required class="mt-2 w-full rounded-xl bg-[#120c1f] border border-purple-800 px-3 py-2 text-white"></label>
+        <button class="rounded-xl bg-purple-600 px-5 py-2 font-bold text-white">Entrar no perfil</button>
+      </form>
+      <p id="profilePickerStatus" role="status" class="mt-4 text-xs text-purple-300"></p>
+      <div class="mt-6 flex flex-wrap justify-center gap-5 text-sm">
+        <button id="profilePickerClose" onclick="closeProfilePicker()" class="text-purple-200">Voltar</button>
+        <button onclick="openProfilePicker(profileEntryPending)" class="text-purple-300">Atualizar perfis</button>
+        <button onclick="logout()" class="text-rose-300 hover:text-rose-200">Sair da conta</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="profileEditorDialog" aria-labelledby="profileEditorTitle">
+    <form id="profileEditor" onsubmit="saveAccountProfile(event)" class="space-y-4 text-left">
+      <h2 id="profileEditorTitle" class="text-center text-2xl font-bold">Editar perfil</h2>
+      <input id="profileEditSlot" type="hidden">
+      <div class="flex flex-col items-center gap-3 text-center">
+        <span id="profilePhotoPreview" class="w-20 h-20 rounded-full overflow-hidden bg-purple-700 flex items-center justify-center text-2xl font-bold">P</span>
+        <div class="avatar-source-buttons"><button type="button" onclick="openAvatarChooser('upload')">↑ Upload</button><button type="button" onclick="openAvatarChooser('gallery')">▦ Galeria do app</button><button type="button" onclick="openAvatarChooser('emoji')">☺ Emoji</button></div>
+        <button type="button" onclick="removeProfilePhoto()" class="text-xs text-purple-300">Remover foto</button>
+
+      </div>
+      <label class="block text-sm text-purple-200">Nome do perfil<input id="profileEditName" oninput="updateProfilePhotoPreview()" required maxlength="30" class="mt-1 w-full rounded-xl bg-[#120c1f] border border-purple-800 px-3 py-2 text-white"></label>
+      <label class="flex items-center gap-2 text-sm text-purple-200"><input id="profileEditChild" type="checkbox">Perfil infantil — ocultar conteúdo +18</label>
+      <label class="flex items-center gap-2 text-sm text-purple-200"><input id="profileEditProtected" type="checkbox">Pedir senha de login ao entrar neste perfil</label>
+      <p class="text-xs text-purple-400">Opcional. Ative nos perfis adultos para restringir o acesso das crianças.</p>
+      <label class="block text-sm text-purple-200">Senha de login para salvar ou excluir<input id="profileEditPassword" type="password" autocomplete="current-password" required class="mt-1 w-full rounded-xl bg-[#120c1f] border border-purple-800 px-3 py-2 text-white"></label>
+      <button id="profileSaveButton" class="rounded-xl bg-purple-600 px-4 py-2 font-bold text-white">Salvar alterações</button>
+      <button type="button" onclick="closeProfileEditor()" class="ml-3 text-sm text-purple-300">Cancelar</button>
+      <p id="profileEditorStatus" role="status" class="text-sm text-rose-300"></p>
+      <section id="profileDangerZone" class="rounded-2xl border border-rose-800 bg-rose-950/30 p-4">
+        <h3 class="font-bold text-rose-400">Área de risco</h3>
+        <p class="my-2 text-xs text-rose-200">Excluir remove os favoritos, histórico e saves deste perfil. Digite sua senha de login acima para confirmar.</p>
+        <button id="profileDelete" type="button" onclick="deleteAccountProfile()" class="rounded-xl bg-rose-700 px-4 py-2 font-bold text-white">Excluir perfil</button>
+      </section>
+    </form>
+  </dialog>
+  <dialog id="avatarChooserDialog" aria-labelledby="avatarChooserTitle">
+    <div class="avatar-chooser-heading"><h2 id="avatarChooserTitle">Escolher avatar</h2><button type="button" onclick="closeAvatarChooser()" aria-label="Fechar escolha de avatar">✕</button></div>
+    <section id="avatarUploadPanel" hidden>
+      <p class="avatar-help">Dê a sua cara ao perfil.</p>
+      <label class="avatar-upload-zone" for="profileEditPhoto"><span class="avatar-upload-icon" aria-hidden="true">↑</span><strong>Clique para escolher uma foto</strong><span>Procure uma imagem nos arquivos do seu dispositivo</span><small>JPG, PNG ou WebP · Até 8 MB · Recorte central</small><input id="profileEditPhoto" type="file" accept="image/jpeg,image/png,image/webp" onchange="uploadChosenAvatar(event)"></label>
+      <p id="avatarUploadStatus" role="status" class="avatar-help"></p>
+    </section>
+    <section id="avatarGalleryPanel" hidden><p class="avatar-help">Escolha um dos ícones da galeria do app.</p><p id="profileGalleryStatus" role="status" class="avatar-help"></p><div id="profileAvatarGallery" class="avatar-options-grid"></div><button type="button" onclick="loadAvatarGallery(false)" class="avatar-refresh">Atualizar galeria</button></section>
+    <section id="avatarEmojiPanel" hidden><p class="avatar-help">Animais, carinhas e símbolos para deixar o perfil do seu jeito.</p><div id="profileEmojiChoices" class="avatar-options-grid"></div></section>
+  </dialog>
+  <!-- JavaScript Externo Modularizado -->
+  <dialog id="readerDialog" aria-labelledby="readerTitle">
+    <div id="readerShell" data-theme="dark">
+      <header class="reader-header"><button id="readerClose" type="button" aria-label="Fechar leitor e voltar à biblioteca">← Biblioteca</button><div class="reader-heading"><span class="reading-eyebrow">SEU MOMENTO DE LEITURA</span><h2 id="readerTitle"></h2></div><button id="readerNotesButton" type="button">✎ Notas</button><button id="readerDictionaryButton" type="button">Aa Dicionário</button></header>
+      <div class="reader-settings"><label>Tema <select id="readerTheme"><option value="dark">Escuro</option><option value="sepia">Sépia</option><option value="light">Claro</option></select></label><label id="readerZoomLabel">Zoom <select id="readerZoom"><option value="1">Ajustar à tela</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option><option value="3">300%</option></select></label><label id="readerFontLabel" hidden>Fonte <select id="readerFont"><option value="90">90%</option><option value="110">110%</option><option value="130">130%</option><option value="160">160%</option><option value="200">200%</option></select></label><label id="readerLanguageLabel" hidden>Idioma</label><label id="readerStartLabel" hidden>Começar no capítulo <input id="readerStartChapter" type="number" min="1" value="1" aria-label="Capítulo inicial"></label><span id="readerLanguageBadge" role="status"></span><span id="readerSaveStatus" role="status"></span></div>
+      <p id="readerMessage" role="status" aria-live="polite"></p>
+      <main id="readerStage" aria-label="Conteúdo da leitura"></main>
+      <aside id="readerPanel" hidden><div class="reader-panel-heading"><h3 id="readerPanelTitle">Bloco de notas</h3><button id="readerPanelClose" type="button" aria-label="Fechar painel">×</button></div><div id="readerNotesPanel"><p>Suas ideias, guardadas junto desta obra.</p><textarea id="readerNotes" maxlength="200000" placeholder="Uma ideia, uma citação, uma descoberta…" aria-label="Notas desta obra"></textarea><div class="reader-note-actions"><button id="readerNotePosition" type="button">＋ Página atual</button><button id="readerExportNotes" type="button">Exportar .txt</button></div><small>Salvamento automático neste perfil.</small></div><div id="readerDictionaryPanel" hidden><p>Selecione uma palavra no PDF ou EPUB, ou digite abaixo.</p><form id="readerDictionaryForm"><input id="readerWord" type="search" maxlength="80" placeholder="Qual palavra?" aria-label="Palavra para consultar" required><button type="submit" class="reading-primary">Consultar</button></form><small>Português · consulta online no Wikcionário. Imagens e PDFs digitalizados exigem digitação.</small><div id="readerDictionaryResult" aria-live="polite"></div></div></aside>
+      <footer class="reader-footer"><button id="readerPrev" type="button" aria-label="Página anterior">← Anterior</button><div class="reader-location"><span id="readerPosition">Preparando…</span><progress id="readerProgress" max="1" value="0" aria-label="Progresso da obra"></progress></div><form id="readerPageForm"><label for="readerPage">Página</label><input id="readerPage" type="number" min="1" value="1" aria-label="Ir para página"><button type="submit">Ir</button></form><button id="readerNext" type="button" aria-label="Próxima página">Próxima →</button></footer>
+    </div>
+  </dialog>
+  <script src="js/ui-motion.js"></script>
+  <script src="js/script.js?v=20260912-source-order1"></script>
+  <script src="js/profiles.js"></script>
+  <script src="js/avatar-gallery.js"></script>
+  <script src="js/game-save-store.js"></script>
+  <script src="js/game-rom-cache.js"></script>
+  <script src="js/external-roms.js"></script>
+  <script src="js/emulator.js"></script>
+  <script src="js/reader-store.js"></script>
+  <script src="js/reading-language.js"></script>
+  <script src="js/reader-cloud.js"></script>
+  <script src="js/reader-extras.js"></script>
+  <script src="js/reader.js"></script>
+  <script src="js/reading-metadata.js"></script>
+  <script src="js/reading-admin.js"></script>
+  <script src="js/reading-import.js"></script>
+  <script src="js/reading-document-metadata.js"></script>
 </body>
 </html>
