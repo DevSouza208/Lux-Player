@@ -11,8 +11,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const TABLE = "lux_home_rail_items";
 const RAILS = new Set(["movies", "series", "games", "books"]);
 const MAX_ITEMS = 12;
-const IMDB_CACHE_MS = 20 * 60 * 1000;
-let imdbCache: { year: number; at: number; items: any[] } = { year: 0, at: 0, items: [] };
+let imdbCache = { year: 0, at: 0, items: [] as any[] };
 
 function respond(data: unknown, status = 200, cache = "no-store") {
   return new Response(JSON.stringify(data), {
@@ -49,15 +48,12 @@ async function resolveAdmin(username: unknown, credential: unknown) {
   return account;
 }
 
-function text(value: unknown, max = 1000) {
-  return String(value ?? "").trim().slice(0, max);
-}
+const text = (value: unknown, max = 1000) => String(value ?? "").trim().slice(0, max);
 
 function cleanPayload(value: unknown) {
   try {
-    const json = JSON.stringify(value && typeof value === "object" ? value : {});
-    if (json.length > 30000) return {};
-    return JSON.parse(json);
+    const raw = JSON.stringify(value && typeof value === "object" ? value : {});
+    return raw.length <= 30000 ? JSON.parse(raw) : {};
   } catch (_) {
     return {};
   }
@@ -80,57 +76,30 @@ function cleanSelection(item: any, position: number, createdBy: string, rail: st
   };
 }
 
-function htmlEntityDecode(value: string) {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
-function candidateFromObject(input: any, rank = 0) {
+function candidate(input: any, rank = 0) {
   const item = input?.item && typeof input.item === "object" ? input.item : input;
   if (!item || typeof item !== "object") return null;
-
   const rawUrl = text(item.url || item.canonicalUrl || input?.url, 2000);
   const idValue = text(item.id || item.titleId || item?.title?.id || input?.id, 80);
-  const id = /^tt\d+$/i.test(idValue)
-    ? idValue
-    : (rawUrl.match(/\/title\/(tt\d+)/i)?.[1] || "");
+  const id = /^tt\d+$/i.test(idValue) ? idValue : (rawUrl.match(/\/title\/(tt\d+)/i)?.[1] || "");
   const title = text(item.name || item.titleText?.text || item?.title?.titleText?.text || item.originalTitleText?.text, 300);
   if (!id || !title) return null;
-
   const imageValue = item.image || item.primaryImage || item?.title?.primaryImage || {};
-  const image = text(
-    typeof imageValue === "string" ? imageValue : imageValue?.url || imageValue?.imageUrl,
-    3000,
-  );
-  const description = text(
-    item.description || item.plot?.plotText?.plainText || item.plotText?.plainText || item?.title?.plot?.plotText?.plainText,
-    1200,
-  );
-  const year = Number(
-    item.releaseYear?.year || item.releaseDate?.year || item?.title?.releaseYear?.year ||
-    (typeof item.dateCreated === "string" ? item.dateCreated.slice(0, 4) : 0),
-  ) || null;
-  const rating = Number(
-    item.aggregateRating?.ratingValue || item.ratingsSummary?.aggregateRating || item?.title?.ratingsSummary?.aggregateRating,
-  ) || null;
   return {
     id,
-    title: htmlEntityDecode(title),
-    image,
-    description: htmlEntityDecode(description),
-    year,
-    rating,
+    title,
+    image: text(typeof imageValue === "string" ? imageValue : imageValue?.url || imageValue?.imageUrl, 3000),
+    description: text(item.description || item.plot?.plotText?.plainText || item.plotText?.plainText, 1200),
+    year: Number(item.releaseYear?.year || item.releaseDate?.year || item?.title?.releaseYear?.year) || null,
+    rating: Number(item.aggregateRating?.ratingValue || item.ratingsSummary?.aggregateRating) || null,
     rank: Number(input?.position || rank) || rank || null,
     url: rawUrl || `https://www.imdb.com/title/${id}/`,
+    source: "IMDb",
   };
 }
 
-function extractLdJson(html: string) {
-  const results: any[] = [];
+function extractImdb(html: string, year: number) {
+  const found: any[] = [];
   const pattern = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(html))) {
@@ -140,92 +109,39 @@ function extractLdJson(html: string) {
       for (const block of blocks) {
         if (Array.isArray(block?.itemListElement)) {
           block.itemListElement.forEach((entry: any, index: number) => {
-            const candidate = candidateFromObject(entry, index + 1);
-            if (candidate) results.push(candidate);
+            const row = candidate(entry, index + 1);
+            if (row) found.push(row);
           });
         } else {
-          const candidate = candidateFromObject(block);
-          if (candidate) results.push(candidate);
+          const row = candidate(block);
+          if (row) found.push(row);
         }
       }
     } catch (_) {}
   }
-  return results;
-}
-
-function extractHydratedJson(html: string) {
-  const results: any[] = [];
-  const scripts = [
-    /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
-    /<script[^>]+type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/i,
-  ];
-  for (const expression of scripts) {
-    const match = html.match(expression);
-    if (!match) continue;
-    let root: any;
-    try { root = JSON.parse(match[1].trim()); } catch (_) { continue; }
-    const stack = [root];
-    let inspected = 0;
-    while (stack.length && inspected < 250000) {
-      const node = stack.pop();
-      inspected += 1;
-      if (!node || typeof node !== "object") continue;
-      const candidate = candidateFromObject(node);
-      if (candidate) results.push(candidate);
-      if (Array.isArray(node)) {
-        for (let i = node.length - 1; i >= 0; i--) stack.push(node[i]);
-      } else {
-        for (const value of Object.values(node)) if (value && typeof value === "object") stack.push(value);
-      }
-    }
-    if (results.length >= MAX_ITEMS) break;
-  }
-  return results;
-}
-
-function uniqueSeries(items: any[], year: number) {
   const seen = new Set<string>();
-  const output: any[] = [];
-  for (const item of items) {
-    if (!item?.id || seen.has(item.id)) continue;
-    seen.add(item.id);
-    output.push({ ...item, source: "IMDb", release_year: item.year || year });
-    if (output.length >= MAX_ITEMS) break;
-  }
-  return output;
-}
-
-async function fetchImdbPage(url: string) {
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/153 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.7,en;q=0.6",
-      "Cache-Control": "no-cache",
-    },
-    redirect: "follow",
-  });
-  if (!response.ok) throw new Error(`IMDb respondeu HTTP ${response.status}.`);
-  return response.text();
+  return found.filter(row => {
+    if (!row?.id || seen.has(row.id)) return false;
+    seen.add(row.id);
+    row.release_year = row.year || year;
+    return true;
+  }).slice(0, MAX_ITEMS);
 }
 
 async function imdbSeries(year: number) {
   const now = Date.now();
-  if (imdbCache.year === year && imdbCache.items.length && now - imdbCache.at < IMDB_CACHE_MS) return imdbCache.items;
-
-  const searchUrl = `https://www.imdb.com/search/title/?title_type=tv_series,tv_miniseries&release_date=${year}-01-01,${year}-12-31&sort=moviemeter,asc`;
-  const html = await fetchImdbPage(searchUrl);
-  let items = uniqueSeries([...extractLdJson(html), ...extractHydratedJson(html)], year);
-
-  if (items.length < MAX_ITEMS) {
-    try {
-      const chartHtml = await fetchImdbPage("https://www.imdb.com/chart/tvmeter/");
-      const fallback = [...extractLdJson(chartHtml), ...extractHydratedJson(chartHtml)]
-        .filter(item => !item.year || item.year === year);
-      items = uniqueSeries([...items, ...fallback], year);
-    } catch (_) {}
-  }
-
+  if (imdbCache.year === year && imdbCache.items.length && now - imdbCache.at < 20 * 60 * 1000) return imdbCache.items;
+  const url = `https://www.imdb.com/search/title/?title_type=tv_series,tv_miniseries&release_date=${year}-01-01,${year}-12-31&sort=moviemeter,asc`;
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/153 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7",
+    },
+    redirect: "follow",
+  });
+  if (!response.ok) throw new Error(`IMDb respondeu HTTP ${response.status}.`);
+  const items = extractImdb(await response.text(), year);
   if (!items.length) throw new Error("O IMDb não retornou lançamentos de séries agora.");
   imdbCache = { year, at: now, items };
   return items;
@@ -267,19 +183,16 @@ Deno.serve(async (req: Request) => {
       const incoming = Array.isArray(body?.items) ? body.items.slice(0, MAX_ITEMS) : [];
       const cleaned = incoming.map((item: any, index: number) => cleanSelection(item, index, createdBy, rail));
 
-      const deleteResponse = await rest(`${TABLE}?rail=eq.${encodeURIComponent(rail)}`, { method: "DELETE" });
-      if (!deleteResponse.ok) throw new Error("Não foi possível substituir a seleção anterior.");
+      const remove = await rest(`${TABLE}?rail=eq.${encodeURIComponent(rail)}`, { method: "DELETE" });
+      if (!remove.ok) throw new Error("Não foi possível substituir a seleção anterior.");
 
       if (cleaned.length) {
-        const insertResponse = await rest(TABLE, {
+        const insert = await rest(TABLE, {
           method: "POST",
           headers: { Prefer: "return=representation" },
           body: JSON.stringify(cleaned),
         });
-        if (!insertResponse.ok) {
-          const detail = await insertResponse.text().catch(() => "");
-          throw new Error(`Não foi possível salvar a nova seleção.${detail ? ` ${detail.slice(0, 180)}` : ""}`);
-        }
+        if (!insert.ok) throw new Error("Não foi possível salvar a nova seleção.");
       }
       return respond({ ok: true, rail, count: cleaned.length });
     }
