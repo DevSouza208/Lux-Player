@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-secondary-background-4';
+  const VERSION = '20260914-secondary-background-5';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
@@ -11,6 +11,15 @@
     script.src = 'js/secondary-grouping.js?v=20260914-1';
     script.async = true;
     script.dataset.luxSecondaryGrouping = '1';
+    document.head.appendChild(script);
+  }
+
+  function loadLocalePreviewModule() {
+    if (window.__luxSecondaryLocalePreviewInstalled || document.querySelector('script[data-lux-secondary-locale-preview]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/secondary-locale-preview.js?v=20260914-1';
+    script.async = true;
+    script.dataset.luxSecondaryLocalePreview = '1';
     document.head.appendChild(script);
   }
 
@@ -151,11 +160,13 @@
   // que a camada mais externa continue não bloqueante antes e depois do login.
   let attempts = 0;
   loadGroupingModule();
+  loadLocalePreviewModule();
   install();
   installModalGuard();
   const timer = setInterval(() => {
     attempts += 1;
     loadGroupingModule();
+    loadLocalePreviewModule();
     install();
     installModalGuard();
     const modal = document.getElementById('luxCanonicalSyncModal');
