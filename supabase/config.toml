@@ -39,3 +39,7 @@ verify_jwt = false
 [functions.sports-logos]
 # Escudos públicos extraídos da programação do Super Placar.
 verify_jwt = false
+
+[functions.home-banners]
+# A listagem alimenta a Home; gravação e upload validam a sessão de administrador na própria função.
+verify_jwt = false
