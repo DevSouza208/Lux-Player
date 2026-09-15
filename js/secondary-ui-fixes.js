@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-secondary-ui-fixes1';
+  const VERSION = '20260914-secondary-ui-fixes2';
   if (window.__luxSecondaryUiFixesInstalled === VERSION) return;
   window.__luxSecondaryUiFixesInstalled = VERSION;
 
@@ -59,10 +59,14 @@
     return sourceRole(item) === 'secondary' || (Array.isArray(item?.luxSources) && item.luxSources.some(source => source?.role === 'secondary'));
   }
 
+  function hasPrincipal(item) {
+    return Array.isArray(item?.luxSources) && item.luxSources.some(source => source?.role === 'principal');
+  }
+
   function isSecondaryOnlyCard(item) {
     if (!item) return false;
-    if (String(item.id || '').startsWith('canonical:')) return true;
-    return sourceRole(item) === 'secondary' && !Array.isArray(item?.luxSources)?.some?.(source => source?.role === 'principal');
+    if (String(item.id || '').startsWith('canonical:')) return !hasPrincipal(item);
+    return sourceRole(item) === 'secondary' && !hasPrincipal(item);
   }
 
   function cleanVisibleName(item) {
@@ -124,7 +128,7 @@
     if (target.m3uEpisodes[season].some(ep => episodeNumber(ep) === number)) return;
     const title = hint?.end ? `Episódios ${number}-${hint.end}` : (source.name || `Episódio ${number}`);
     target.m3uEpisodes[season].push({
-      id: `secondary:${target.canonicalId || target.id}:s${season}e${number}:${Math.random().toString(36).slice(2, 7)}`,
+      id: `secondary:${target.canonicalId || target.id}:s${season}e${number}`,
       name: title,
       title,
       episodeTitle: title,
@@ -162,7 +166,7 @@
     if (/^\s*\d{1,3}\s*[xX]\s*\d{1,4}/.test(name) || /^\s*S\d+E\d+/i.test(name)) score += 1000;
     if (/ONSeason|season finale/i.test(name)) score += 300;
     if (/^\s*[+\-–—]/.test(name)) score += 100;
-    if (!String(item?.id || '').startsWith('canonical:')) score -= 2000;
+    if (!isSecondaryOnlyCard(item)) score -= 2000;
     return score;
   }
 
@@ -171,9 +175,7 @@
     for (const item of catalog) {
       if (!item || item.type !== 'series' || !hasSecondary(item)) continue;
       const tmdb = Number(item.tmdb_id) || 0;
-      const key = tmdb
-        ? `tmdb:${tmdb}`
-        : `name:${normalize(item.name)}|${normalize(item.group)}`;
+      const key = tmdb ? `tmdb:${tmdb}` : `name:${normalize(item.name)}|${normalize(item.group)}`;
       if (!key || key === 'name:|') continue;
       const list = groups.get(key) || [];
       list.push(item);
