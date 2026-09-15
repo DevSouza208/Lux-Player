@@ -6,6 +6,16 @@
 
   const VIEW_MODE_KEY = 'lux-play:console-view-mode';
 
+  // Complemento específico do Nintendo 64: analógico e os quatro botões C.
+  // O arquivo é pequeno e só ativa sua lógica quando a sessão atual é N64.
+  if (!document.querySelector('script[data-lux-mobile-n64-controls]')) {
+    const n64Script = document.createElement('script');
+    n64Script.src = 'js/mobile-n64-controls.js?v=20260915-1';
+    n64Script.async = true;
+    n64Script.dataset.luxMobileN64Controls = '1';
+    document.head.appendChild(n64Script);
+  }
+
   const RETROPAD = {
     B: 0, Y: 1, SELECT: 2, START: 3,
     UP: 4, DOWN: 5, LEFT: 6, RIGHT: 7,
@@ -72,7 +82,9 @@
       else if (typeof pendingEmulatorGame !== 'undefined' && pendingEmulatorGame?.console) type = pendingEmulatorGame.console;
     } catch (_) {}
     if (!type) type = document.getElementById('emulatorIntroConsole')?.textContent || 'gba';
-    return String(type).toLowerCase().replaceAll(' ', '');
+    const normalized = String(type).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normalized === 'nintendo64' || normalized === 'n64') return 'n64';
+    return normalized;
   };
 
   const storedViewMode = () => {
