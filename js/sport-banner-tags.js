@@ -1,16 +1,18 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-sport-banner-tags2';
+  const VERSION = '20260915-sport-banner-tags3';
   if (window.__luxSportBannerTagsInstalled === VERSION) return;
   window.__luxSportBannerTagsInstalled = VERSION;
 
   const CACHE_MS = 60_000;
   const LIVE_AFTER_MS = 180 * 60_000;
+  const HOME_SERIES_SRC = 'js/home-series-2026.js?v=20260915-home-series-2026-5';
   let cache = { at: 0, banners: [] };
   let pending = null;
   let scheduled = false;
   let renderToken = 0;
+  let lastSeriesKick = 0;
 
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -57,6 +59,12 @@
         background: rgba(5, 150, 105, .20);
         color: #a7f3d0;
       }
+      #homeHeroBanner[data-lux-sport-banner="1"][data-lux-sport-live="0"] #heroPlayBtn {
+        display: none !important;
+      }
+      #homeHeroBanner[data-lux-sport-banner="1"][data-lux-sport-live="1"] #heroOverview {
+        display: none !important;
+      }
       @media (max-width: 767px) {
         #heroSportMetaTags { gap: 6px; margin-top: 11px; }
         #heroSportMetaTags .lux-sport-meta-tag {
@@ -84,6 +92,45 @@
       overview.insertAdjacentElement('afterend', box);
     }
     return box;
+  }
+
+  function ensureHomeSeriesModule() {
+    if (window.LuxHomeSeries2026?.render) return true;
+    if (!document.querySelector('script[data-lux-home-series-direct]')) {
+      const script = document.createElement('script');
+      script.src = HOME_SERIES_SRC;
+      script.async = true;
+      script.dataset.luxHomeSeriesDirect = '1';
+      document.head.appendChild(script);
+    }
+    return false;
+  }
+
+  function hasLocalSeries() {
+    try {
+      return Array.isArray(allMediaItems)
+        && allMediaItems.some(item => String(item?.type || '').toLowerCase() === 'series');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function keepHomeSeriesAlive() {
+    ensureHomeSeriesModule();
+    if (!window.LuxHomeSeries2026?.render || !hasLocalSeries()) return false;
+
+    const container = $('homeSeries2026Container');
+    if (container?.querySelector('[data-lux-series-2026="1"]')) return true;
+    const text = String(container?.textContent || '');
+    if (/Nenhum lançamento de/i.test(text)) return true;
+
+    const now = Date.now();
+    if (now - lastSeriesKick < 1200) return false;
+    lastSeriesKick = now;
+    Promise.resolve(window.LuxHomeSeries2026.render()).catch(error => {
+      console.warn('[Lux Play] Não foi possível renderizar Séries 2026:', error);
+    });
+    return false;
   }
 
   async function listPublic() {
@@ -183,29 +230,38 @@
     if (overview) overview.classList.remove('hidden');
   }
 
+  function clearSportHeroState() {
+    const hero = $('homeHeroBanner');
+    hero?.removeAttribute('data-lux-sport-banner');
+    hero?.removeAttribute('data-lux-sport-live');
+  }
+
   function hideTags() {
     const box = $('heroSportMetaTags');
     if (box) {
       box.classList.add('hidden');
       box.replaceChildren();
     }
+    clearSportHeroState();
     restoreOverview();
   }
 
   function syncSportActionState(banner, overview) {
+    const hero = $('homeHeroBanner');
     const play = $('heroPlayBtn');
     const live = isLive(banner);
 
-    // Antes do horário, o destaque é só informativo: nada de botão antecipado.
+    if (hero) {
+      hero.dataset.luxSportBanner = '1';
+      hero.dataset.luxSportLive = live ? '1' : '0';
+    }
+
     if (!live) {
       overview?.classList.remove('hidden');
       play?.classList.add('hidden');
       return false;
     }
 
-    // No horário do jogo, as tags assumem os metadados e a descrição sai para
-    // abrir espaço para a ação principal. O onclick/label continuam vindo do
-    // renderer original do banner.
     overview?.classList.add('hidden');
     if (play && banner?.cta_type && banner.cta_type !== 'none') play.classList.remove('hidden');
     return true;
@@ -257,16 +313,41 @@
     observer.observe(wrap, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
     scheduleSync();
 
+    // Séries 2026 não depende mais indiretamente do guard de esportes: este módulo,
+    // carregado cedo na Home, garante que o renderer exista e volta a acioná-lo
+    // assim que o catálogo principal de séries estiver disponível.
+    ensureHomeSeriesModule();
+    let seriesAttempts = 0;
+    const seriesTimer = setInterval(() => {
+      seriesAttempts += 1;
+      const ready = keepHomeSeriesAlive();
+      if (ready || seriesAttempts >= 360) clearInterval(seriesTimer);
+    }, 500);
+
+    const refreshSeries = () => {
+      lastSeriesKick = 0;
+      keepHomeSeriesAlive();
+    };
+    $('navHome')?.addEventListener('click', refreshSeries);
+    $('bNavHome')?.addEventListener('click', refreshSeries);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshSeries();
+    });
+
     // A passagem para AO VIVO pode acontecer sem qualquer mutação no DOM.
-    // Reavaliamos a cada 20 s para o botão aparecer sozinho no horário marcado.
     const liveTimer = setInterval(() => {
       if (!document.hidden) scheduleSync();
     }, 20_000);
 
-    window.addEventListener('beforeunload', () => clearInterval(liveTimer), { once: true });
+    window.addEventListener('beforeunload', () => {
+      clearInterval(liveTimer);
+      clearInterval(seriesTimer);
+    }, { once: true });
+
     window.LuxSportBannerTags = {
       version: VERSION,
-      refresh() { cache.at = 0; scheduleSync(); }
+      refresh() { cache.at = 0; scheduleSync(); },
+      refreshSeries,
     };
     return true;
   }
