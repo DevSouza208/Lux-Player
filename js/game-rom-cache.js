@@ -146,4 +146,12 @@
   }
 
   window.LuxRomCache = { get, status, download, remove, cleanupExpired };
+
+  if (!document.querySelector('script[data-lux-game-local-cache]')) {
+    const script = document.createElement('script');
+    script.src = 'js/game-local-cache-flow.js?v=20260915-game-local-cache1';
+    script.async = true;
+    script.dataset.luxGameLocalCache = '1';
+    document.head.appendChild(script);
+  }
 })();
