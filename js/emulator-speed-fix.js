@@ -1,12 +1,20 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-n64-performance2';
+  const VERSION = '20260915-n64-performance3';
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isPhone = /iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent || '') ||
     (navigator.maxTouchPoints > 1 && Math.min(screen.width || 9999, screen.height || 9999) <= 768);
   const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent || '') ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  if (!document.querySelector('script[data-lux-n64-local-session]')) {
+    const script = document.createElement('script');
+    script.src = 'js/n64-local-session.js?v=20260915-n64-local-session1';
+    script.async = false;
+    script.dataset.luxN64LocalSession = '1';
+    document.head.appendChild(script);
+  }
 
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const withTimeout = (promise, ms, fallback = null) => Promise.race([
@@ -55,9 +63,6 @@
   }
   ensurePerformanceStyles();
 
-  // One-time recovery for the standalone PWA only. We intentionally clear only
-  // EmulatorJS' downloaded-core cache. Lux saves and downloaded ROMs live in
-  // separate stores and are left untouched.
   if (isStandalone && isPhone) {
     const RECOVERY_KEY = 'lux-play:pwa-emulator-recovery-v2';
     let alreadyRecovered = false;
@@ -83,9 +88,6 @@
     }
   }
 
-  // Rotation experiments are deliberately disabled while the landscape UI is rebuilt.
-  // Remove only emulator-specific legacy assets/elements; the separate Lux Controller
-  // PWA keeps its own orientation logic untouched.
   const removeLegacyRotationArtifacts = () => {
     document.querySelectorAll(
       '#luxVisibleMobileRotateButton, #luxEmulatorRotateButton, .lux-visible-mobile-rotate-button, .lux-emulator-rotate-button, #luxEmulatorOrientationSetting, [data-lux-rotate-setting]'
@@ -190,14 +192,9 @@
       const result = original.apply(this, args);
 
       if (n64) {
-        // EmulatorJS recommends mupen64plus_next on desktop and falls back to
-        // parallel-n64 on iOS. Make that choice explicit so a stale core choice
-        // cannot follow the user between devices.
         window.EJS_core = isIOS ? 'parallel-n64' : 'mupen64plus_next';
         window.EJS_forceLegacyCores = false;
 
-        // Threads only work when the host is already cross-origin isolated.
-        // Never force COOP/COEP here because Lux consumes many external streams.
         const threadsAvailable = window.crossOriginIsolated === true && typeof SharedArrayBuffer === 'function';
         window.EJS_threads = threadsAvailable;
       }
@@ -260,9 +257,6 @@
           <button onclick="startNewGameFromDetails()" class="rounded-xl border border-purple-700/70 bg-purple-600/80 p-4 text-center text-sm font-bold text-white hover:bg-purple-500">Jogar do zero agora</button>`;
       }
 
-      // Reimplementa apenas a checagem inicial de saves. O fluxo antigo esperava
-      // indefinidamente a nuvem antes de mostrar o modal, o que no iPhone parecia
-      // um travamento da tela de detalhes.
       try {
         if (typeof getGameSaveSlots !== 'function' || typeof nativeGameRecord !== 'function') {
           return await original.apply(this, arguments);
