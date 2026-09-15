@@ -13,15 +13,13 @@
     { id: 'snes', label: 'SNES', core: 'snes', status: 'tested' },
     { id: 'megadrive', label: 'Mega Drive', core: 'segaMD', status: 'tested' },
     { id: 'mastersystem', label: 'Master System', core: 'segaMS', status: 'tested' },
-    { id: 'n64', label: 'Nintendo 64', core: 'n64', status: 'tested' },
-    { id: 'psp', label: 'PSP', core: 'psp', status: 'untested' }
+    { id: 'n64', label: 'Nintendo 64', core: 'n64', status: 'tested' }
   ];
 
   const extensionMap = {
     gb: 'gb', gbc: 'gbc', gba: 'gba', nes: 'nes',
     sfc: 'snes', smc: 'snes', sms: 'mastersystem',
-    md: 'megadrive', gen: 'megadrive', n64: 'n64', z64: 'n64', v64: 'n64',
-    iso: 'psp', cso: 'psp', pbp: 'psp'
+    md: 'megadrive', gen: 'megadrive', n64: 'n64', z64: 'n64', v64: 'n64'
   };
 
   function openDatabase() {
@@ -92,7 +90,7 @@
   async function importFile(file) {
     if (!file?.name || !file.size) throw new Error('Escolha uma ROM válida.');
     const consoleId = systemForFile(file);
-    if (!consoleId) throw new Error('Extensão não reconhecida. Use uma ROM de Game Boy, NES, SNES, Mega Drive, Master System, N64 ou PSP.');
+    if (!consoleId) throw new Error('Extensão não reconhecida. Use uma ROM de Game Boy, NES, SNES, Mega Drive, Master System ou N64.');
     const record = {
       id: 'external_' + (crypto.randomUUID?.() || Date.now() + '_' + Math.random().toString(36).slice(2)),
       name: file.name.replace(/\.[^.]+$/, ''),
