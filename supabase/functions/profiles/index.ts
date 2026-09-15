@@ -1,4 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+
+// [LUX-AUTH-007] `password` é um nome legado do payload. Ele pode conter a senha
+// durante a migração ou, preferencialmente, um token revogável luxsess_.
 const headers = { 'Access-Control-Allow-Origin':'*', 'Access-Control-Allow-Methods':'POST, OPTIONS', 'Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type', 'Cache-Control':'no-store' };
 const json = (data: unknown, status = 200) => Response.json(data,{status,headers});
 Deno.serve(async (request: Request) => {
@@ -9,9 +12,11 @@ Deno.serve(async (request: Request) => {
     try { body=await request.json(); } catch { return json({error:'Dados inválidos.'},400); }
     if(!body || typeof body.username !== 'string' || typeof body.password !== 'string' || !body.username || !body.password) return json({error:'Login necessário.'},401);
     const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
-    const {data:account,error:authError}=await db.from('usuarios').select('usuario,nome,vencimento,cargo').eq('usuario',body.username).eq('senha',body.password).maybeSingle();
+
+    const {data:account,error:authError}=await db.rpc('lux_auth_resolve',{p_username:body.username,p_credential:body.password});
     if(authError) throw authError;
-    if(!account) return json({error:'Senha incorreta.'},401);
+    if(!account) return json({error:'Credencial inválida ou sessão expirada.'},401);
+
     const expiry=String(account.vencimento || '').split('/');
     if(expiry.length===3 && Date.now()>new Date(`${expiry[2]}-${expiry[1].padStart(2,'0')}-${expiry[0].padStart(2,'0')}T23:59:59-03:00`).getTime()) return json({error:'Acesso vencido.'},403);
     if(['gallery-list','gallery-save','gallery-delete'].includes(body.action)) {
@@ -36,7 +41,12 @@ Deno.serve(async (request: Request) => {
       const {error}=await db.rpc('save_account_profile',{p_user:account.usuario,p_name:body.name.trim(),p_child:body.is_child,p_slot:body.slot??null,p_avatar:avatar,p_protected:body.password_protected});
       if(error) return json({error:'Não foi possível salvar. Confira o limite de 4 perfis e tente novamente.'},409);
     } else if(body.action==='delete') {
-      if(![1,2,3,4].includes(body.slot) || typeof body.data_key!=='string' || body.confirmPassword!==body.password) return json({error:'Confirme a senha de login para excluir.'},400);
+      if(![1,2,3,4].includes(body.slot) || typeof body.data_key!=='string' || typeof body.confirmPassword!=='string' || !body.confirmPassword) return json({error:'Confirme a senha de login para excluir.'},400);
+      // [LUX-AUTH-007] Excluir perfil continua exigindo a SENHA digitada agora.
+      // O token autentica a sessão, mas não substitui esta confirmação sensível.
+      const {data:confirmation,error:confirmationError}=await db.from('usuarios').select('usuario').ilike('usuario',String(account.usuario)).eq('senha',body.confirmPassword).maybeSingle();
+      if(confirmationError)throw confirmationError;
+      if(!confirmation)return json({error:'Senha de confirmação incorreta.'},403);
       const {error}=await db.rpc('delete_account_profile',{p_user:account.usuario,p_slot:body.slot,p_data_key:body.data_key});
       if(error)return json({error:'Não foi possível excluir. Mantenha pelo menos um perfil e atualize a lista antes de tentar novamente.'},409);
     } else if(body.action!=='list') return json({error:'Ação inválida.'},400);

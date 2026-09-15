@@ -43,16 +43,39 @@ async function updateUser(env, username, data) {
 async function getUserByUsername(env, username) {
   const response = await supabaseFetch(
     env,
-    `usuarios?select=usuario,senha,cargo,lista_m3u&usuario=eq.${encodeURIComponent(username)}&limit=1`
+    `usuarios?select=usuario,cargo,lista_m3u&usuario=eq.${encodeURIComponent(username)}&limit=1`
   );
   if (!response.ok) throw new Error(`Erro ao consultar usuário: HTTP ${response.status}`);
   const rows = await response.json();
   return rows?.[0] || null;
 }
 
-async function authenticateAdmin(env, username, password) {
-  const account = await getUserByUsername(env, username);
-  if (!account || String(account.senha || "") !== String(password || "")) {
+async function resolveLuxAccount(env, username, credential) {
+  const cleanUsername = String(username || "").trim();
+  const cleanCredential = String(credential || "");
+  if (!cleanUsername || !cleanCredential) return null;
+
+  const response = await supabaseFetch(env, "rpc/lux_auth_resolve", {
+    method: "POST",
+    body: JSON.stringify({
+      p_username: cleanUsername,
+      p_credential: cleanCredential
+    })
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    console.warn("[Lux Playlist Sync] Falha ao validar sessão no Supabase:", response.status, details);
+    throw new Error(`Erro ao validar sessão: HTTP ${response.status}`);
+  }
+
+  const account = await response.json().catch(() => null);
+  return Array.isArray(account) ? (account[0] || null) : account;
+}
+
+async function authenticateAdmin(env, username, credential) {
+  const account = await resolveLuxAccount(env, username, credential);
+  if (!account || typeof account !== "object") {
     throw new Error("Credenciais inválidas.");
   }
   if (String(account.cargo || "").trim().toLowerCase() !== "admin") {
@@ -368,7 +391,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.3" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.4" });
     }
 
     if (
@@ -378,11 +401,12 @@ export default {
       return serveR2Object(request, env);
     }
 
-    // Painel Admin: valida o administrador e sincroniza a conta escolhida.
+    // Painel Admin: valida senha legada OU sessão luxsess_ e sincroniza a conta escolhida.
     if (request.method === "POST" && url.pathname === "/sync-account") {
       const body = await readJsonBody(request);
       try {
-        const admin = await authenticateAdmin(env, body.username, body.password);
+        const credential = body.credential ?? body.password;
+        const admin = await authenticateAdmin(env, body.username, credential);
         const targetUsername = String(body.targetUsername || admin.usuario || "").trim();
         const target = await getUserByUsername(env, targetUsername);
         if (!target) throw new Error("Usuário a sincronizar não encontrado.");
@@ -417,7 +441,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.6.3"
+      version: "1.6.4"
     });
   },
 
