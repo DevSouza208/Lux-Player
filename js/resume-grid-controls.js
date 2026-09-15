@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-resume-grid-controls-1';
+  const VERSION = '20260915-resume-grid-controls-2';
   if (window.__luxResumeGridControlsInstalled === VERSION) return;
   window.__luxResumeGridControlsInstalled = VERSION;
 
@@ -56,11 +56,11 @@
 
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'lux-resume-grid-remove absolute right-2 w-8 h-8 rounded-xl bg-black/75 hover:bg-rose-600 text-white flex items-center justify-center z-30 shadow transition-colors';
+      button.className = 'lux-resume-grid-remove absolute right-2 w-7 h-7 rounded-full bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-30 shadow';
       button.style.top = item.isAdult ? '2.75rem' : '0.5rem';
       button.title = 'Remover do Continuar Assistindo';
       button.setAttribute('aria-label', 'Remover do Continuar Assistindo');
-      button.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4"></i>';
+      button.innerHTML = '<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>';
       button.onclick = event => {
         event.preventDefault();
         event.stopPropagation();
