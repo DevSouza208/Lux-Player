@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-sport-banner-tags3';
+  const VERSION = '20260915-sport-banner-tags4';
   if (window.__luxSportBannerTagsInstalled === VERSION) return;
   window.__luxSportBannerTagsInstalled = VERSION;
 
@@ -30,6 +30,19 @@
     const style = document.createElement('style');
     style.id = 'luxSportHeroTagsStyle';
     style.textContent = `
+      #heroCompetitionLogo:not(.hidden) {
+        display: block;
+        width: fit-content;
+        max-height: 58px;
+        max-width: 190px;
+        margin-bottom: 2px;
+        padding: 8px 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, .98);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, .20);
+        object-fit: contain;
+        object-position: left center;
+      }
       #heroSportMetaTags {
         display: flex;
         flex-wrap: wrap;
@@ -66,6 +79,12 @@
         display: none !important;
       }
       @media (max-width: 767px) {
+        #heroCompetitionLogo:not(.hidden) {
+          max-height: 50px;
+          max-width: 160px;
+          padding: 7px 10px;
+          border-radius: 12px;
+        }
         #heroSportMetaTags { gap: 6px; margin-top: 11px; }
         #heroSportMetaTags .lux-sport-meta-tag {
           min-height: 27px;
@@ -309,13 +328,11 @@
   function installObserver() {
     const wrap = $('heroContentWrap') || $('homeSection') || document.body;
     if (!wrap) return false;
+    ensureStyles();
     const observer = new MutationObserver(scheduleSync);
     observer.observe(wrap, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class'] });
     scheduleSync();
 
-    // Séries 2026 não depende mais indiretamente do guard de esportes: este módulo,
-    // carregado cedo na Home, garante que o renderer exista e volta a acioná-lo
-    // assim que o catálogo principal de séries estiver disponível.
     ensureHomeSeriesModule();
     let seriesAttempts = 0;
     const seriesTimer = setInterval(() => {
@@ -334,7 +351,6 @@
       if (!document.hidden) refreshSeries();
     });
 
-    // A passagem para AO VIVO pode acontecer sem qualquer mutação no DOM.
     const liveTimer = setInterval(() => {
       if (!document.hidden) scheduleSync();
     }, 20_000);
