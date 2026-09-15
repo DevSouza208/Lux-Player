@@ -43,3 +43,7 @@ verify_jwt = false
 [functions.home-banners]
 # A listagem alimenta a Home; gravação e upload validam a sessão de administrador na própria função.
 verify_jwt = false
+
+[functions.home-rails]
+# Seleções públicas da Home e feed do IMDb; alterações administrativas validam a sessão dentro da função.
+verify_jwt = false
