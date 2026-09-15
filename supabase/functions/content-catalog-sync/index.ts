@@ -69,26 +69,22 @@ function parseEpisode(title: string, group = ''): ParsedEpisode | null {
   const raw = String(title || '').trim();
 
   let m = raw.match(/^0*(\d{1,3})\s*[xX]\s*0*(\d{1,4})(?:\s*[\/-]\s*0*(\d{1,4}))?([A-Za-z]{0,3})\s+(.+)$/i);
-  if (m) {
-    return {
-      base: chooseEpisodeBase(m[5], group),
-      season: Number(m[1]) || 1,
-      episode: Number(m[2]) || 1,
-      episodeEnd: m[3] ? (Number(m[3]) || null) : null,
-      marker: String(m[4] || '').toUpperCase()
-    };
-  }
+  if (m) return {
+    base: chooseEpisodeBase(m[5], group),
+    season: Number(m[1]) || 1,
+    episode: Number(m[2]) || 1,
+    episodeEnd: m[3] ? (Number(m[3]) || null) : null,
+    marker: String(m[4] || '').toUpperCase()
+  };
 
   m = raw.match(/^S\s*0*(\d{1,3})\s*E\s*0*(\d{1,4})(?:\s*[\/-]\s*(?:E\s*)?0*(\d{1,4}))?([A-Za-z]{0,3})\s+(.+)$/i);
-  if (m) {
-    return {
-      base: chooseEpisodeBase(m[5], group),
-      season: Number(m[1]) || 1,
-      episode: Number(m[2]) || 1,
-      episodeEnd: m[3] ? (Number(m[3]) || null) : null,
-      marker: String(m[4] || '').toUpperCase()
-    };
-  }
+  if (m) return {
+    base: chooseEpisodeBase(m[5], group),
+    season: Number(m[1]) || 1,
+    episode: Number(m[2]) || 1,
+    episodeEnd: m[3] ? (Number(m[3]) || null) : null,
+    marker: String(m[4] || '').toUpperCase()
+  };
 
   const suffixPatterns: Array<[RegExp, number, number]> = [
     [/^(.*?)[\s._-]+S\s*0*(\d{1,3})\s*E\s*0*(\d{1,4})(?:\D.*)?$/i, 2, 3],
@@ -97,11 +93,23 @@ function parseEpisode(title: string, group = ''): ParsedEpisode | null {
   ];
   for (const [re, seasonGroup, episodeGroup] of suffixPatterns) {
     const hit = raw.match(re);
-    if (hit) return { base: cleanText(hit[1], 500), season: Number(hit[seasonGroup]) || 1, episode: Number(hit[episodeGroup]) || 1, episodeEnd: null, marker: '' };
+    if (hit) return {
+      base: cleanText(hit[1], 500),
+      season: Number(hit[seasonGroup]) || 1,
+      episode: Number(hit[episodeGroup]) || 1,
+      episodeEnd: null,
+      marker: ''
+    };
   }
 
   const simple = raw.match(/^(.*?)(?:\s*[-–—|:]?\s*)(?:ep(?:is[oó]dio|isode)?\.?|e)\s*0*(\d{1,4})(?:\D.*)?$/i);
-  if (simple?.[1]) return { base: cleanText(simple[1], 500), season: 1, episode: Number(simple[2]) || 1, episodeEnd: null, marker: '' };
+  if (simple?.[1]) return {
+    base: cleanText(simple[1], 500),
+    season: 1,
+    episode: Number(simple[2]) || 1,
+    episodeEnd: null,
+    marker: ''
+  };
   return null;
 }
 
@@ -174,12 +182,13 @@ function hashCode(value: string) {
   return hash;
 }
 
-function parseM3U(text: string, hint = 'auto') {
+function parseM3U(text: string, hint = 'auto', secureVideosOnly = false) {
   const lines = String(text || '').split(/\r?\n/);
   const byLogicalKey = new Map<string, any>();
   let info: ReturnType<typeof parseExtinf> | null = null;
   let skippedPlaceholders = 0;
   let skippedInvalid = 0;
+  let skippedHttp = 0;
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -187,6 +196,12 @@ function parseM3U(text: string, hint = 'auto') {
     if (line.startsWith('#EXTINF:')) { info = parseExtinf(line); continue; }
     if (line.startsWith('#')) continue;
     if (!info || !/^https?:\/\//i.test(line)) { info = null; continue; }
+
+    if (secureVideosOnly && /^http:\/\//i.test(line)) {
+      skippedHttp += 1;
+      info = null;
+      continue;
+    }
 
     const group = cleanText(info.attrs['group-title'] || '', 300);
     const originalTitle = info.name || cleanText(info.attrs['tvg-name'] || '', 500) || 'Sem título';
@@ -245,7 +260,12 @@ function parseM3U(text: string, hint = 'auto') {
 
   return {
     items: [...byLogicalKey.values()],
-    stats: { parsed: byLogicalKey.size, skipped_placeholders: skippedPlaceholders, skipped_invalid: skippedInvalid }
+    stats: {
+      parsed: byLogicalKey.size,
+      skipped_placeholders: skippedPlaceholders,
+      skipped_invalid: skippedInvalid,
+      skipped_http: skippedHttp
+    }
   };
 }
 
@@ -253,13 +273,19 @@ async function fetchText(url: string, timeoutMs = 45000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { redirect: 'follow', signal: controller.signal, headers: { 'User-Agent': 'Lux-Canonical-Sync/1.6.3-secondary-fix2' } });
+    const response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Lux-Canonical-Sync/1.6.3-secondary-https-only' }
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     if (!text) throw new Error('Fonte vazia.');
     if (text.length > 60 * 1024 * 1024) throw new Error('Fonte excede 60 MB.');
     return text;
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function resolveAccount(db: any, body: any, adminOnly = true) {
@@ -275,8 +301,12 @@ async function resolveAccount(db: any, body: any, adminOnly = true) {
 
 async function ingestItems(db: any, layer: string, sourceId: string, sourceName: string, priority: number, items: any[]) {
   const seenAt = new Date().toISOString();
-  const { error: staleError } = await db.from('lux_catalog_sources').update({ available: false, updated_at: seenAt }).eq('source_layer', layer).eq('source_id', sourceId);
+  const { error: staleError } = await db.from('lux_catalog_sources')
+    .update({ available: false, updated_at: seenAt })
+    .eq('source_layer', layer)
+    .eq('source_id', sourceId);
   if (staleError) throw staleError;
+
   const totals = { processed: 0, new_titles: 0, new_episodes: 0, new_sources: 0, updated_sources: 0 };
   for (let offset = 0; offset < items.length; offset += 600) {
     const batch = items.slice(offset, offset + 600);
@@ -311,17 +341,35 @@ Deno.serve(async (request: Request) => {
   try {
     let body: any;
     try { body = await request.json(); } catch { return json({ error: 'JSON inválido.' }, 400); }
-    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+
+    const db = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      { auth: { persistSession: false } }
+    );
     const auth = await resolveAccount(db, body, true);
     if (auth.error) return auth.error;
     const action = cleanText(body?.action, 40).toLowerCase();
 
     if (action === 'options') {
-      const { data: accountRow } = await db.from('usuarios').select('usuario,lista_m3u,lista_m3u_https').eq('usuario', auth.username).single();
-      const { data: secondary } = await db.from('secondary_content_sources').select('id,name,source_type,priority,enabled,last_status').order('priority');
+      const { data: accountRow } = await db.from('usuarios')
+        .select('usuario,lista_m3u,lista_m3u_https')
+        .eq('usuario', auth.username)
+        .single();
+      const { data: secondary } = await db.from('secondary_content_sources')
+        .select('id,name,source_type,priority,enabled,last_status')
+        .order('priority');
       const { count: titleCount } = await db.from('lux_catalog_titles').select('id', { count: 'exact', head: true });
       const { count: sourceCount } = await db.from('lux_catalog_sources').select('id', { count: 'exact', head: true }).eq('available', true);
-      return json({ principal: { available: Boolean(accountRow?.lista_m3u_https || accountRow?.lista_m3u), name: 'Lista principal' }, providers: [], secondary: secondary || [], catalog: { titles: titleCount || 0, active_sources: sourceCount || 0 } });
+      return json({
+        principal: {
+          available: Boolean(accountRow?.lista_m3u_https || accountRow?.lista_m3u),
+          name: 'Lista principal'
+        },
+        providers: [],
+        secondary: secondary || [],
+        catalog: { titles: titleCount || 0, active_sources: sourceCount || 0 }
+      });
     }
 
     if (action === 'begin') {
@@ -329,13 +377,26 @@ Deno.serve(async (request: Request) => {
       const tasks: any[] = [];
       if (layers.principal) tasks.push({ kind: 'principal', id: 'principal', name: 'Lista principal' });
       if (layers.secondary) {
-        const { data } = await db.from('secondary_content_sources').select('id,name,enabled').eq('enabled', true).order('priority');
+        const { data } = await db.from('secondary_content_sources')
+          .select('id,name,enabled')
+          .eq('enabled', true)
+          .order('priority');
         const wanted = new Set(Array.isArray(body?.secondary_ids) ? body.secondary_ids.map(String) : []);
-        (data || []).filter((s: any) => !wanted.size || wanted.has(String(s.id))).forEach((s: any) => tasks.push({ kind: 'secondary', id: s.id, name: s.name }));
+        (data || [])
+          .filter((s: any) => !wanted.size || wanted.has(String(s.id)))
+          .forEach((s: any) => tasks.push({ kind: 'secondary', id: s.id, name: s.name }));
       }
       if (!tasks.length) return json({ error: 'Selecione ao menos uma fonte principal ou secundária ativa.' }, 400);
+
       const requestedLayers = ['principal', 'secondary'].filter(k => Boolean(layers[k]));
-      const { data: run, error } = await db.from('lux_catalog_sync_runs').insert({ requested_by: auth.username, requested_layers: requestedLayers, status: 'running', current_phase: 'preparando', progress_total: tasks.length, stats: { tasks: [] } }).select('*').single();
+      const { data: run, error } = await db.from('lux_catalog_sync_runs').insert({
+        requested_by: auth.username,
+        requested_layers: requestedLayers,
+        status: 'running',
+        current_phase: 'preparando',
+        progress_total: tasks.length,
+        stats: { tasks: [] }
+      }).select('*').single();
       if (error) throw error;
       return json({ run_id: run.id, tasks });
     }
@@ -344,7 +405,11 @@ Deno.serve(async (request: Request) => {
       const runId = cleanText(body?.run_id, 80);
       const kind = cleanText(body?.kind, 30);
       const id = cleanText(body?.id, 200);
-      const { data: run, error: runError } = await db.from('lux_catalog_sync_runs').select('*').eq('id', runId).eq('requested_by', auth.username).single();
+      const { data: run, error: runError } = await db.from('lux_catalog_sync_runs')
+        .select('*')
+        .eq('id', runId)
+        .eq('requested_by', auth.username)
+        .single();
       if (runError || !run) return json({ error: 'Sincronização não encontrada.' }, 404);
 
       let layer = '';
@@ -353,14 +418,21 @@ Deno.serve(async (request: Request) => {
       let priority = 100;
       let items: any[] = [];
       let parseStats: any = {};
-      await db.from('lux_catalog_sync_runs').update({ current_phase: `sincronizando:${kind}:${id}` }).eq('id', runId);
+
+      await db.from('lux_catalog_sync_runs')
+        .update({ current_phase: `sincronizando:${kind}:${id}` })
+        .eq('id', runId);
 
       if (kind === 'principal') {
-        const { data: accountRow, error } = await db.from('usuarios').select('lista_m3u,lista_m3u_https').eq('usuario', auth.username).single();
+        const { data: accountRow, error } = await db.from('usuarios')
+          .select('lista_m3u,lista_m3u_https')
+          .eq('usuario', auth.username)
+          .single();
         if (error) throw error;
         const url = String(accountRow?.lista_m3u_https || accountRow?.lista_m3u || '').trim();
         if (!/^https?:\/\//i.test(url)) throw new Error('A lista principal não possui URL sincronizável.');
-        const parsed = parseM3U(await fetchText(url), 'auto');
+
+        const parsed = parseM3U(await fetchText(url), 'auto', false);
         items = parsed.items;
         parseStats = parsed.stats;
         layer = 'principal';
@@ -368,49 +440,103 @@ Deno.serve(async (request: Request) => {
         sourceName = 'Lista principal';
         priority = 0;
       } else if (kind === 'secondary') {
-        const { data: source, error } = await db.from('secondary_content_sources').select('*').eq('id', id).eq('enabled', true).single();
+        const { data: source, error } = await db.from('secondary_content_sources')
+          .select('*')
+          .eq('id', id)
+          .eq('enabled', true)
+          .single();
         if (error || !source) throw new Error('Fonte secundária está desativada ou não existe.');
+
         try {
-          const parsed = parseM3U(await fetchText(source.source_url), source.source_type || 'auto');
+          // A URL da própria M3U pode ser HTTP ou HTTPS. A restrição vale somente
+          // para os vídeos/episódios contidos nela.
+          const parsed = parseM3U(
+            await fetchText(source.source_url),
+            source.source_type || 'auto',
+            true
+          );
           items = parsed.items;
           parseStats = parsed.stats;
           layer = 'secondary';
           sourceId = String(source.id);
           sourceName = source.name;
           priority = Number(source.priority) || 100;
-          await db.from('secondary_content_sources').update({ last_checked_at: new Date().toISOString(), last_status: 'success', last_error: null, updated_at: new Date().toISOString() }).eq('id', id);
+
+          await db.from('secondary_content_sources').update({
+            last_checked_at: new Date().toISOString(),
+            last_status: 'success',
+            last_error: null,
+            updated_at: new Date().toISOString()
+          }).eq('id', id);
         } catch (error: any) {
-          await db.from('secondary_content_sources').update({ last_checked_at: new Date().toISOString(), last_status: 'error', last_error: cleanText(error?.message || 'Falha ao ler fonte.', 1000), updated_at: new Date().toISOString() }).eq('id', id);
+          await db.from('secondary_content_sources').update({
+            last_checked_at: new Date().toISOString(),
+            last_status: 'error',
+            last_error: cleanText(error?.message || 'Falha ao ler fonte.', 1000),
+            updated_at: new Date().toISOString()
+          }).eq('id', id);
           throw error;
         }
       } else {
         return json({ error: 'Tarefa inválida. Providers estão desativados por enquanto.' }, 400);
       }
 
-      if (!items.length) throw new Error('Nenhuma entrada reproduzível foi encontrada nessa fonte.');
+      if (!items.length) {
+        if (kind === 'secondary' && Number(parseStats?.skipped_http || 0) > 0) {
+          throw new Error(`Nenhum vídeo HTTPS utilizável foi encontrado. ${parseStats.skipped_http} link(s) HTTP foram ignorados.`);
+        }
+        throw new Error('Nenhuma entrada reproduzível foi encontrada nessa fonte.');
+      }
+
       const result = await ingestItems(db, layer, sourceId, sourceName, priority, items);
       const enrichedResult = { ...result, ...parseStats };
       const nextStats = addStats(run.stats, sourceName, enrichedResult);
       const nextProgress = Math.min(Number(run.progress_total) || 1, (Number(run.progress_current) || 0) + 1);
-      await db.from('lux_catalog_sync_runs').update({ stats: nextStats, progress_current: nextProgress, current_phase: `concluído:${sourceName}` }).eq('id', runId);
-      return json({ name: sourceName, ...enrichedResult, progress_current: nextProgress, progress_total: run.progress_total });
+
+      await db.from('lux_catalog_sync_runs').update({
+        stats: nextStats,
+        progress_current: nextProgress,
+        current_phase: `concluído:${sourceName}`
+      }).eq('id', runId);
+
+      return json({
+        name: sourceName,
+        ...enrichedResult,
+        progress_current: nextProgress,
+        progress_total: run.progress_total
+      });
     }
 
-    if (action === 'enrich') return json({ checked: 0, matched: 0, review: 0, remaining: 0, disabled: true });
+    if (action === 'enrich') {
+      return json({ checked: 0, matched: 0, review: 0, remaining: 0, disabled: true });
+    }
 
     if (action === 'finish') {
       const runId = cleanText(body?.run_id, 80);
-      const { data: run, error } = await db.from('lux_catalog_sync_runs').select('*').eq('id', runId).eq('requested_by', auth.username).single();
+      const { data: run, error } = await db.from('lux_catalog_sync_runs')
+        .select('*')
+        .eq('id', runId)
+        .eq('requested_by', auth.username)
+        .single();
       if (error || !run) return json({ error: 'Sincronização não encontrada.' }, 404);
+
       const status = Number(run.progress_current) >= Number(run.progress_total) ? 'success' : 'partial';
-      const { data: updated, error: updateError } = await db.from('lux_catalog_sync_runs').update({ status, current_phase: 'finalizado', finished_at: new Date().toISOString() }).eq('id', runId).select('*').single();
+      const { data: updated, error: updateError } = await db.from('lux_catalog_sync_runs').update({
+        status,
+        current_phase: 'finalizado',
+        finished_at: new Date().toISOString()
+      }).eq('id', runId).select('*').single();
       if (updateError) throw updateError;
       return json({ run: updated });
     }
 
     if (action === 'status') {
       const runId = cleanText(body?.run_id, 80);
-      const { data: run, error } = await db.from('lux_catalog_sync_runs').select('*').eq('id', runId).eq('requested_by', auth.username).single();
+      const { data: run, error } = await db.from('lux_catalog_sync_runs')
+        .select('*')
+        .eq('id', runId)
+        .eq('requested_by', auth.username)
+        .single();
       if (error || !run) return json({ error: 'Sincronização não encontrada.' }, 404);
       return json({ run });
     }
@@ -418,6 +544,10 @@ Deno.serve(async (request: Request) => {
     return json({ error: 'Ação inválida.' }, 400);
   } catch (error: any) {
     console.error('content-catalog-sync:', error);
-    return json({ error: error?.name === 'AbortError' ? 'A fonte demorou demais para responder.' : (error?.message || 'Falha na sincronização do catálogo.') }, 500);
+    return json({
+      error: error?.name === 'AbortError'
+        ? 'A fonte demorou demais para responder.'
+        : (error?.message || 'Falha na sincronização do catálogo.')
+    }, 500);
   }
 });
