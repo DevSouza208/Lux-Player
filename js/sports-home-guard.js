@@ -31,10 +31,7 @@
     if (!window.LuxSports) ensureScript('lux-sports-data', 'js/sports.js?v=20260913-guide-fast1');
     if (!window.__luxSportsGuideFixesInstalled) ensureScript('lux-sports-guide-fixes', 'js/sports-guide-fixes.js?v=20260914-1');
     if (!window.LuxSportsLogos) ensureScript('lux-sports-logo-data', 'js/sports-global-mapping.js?v=20260913-footy-fast2');
-  }
-
-  function loadHomeContentRails() {
-    if (!window.LuxHomeRails) ensureScript('lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-1');
+    if (!window.__luxHomeSeriesInternalRouter) ensureScript('lux-home-series-internal-router', 'js/home-series-internal-router.js?v=20260915-1');
   }
 
   function enrichHiddenSportsData() {
@@ -49,7 +46,6 @@
   }
 
   loadSportsDataEngine();
-  loadHomeContentRails();
 
   if (!SPORTS_HOME_ENABLED) {
     if (!applySportsVisibility()) {
@@ -61,12 +57,12 @@
 
     // A seção visual continua escondida, mas o parser do Guia de Jogos,
     // normalização de horários e resolvedor de escudos ficam ativos para o
-    // construtor de banners no painel Admin.
+    // construtor de banners no painel Admin. O roteador das séries da Home
+    // também fica carregado para impedir redirecionamento externo TMDB/IMDb.
     let attempts = 0;
     const dataTimer = setInterval(() => {
       attempts += 1;
       loadSportsDataEngine();
-      loadHomeContentRails();
       enrichHiddenSportsData();
       if (attempts >= 240) clearInterval(dataTimer);
     }, 250);
@@ -114,7 +110,7 @@
   const timer = setInterval(() => {
     attempts += 1;
     loadGuideFixes();
-    loadHomeContentRails();
+    loadSportsDataEngine();
     enrichHiddenSportsData();
     if (ensureOwner() || attempts >= 240) clearInterval(timer);
   }, 50);
