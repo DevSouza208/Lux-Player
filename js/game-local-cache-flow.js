@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-game-local-cache1';
+  const VERSION = '20260916-r2-rom-cache2';
   const OVERLAY_ID = 'luxGameCacheOverlay';
   const STYLE_ID = 'luxGameCacheOverlayStyle';
 
@@ -24,8 +24,15 @@
     return value === 'n64' || value === 'nintendo64';
   }
 
+  function resolvedSource(game) {
+    try { return window.LuxRomCache?.resolveSource?.(game) || null; }
+    catch (_) { return null; }
+  }
+
   function shouldAutoCache(game) {
-    return !!(game && !game.external && !game.localUrl && game.url && window.LuxRomCache);
+    if (!game || game.external || game.localUrl || !window.LuxRomCache) return false;
+    const source = resolvedSource(game);
+    return !!source?.url;
   }
 
   function ensureStyle() {
@@ -60,10 +67,10 @@
           <div class="lux-game-cache-icon">🎮</div>
           <div class="lux-game-cache-title">Preparando jogo</div>
           <div class="lux-game-cache-game"></div>
-          <div class="lux-game-cache-status">Verificando arquivos temporários...</div>
+          <div class="lux-game-cache-status">Verificando ROM neste dispositivo...</div>
           <div class="lux-game-cache-track"><div class="lux-game-cache-bar"></div></div>
           <div class="lux-game-cache-meta">0%</div>
-          <div class="lux-game-cache-note">A ROM fica armazenada temporariamente neste dispositivo e pode ser removida após 7 dias sem uso.</div>
+          <div class="lux-game-cache-note">Depois do primeiro download, a ROM abre deste dispositivo. Cada uso renova o prazo. Após 7 dias completos sem uso, ela é removida automaticamente e, no próximo acesso, será baixada novamente.</div>
         </div>`;
       document.body.appendChild(overlay);
     }
@@ -104,19 +111,20 @@
     if (existing) return { cached: true, skipped: false, size: existing.size || 0 };
 
     ensureOverlay(game);
-    updateOverlay('Baixando ROM para este dispositivo...', 0.03, 'Preparando download');
+    const source = resolvedSource(game);
+    updateOverlay(source?.source === 'r2' ? 'Baixando ROM do Lux R2...' : 'Baixando ROM...', 0.03, 'Preparando download');
 
     await window.LuxRomCache.download(game, ratio => {
       const progress = Number.isFinite(ratio) ? ratio : 0;
       updateOverlay(
-        'Baixando ROM para este dispositivo...',
+        source?.source === 'r2' ? 'Baixando ROM do Lux R2...' : 'Baixando ROM...',
         0.03 + progress * 0.90,
         progress > 0 ? `${Math.round(progress * 100)}% da ROM` : 'Baixando...'
       );
     });
 
     const saved = await cachedStatus(game);
-    if (!saved) throw new Error('A ROM foi baixada, mas não ficou disponível no cache local.');
+    if (!saved) throw new Error('A ROM foi baixada, mas não ficou disponível no armazenamento local.');
     return { cached: false, skipped: false, size: saved.size || 0 };
   }
 
@@ -128,7 +136,7 @@
     button.classList.toggle('opacity-50', !status);
     button.classList.toggle('cursor-not-allowed', !status);
     const label = button.querySelector('span');
-    if (label) label.textContent = status ? 'Limpar arquivos temporários deste jogo' : 'Nenhum arquivo temporário deste jogo';
+    if (label) label.textContent = status ? 'Remover ROM deste dispositivo' : 'ROM ainda não baixada neste dispositivo';
   }
 
   function addClearButton(game) {
@@ -140,7 +148,7 @@
     button.id = 'gameClearTempButton';
     button.type = 'button';
     button.className = 'w-full mb-2 border border-purple-800/60 bg-purple-950/40 text-purple-200 hover:bg-purple-900/60 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-center items-center gap-2';
-    button.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4"></i><span>Verificando arquivos temporários...</span>';
+    button.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4"></i><span>Verificando ROM neste dispositivo...</span>';
     button.onclick = () => window.clearCurrentGameTemporaryFiles?.();
 
     const downloadButton = document.getElementById('gameDownloadButton');
@@ -160,7 +168,7 @@
       return;
     }
 
-    const confirmed = window.confirm?.('Remover a ROM temporária deste jogo deste dispositivo? Saves, progresso e favoritos não serão apagados.') ?? true;
+    const confirmed = window.confirm?.('Remover a ROM deste jogo deste dispositivo? Saves, progresso e favoritos não serão apagados.') ?? true;
     if (!confirmed) return;
 
     try {
@@ -168,12 +176,12 @@
       await refreshClearButton(game);
       const download = document.getElementById('gameDownloadButton');
       const label = download?.querySelector('span');
-      if (label) label.textContent = 'Baixar para jogar localmente';
+      if (label) label.textContent = 'Baixar ROM neste dispositivo';
       if (download) download.disabled = false;
-      window.alert?.('Arquivos temporários deste jogo foram removidos.');
+      window.alert?.('ROM removida deste dispositivo.');
     } catch (error) {
-      console.warn('[Lux Cache] Não foi possível limpar os arquivos temporários:', error);
-      window.alert?.('Não foi possível limpar os arquivos temporários deste jogo.');
+      console.warn('[Lux ROM Cache] Não foi possível remover a ROM:', error);
+      window.alert?.('Não foi possível remover a ROM deste dispositivo.');
     }
   };
 
@@ -183,6 +191,8 @@
 
     const patched = async function (...args) {
       const game = currentGame();
+
+      // N64 usa um fluxo local próprio e será migrado na etapa seguinte.
       if (!shouldAutoCache(game) || isN64(game)) return original.apply(this, args);
 
       try {
@@ -195,8 +205,8 @@
         if (!status) hideOverlay(140);
         return result;
       } catch (error) {
-        console.warn('[Lux Cache] Falha ao preparar ROM local; abrindo pela fonte original:', error);
-        updateOverlay('Não foi possível salvar a ROM local.', 1, 'Abrindo pela fonte original');
+        console.warn('[Lux ROM Cache] Falha ao preparar ROM local; usando a fonte disponível:', error);
+        updateOverlay('Não foi possível armazenar a ROM local.', 1, 'Tentando abrir pela fonte disponível');
         hideOverlay(600);
         return original.apply(this, args);
       }
