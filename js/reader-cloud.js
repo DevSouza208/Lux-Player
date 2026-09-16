@@ -14,12 +14,12 @@
   const timeoutMs=Math.max(1000,Number(options?.timeoutMs)||10000);
   let timer,response;
   try{response=await Promise.race([
-   supabaseClient.functions.invoke(name,{body:{...payload,username:account.user,password:account.pass,profileSlot:account.profile?.slot||1,profileKey:account.profile?.data_key||''}}),
+   supabaseClient.functions.invoke(name,{body:{...payload,username:account.user,password:account.pass,profileSlot:account.profile?.slot||1,profileKey:account.profile?.data_key||''},responseType:options?.responseType}),
    new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('A nuvem demorou para responder. Alterações guardadas neste dispositivo.')),timeoutMs);})
   ]);}finally{clearTimeout(timer);}
   if(owner!==currentOwner())throw new Error('O perfil mudou.');
-  if(response.error||response.data?.error){
-   let message=response.data?.error||'Sem conexão com a nuvem. Alterações guardadas neste dispositivo.';
+  if(response.error||(!options?.responseType&&response.data?.error)){
+   let message=!options?.responseType&&response.data?.error||'Sem conexão com a nuvem. Alterações guardadas neste dispositivo.';
    try{message=(await response.error.context.json()).error||message;}catch{}
    throw new Error(message);
   }
