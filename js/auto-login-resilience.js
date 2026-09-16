@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-manual-login1';
+  const VERSION = '20260916-manual-login2';
   if (window.__luxManualLoginInstalled === VERSION) return;
   window.__luxManualLoginInstalled = VERSION;
 
@@ -26,8 +26,6 @@
   }
 
   function clearAutomaticSessionState() {
-    // O login volta a ser sempre explícito. Tokens/sessões antigas não podem mais
-    // esconder a tela de login nem disparar handleLogin durante a inicialização.
     try {
       const legacyPass = localStorage.getItem(LOCAL_PASS_KEY) || '';
       if (legacyPass === SESSION_MARKER || /^luxsess_[A-Za-z0-9_-]{40,200}$/.test(legacyPass)) {
@@ -53,11 +51,34 @@
     }
   }
 
+  function removeLegacyRememberControls() {
+    const auth = document.getElementById('authScreen');
+    const pass = document.getElementById('authPass');
+    if (!auth || !pass) return;
+
+    // Mantém somente o controle novo. O login já possuía um "Manter conectado"
+    // legado; removemos qualquer label/checkbox antigo ao redor do formulário.
+    auth.querySelectorAll('label').forEach(label => {
+      if (label.dataset.luxRememberLoginNew === '1') return;
+      const text = String(label.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (text.includes('manter conectado')) label.remove();
+    });
+
+    auth.querySelectorAll('input[type="checkbox"]').forEach(input => {
+      if (input.id === 'luxRememberLogin') return;
+      const parentText = String(input.parentElement?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (parentText.includes('manter conectado')) input.parentElement?.remove();
+    });
+  }
+
   function ensureRememberControl() {
     const pass = document.getElementById('authPass');
-    if (!pass || document.getElementById('luxRememberLogin')) return;
+    if (!pass) return;
+    removeLegacyRememberControls();
+    if (document.getElementById('luxRememberLogin')) return;
 
     const row = document.createElement('label');
+    row.dataset.luxRememberLoginNew = '1';
     row.className = 'flex items-center gap-2 text-xs text-purple-300/80 cursor-pointer select-none';
     row.innerHTML = '<input id="luxRememberLogin" type="checkbox" class="accent-purple-600 w-3.5 h-3.5"><span>Manter conectado</span>';
     pass.closest('div')?.insertAdjacentElement('afterend', row);
@@ -90,8 +111,6 @@
       const pass = String(document.getElementById('authPass')?.value || '');
       const remember = Boolean(document.getElementById('luxRememberLogin')?.checked);
 
-      // Persistimos apenas o que o usuário explicitamente pediu para lembrar.
-      // Isso serve somente para preencher o formulário; nunca dispara login sozinho.
       if (remember && user && pass) {
         safeSet(REMEMBER_KEY, '1');
         safeSet(REMEMBER_USER_KEY, user);
@@ -122,7 +141,6 @@
     }, 25);
   }
 
-  // Não existe mais auto-login neste módulo. Toda abertura começa na tela de login.
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
