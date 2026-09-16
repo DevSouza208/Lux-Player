@@ -7,14 +7,15 @@
   statuses.set(store.key(owner,id),{state,message});
   if(typeof root.dispatchEvent==='function')root.dispatchEvent(new CustomEvent('lux-reading-sync',{detail:{owner,id,state,message}}));
  }
- async function request(name,payload,account=user()){
+ async function request(name,payload,account=user(),options={}){
   if(!account)throw new Error('Entre em um perfil.');
   const owner=store.owner(account);
   if(typeof supabaseClient==='undefined')throw new Error('Sincronização indisponível.');
+  const timeoutMs=Math.max(1000,Number(options?.timeoutMs)||10000);
   let timer,response;
   try{response=await Promise.race([
    supabaseClient.functions.invoke(name,{body:{...payload,username:account.user,password:account.pass,profileSlot:account.profile?.slot||1,profileKey:account.profile?.data_key||''}}),
-   new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('A nuvem demorou para responder. Alterações guardadas neste dispositivo.')),10000);})
+   new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('A nuvem demorou para responder. Alterações guardadas neste dispositivo.')),timeoutMs);})
   ]);}finally{clearTimeout(timer);}
   if(owner!==currentOwner())throw new Error('O perfil mudou.');
   if(response.error||response.data?.error){
@@ -34,7 +35,6 @@
   const state=store.readState(owner,id),records=state._records||={};
   const local=records[remote.key];
   if(sent&&local&&JSON.stringify(local.payload)!==JSON.stringify(sent.payload)){
-   // An edit made during the request is still pending, based on the acknowledged revision.
    local.revision=Number(remote.revision);store.replaceState(owner,id,state);return;
   }
   if(local?.dirty&&JSON.stringify(local.payload)!==JSON.stringify(remote.payload)){
@@ -44,7 +44,6 @@
     records['recovery:'+recoveryKey]={payload,revision:0,dirty:true};applyPayload(state,'recovery:'+recoveryKey,payload);
     state.syncNotice='Uma edição simultânea foi preservada em Versões recuperadas.';
    }else{
-    // Preferences and position represent the most recent local intent; retry against the latest revision.
     local.revision=Number(remote.revision);store.replaceState(owner,id,state);return;
    }
   }
@@ -63,7 +62,6 @@
   const task=(async()=>{
    try{
     seed(owner,id);notify(owner,id,'syncing','Sincronizando…');
-    // Submit changes before pulling. The database compares revisions atomically.
     for(let round=0;round<4;round++){
      const records=store.readState(owner,id)._records||{};
      const pending=Object.entries(records).filter(([,r])=>r.dirty).map(([key,r])=>({key,payload:r.payload,revision:r.revision||0}));
