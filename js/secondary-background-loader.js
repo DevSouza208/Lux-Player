@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-secondary-background-drive1';
+  const VERSION = '20260916-secondary-background-drive2';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
@@ -38,7 +38,7 @@
 
   if (!document.querySelector('script[data-lux-drive-secondary-source-ui]')) {
     const script = document.createElement('script');
-    script.src = 'js/drive-secondary-source-ui.js?v=20260916-1';
+    script.src = 'js/drive-secondary-source-ui.js?v=20260916-2';
     script.async = false;
     script.dataset.luxDriveSecondarySourceUi = '1';
     document.head.appendChild(script);
