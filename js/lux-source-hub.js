@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-drive-hq2';
+  const VERSION = '20260916-drive-hq4';
   const DEFAULT_HQ_SOURCE = {
     id: 'hq-drive-marvel', name: 'HQs • Google Drive', provider: 'google-drive', kind: 'comics',
     url: 'https://drive.google.com/drive/folders/1zjVQ0K6mWgXcZSTV8gNi-jxY0x2KWjGN', enabled: true, recursive: true,
@@ -36,7 +36,7 @@
       children:folder?[]:undefined };
   }
   async function cloudRequest(payload) {
-    if (window.LuxReaderCloud?.request) return window.LuxReaderCloud.request('drive-source-scan', payload);
+    if (window.LuxReaderCloud?.request) return window.LuxReaderCloud.request('drive-source-scan', payload, undefined, { timeoutMs: 60000 });
     throw new Error('Conexão segura com o Lux indisponível. Entre novamente e tente de novo.');
   }
   async function scanDriveSource({ folderUrl, onProgress, signal, pageSize = 300, maxCalls = 500 }) {
