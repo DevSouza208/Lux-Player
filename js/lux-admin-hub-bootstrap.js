@@ -1,10 +1,10 @@
 (() => {
   'use strict';
   if (window.__luxAdminHubBootstrapInstalled) return;
-  window.__luxAdminHubBootstrapInstalled = '20260915-2';
+  window.__luxAdminHubBootstrapInstalled = '20260916-3';
   const scripts = [
-    ['js/admin-panel-polish.js?v=20260915-admin-hub2', 'lux-admin-hub'],
-    ['js/lux-source-hub-loader.js?v=20260915-drive-hq1', 'lux-source-loader'],
+    ['js/admin-panel-polish.js?v=20260916-admin-hub3', 'lux-admin-hub'],
+    ['js/lux-source-hub-loader.js?v=20260916-drive-hq2', 'lux-source-loader'],
     ['js/home-featured-live-channel-picker.js?v=20260915-featured-live-picker1', 'lux-featured-live-picker']
   ];
   scripts.forEach(([src, marker]) => {
