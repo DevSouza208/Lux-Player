@@ -1,14 +1,12 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-secondary-background-retired1';
+  const VERSION = '20260916-secondary-background-drive1';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
-  // O antigo pipeline de fontes secundárias/revisão de idioma foi aposentado.
-  // Nada de grouping, locale preview, aprovação, observers globais ou polling
-  // deve rodar no login/Home. O novo Source Hub é administrativo e independente.
-
+  // O pipeline antigo de revisão/idioma continua aposentado. Este loader só
+  // mantém a limpeza do runtime legado e conecta a UI administrativa do Drive.
   function unwrapLoadFunction(fn) {
     let current = fn;
     const seen = new Set();
@@ -30,8 +28,6 @@
     return true;
   }
 
-  // Limpa observers antigos caso uma versão anterior tenha sido executada
-  // antes da atualização/service worker entregar este arquivo.
   try { window.__luxSecondaryModalObserver?.disconnect?.(); } catch (_) {}
   try { window.__luxAdminSyncLayoutObserver?.disconnect?.(); } catch (_) {}
   window.__luxSecondaryModalObserver = null;
@@ -40,8 +36,13 @@
   retireLegacyWrapper();
   setTimeout(retireLegacyWrapper, 0);
 
-  window.LuxLegacySecondaryRuntime = Object.freeze({
-    version: VERSION,
-    retired: true
-  });
+  if (!document.querySelector('script[data-lux-drive-secondary-source-ui]')) {
+    const script = document.createElement('script');
+    script.src = 'js/drive-secondary-source-ui.js?v=20260916-1';
+    script.async = false;
+    script.dataset.luxDriveSecondarySourceUi = '1';
+    document.head.appendChild(script);
+  }
+
+  window.LuxLegacySecondaryRuntime = Object.freeze({ version: VERSION, retired: true });
 })();
