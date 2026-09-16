@@ -1,11 +1,12 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-n64-local-session2';
+  const VERSION = '20260916-n64-r2-cache3';
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   const MAX_AGE_MINS = 7 * 24 * 60;
-  const CORE_READY_KEY = 'lux-play:n64-core-ready-v2';
+  const CORE_READY_KEY = 'lux-play:n64-core-ready-v3';
   const OVERLAY_ID = 'luxN64PrepareOverlay';
+  const STYLE_ID = 'luxN64PrepareStyle';
   const START_TIMEOUT_MS = 18000;
 
   if (window.__luxN64LocalSession === VERSION) return;
@@ -34,6 +35,11 @@
       if (typeof activeEmulatorGame !== 'undefined' && activeEmulatorGame) return activeEmulatorGame;
     } catch (_) {}
     return null;
+  }
+
+  function resolvedSource(game) {
+    try { return window.LuxRomCache?.resolveSource?.(game) || null; }
+    catch (_) { return null; }
   }
 
   function coreCacheFresh() {
@@ -70,97 +76,23 @@
   }
 
   function ensureStyles() {
-    if (document.getElementById('luxN64PrepareStyle')) return;
+    if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
-    style.id = 'luxN64PrepareStyle';
+    style.id = STYLE_ID;
     style.textContent = `
-      #${OVERLAY_ID} {
-        position: fixed;
-        inset: 0;
-        z-index: 2147483500;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        background: #09060e;
-        color: #fff;
-      }
-      #${OVERLAY_ID}.hidden { display: none !important; }
-      #${OVERLAY_ID} .lux-n64-prep-card {
-        width: min(440px, 100%);
-        padding: 30px 26px;
-        border: 1px solid rgba(126, 34, 206, .6);
-        border-radius: 28px;
-        background: #120c1f;
-        box-shadow: 0 24px 70px rgba(0, 0, 0, .42);
-        text-align: center;
-      }
-      #${OVERLAY_ID} .lux-n64-prep-icon {
-        width: 68px;
-        height: 68px;
-        margin: 0 auto 18px;
-        border-radius: 22px;
-        display: grid;
-        place-items: center;
-        font-size: 30px;
-        background: rgba(147, 51, 234, .18);
-        border: 1px solid rgba(168, 85, 247, .28);
-      }
-      #${OVERLAY_ID} .lux-n64-prep-title {
-        font-size: 20px;
-        font-weight: 900;
-        letter-spacing: -.02em;
-      }
-      #${OVERLAY_ID} .lux-n64-prep-game {
-        margin-top: 5px;
-        font-size: 13px;
-        color: #c4b5fd;
-      }
-      #${OVERLAY_ID} .lux-n64-prep-status {
-        margin-top: 22px;
-        font-size: 13px;
-        font-weight: 700;
-        color: #e9d5ff;
-      }
-      #${OVERLAY_ID} .lux-n64-prep-track {
-        height: 8px;
-        margin-top: 12px;
-        overflow: hidden;
-        border-radius: 999px;
-        background: rgba(88, 28, 135, .42);
-      }
-      #${OVERLAY_ID} .lux-n64-prep-bar {
-        width: 3%;
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, #7c3aed, #c084fc);
-        transition: width .18s ease;
-      }
-      #${OVERLAY_ID} .lux-n64-prep-meta {
-        margin-top: 10px;
-        font-size: 11px;
-        color: #a78bfa;
-      }
-      #${OVERLAY_ID} .lux-n64-prep-note {
-        margin-top: 20px;
-        font-size: 11px;
-        line-height: 1.55;
-        color: #7e6b9f;
-      }
-      #${OVERLAY_ID} .lux-n64-prep-recovery {
-        display: none;
-        width: 100%;
-        margin-top: 18px;
-        border: 1px solid rgba(168, 85, 247, .55);
-        border-radius: 14px;
-        padding: 11px 14px;
-        background: rgba(88, 28, 135, .45);
-        color: #f3e8ff;
-        font-size: 12px;
-        font-weight: 800;
-        cursor: pointer;
-      }
-      #${OVERLAY_ID}[data-recovery="1"] .lux-n64-prep-recovery { display: block; }
+      #${OVERLAY_ID}{position:fixed;inset:0;z-index:2147483500;display:flex;align-items:center;justify-content:center;padding:24px;background:#09060e;color:#fff}
+      #${OVERLAY_ID}.hidden{display:none!important}
+      #${OVERLAY_ID} .lux-n64-prep-card{width:min(440px,100%);padding:30px 26px;border:1px solid rgba(126,34,206,.6);border-radius:28px;background:#120c1f;box-shadow:0 24px 70px rgba(0,0,0,.42);text-align:center}
+      #${OVERLAY_ID} .lux-n64-prep-icon{width:68px;height:68px;margin:0 auto 18px;border-radius:22px;display:grid;place-items:center;font-size:30px;background:rgba(147,51,234,.18);border:1px solid rgba(168,85,247,.28)}
+      #${OVERLAY_ID} .lux-n64-prep-title{font-size:20px;font-weight:900;letter-spacing:-.02em}
+      #${OVERLAY_ID} .lux-n64-prep-game{margin-top:5px;font-size:13px;color:#c4b5fd}
+      #${OVERLAY_ID} .lux-n64-prep-status{margin-top:22px;font-size:13px;font-weight:700;color:#e9d5ff}
+      #${OVERLAY_ID} .lux-n64-prep-track{height:8px;margin-top:12px;overflow:hidden;border-radius:999px;background:rgba(88,28,135,.42)}
+      #${OVERLAY_ID} .lux-n64-prep-bar{width:3%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7c3aed,#c084fc);transition:width .18s ease}
+      #${OVERLAY_ID} .lux-n64-prep-meta{margin-top:10px;font-size:11px;color:#a78bfa}
+      #${OVERLAY_ID} .lux-n64-prep-note{margin-top:20px;font-size:11px;line-height:1.55;color:#7e6b9f}
+      #${OVERLAY_ID} .lux-n64-prep-recovery{display:none;width:100%;margin-top:18px;border:1px solid rgba(168,85,247,.55);border-radius:14px;padding:11px 14px;background:rgba(88,28,135,.45);color:#f3e8ff;font-size:12px;font-weight:800;cursor:pointer}
+      #${OVERLAY_ID}[data-recovery="1"] .lux-n64-prep-recovery{display:block}
     `;
     document.head.appendChild(style);
   }
@@ -171,17 +103,18 @@
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = OVERLAY_ID;
+      overlay.className = 'hidden';
       overlay.dataset.recovery = '0';
       overlay.innerHTML = `
         <div class="lux-n64-prep-card">
           <div class="lux-n64-prep-icon">🎮</div>
           <div class="lux-n64-prep-title">Preparando Nintendo 64</div>
           <div class="lux-n64-prep-game"></div>
-          <div class="lux-n64-prep-status">Preparando arquivos temporários...</div>
+          <div class="lux-n64-prep-status">Verificando ROM neste dispositivo...</div>
           <div class="lux-n64-prep-track"><div class="lux-n64-prep-bar"></div></div>
           <div class="lux-n64-prep-meta">0%</div>
           <button type="button" class="lux-n64-prep-recovery">Voltar aos detalhes</button>
-          <div class="lux-n64-prep-note">A ROM e o núcleo ficam em cache neste dispositivo. Arquivos sem uso por 7 dias podem ser removidos automaticamente.</div>
+          <div class="lux-n64-prep-note">A ROM segue a mesma regra dos outros consoles: cada uso renova o prazo e, após 7 dias completos sem uso, ela é removida deste dispositivo.</div>
         </div>`;
       document.body.appendChild(overlay);
       overlay.querySelector('.lux-n64-prep-recovery')?.addEventListener('click', recoverToDetails);
@@ -224,13 +157,9 @@
     clearLaunchWatchdog();
     const game = lastLaunchGame;
     hideOverlay(0);
-    try {
-      if (typeof closeGameEmulator === 'function') closeGameEmulator();
-    } catch (_) {}
+    try { if (typeof closeGameEmulator === 'function') closeGameEmulator(); } catch (_) {}
     setTimeout(() => {
-      try {
-        if (game && typeof openGameDetails === 'function') openGameDetails(game);
-      } catch (_) {}
+      try { if (game && typeof openGameDetails === 'function') openGameDetails(game); } catch (_) {}
     }, 20);
   }
 
@@ -241,7 +170,7 @@
     updateOverlay({
       status: 'O núcleo demorou mais que o esperado.',
       progress: 1,
-      meta: 'Nada ficou preso: volte aos detalhes e tente novamente.'
+      meta: 'Volte aos detalhes e tente novamente.'
     });
   }
 
@@ -252,9 +181,7 @@
       launchWatchdog = 0;
       const overlay = document.getElementById(OVERLAY_ID);
       if (!overlay || overlay.classList.contains('hidden')) return;
-
-      const ready = !!window.EJS_emulator?.gameManager;
-      if (ready) {
+      if (window.EJS_emulator?.gameManager) {
         markCoreUsed();
         updateOverlay({ status: 'Tudo pronto!', progress: 1, meta: 'Executando localmente' });
         hideOverlay(120);
@@ -265,33 +192,41 @@
   }
 
   async function getRomStatus(game) {
-    if (!window.LuxRomCache?.status || !game?.url) return null;
+    if (!window.LuxRomCache?.status || !resolvedSource(game)?.url) return null;
     try { return await window.LuxRomCache.status(game); }
     catch (_) { return null; }
   }
 
   async function prepareRom(game) {
-    if (!game || game.external || game.localUrl || !game.url || !window.LuxRomCache) {
+    if (!game || game.external || game.localUrl || !window.LuxRomCache) {
       return { local: !!game?.localUrl, cached: false };
     }
+
+    const source = resolvedSource(game);
+    if (!source?.url) throw new Error('A ROM deste jogo não possui uma fonte disponível.');
 
     const existing = await getRomStatus(game);
     if (existing) return { local: true, cached: true, size: existing.size || 0 };
 
     ensureOverlay(game);
-    updateOverlay({ status: 'Baixando ROM para este dispositivo...', progress: 0.04 });
+    updateOverlay({
+      status: source.source === 'r2' ? 'Baixando ROM do Lux R2...' : 'Baixando ROM...',
+      progress: 0.04,
+      meta: 'Preparando download'
+    });
 
     await window.LuxRomCache.download(game, ratio => {
       const normalized = Number.isFinite(ratio) ? ratio : 0;
       updateOverlay({
-        status: 'Baixando ROM para este dispositivo...',
+        status: source.source === 'r2' ? 'Baixando ROM do Lux R2...' : 'Baixando ROM...',
         progress: 0.04 + (normalized * 0.82),
         meta: normalized > 0 ? `${Math.round(normalized * 100)}% da ROM` : 'Baixando...'
       });
     });
 
     const saved = await getRomStatus(game);
-    return { local: !!saved, cached: false, size: saved?.size || 0 };
+    if (!saved) throw new Error('A ROM foi baixada, mas não ficou disponível neste dispositivo.');
+    return { local: true, cached: false, size: saved.size || 0 };
   }
 
   function autoStartPreparedN64(game) {
@@ -330,6 +265,9 @@
       cleanupCoreMarker();
       try { await window.LuxRomCache?.cleanupExpired?.(); } catch (_) {}
 
+      const source = resolvedSource(game);
+      if (!source?.url) return original.apply(this, args);
+
       const romStatus = await getRomStatus(game);
       const needsOverlay = !romStatus || !coreCacheFresh();
       if (needsOverlay) ensureOverlay(game);
@@ -341,16 +279,16 @@
 
         if (!needsOverlay) ensureOverlay(game);
         updateOverlay({
-          status: 'Abrindo a ROM local...',
+          status: 'Abrindo a ROM deste dispositivo...',
           progress: 0.90,
           meta: romStatus ? 'ROM encontrada no dispositivo' : 'ROM salva no dispositivo'
         });
         autoStartPreparedN64(pendingGame() || game);
         return result;
       } catch (error) {
-        console.warn('[Lux N64] Falha ao preparar a cópia local; usando a fonte online.', error);
+        console.warn('[Lux N64] Falha ao preparar ROM local:', error);
         updateOverlay({
-          status: 'Não foi possível preparar a cópia local.',
+          status: 'Não foi possível preparar a ROM.',
           progress: 1,
           meta: 'Voltando aos detalhes para tentar novamente.'
         });
@@ -378,7 +316,7 @@
         updateOverlay({
           status: 'Carregando núcleo e iniciando o jogo...',
           progress: 0.96,
-          meta: coreCacheFresh() ? 'Usando arquivos temporários em cache' : 'Preparando núcleo pela primeira vez'
+          meta: coreCacheFresh() ? 'Usando núcleo em cache' : 'Preparando núcleo pela primeira vez'
         });
       }
 
@@ -388,9 +326,8 @@
         const onStart = window.EJS_onGameStart;
         if (typeof onStart === 'function' && !onStart.__luxN64LocalReadyWrapped) {
           const wrapped = async (...startArgs) => {
-            try {
-              return await onStart(...startArgs);
-            } finally {
+            try { return await onStart(...startArgs); }
+            finally {
               clearLaunchWatchdog();
               markCoreUsed();
               updateOverlay({ status: 'Tudo pronto!', progress: 1, meta: 'Executando localmente' });
@@ -415,11 +352,7 @@
   try { window.LuxRomCache?.cleanupExpired?.(); } catch (_) {}
 
   let attempts = 0;
-  const install = () => {
-    const gameOk = patchStartGameFromDetails();
-    const emulatorOk = patchStartEmulatorSession();
-    return gameOk && emulatorOk;
-  };
+  const install = () => patchStartGameFromDetails() && patchStartEmulatorSession();
 
   if (!install()) {
     const timer = setInterval(() => {
