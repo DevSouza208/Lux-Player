@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-secondary-background-drive7';
+  const VERSION = '20260916-secondary-background-drive8';
   if (window.__luxSecondaryBackgroundLoaderInstalled === VERSION) return;
   window.__luxSecondaryBackgroundLoaderInstalled = VERSION;
 
@@ -44,7 +44,7 @@
   setTimeout(retireLegacyWrapper, 0);
 
   loadScript('js/drive-secondary-source-ui.js?v=20260916-2', 'lux-drive-secondary-source-ui');
-  loadScript('js/reading-source-library.js?v=20260916-source-reading7', 'lux-reading-source-library-runtime');
+  loadScript('js/reading-source-library.js?v=20260916-source-reading8', 'lux-reading-source-library-runtime');
 
   window.LuxLegacySecondaryRuntime = Object.freeze({ version: VERSION, retired: true });
 })();
