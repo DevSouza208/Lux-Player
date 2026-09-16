@@ -1,99 +1,18 @@
 import { readingAuth, readingHeaders, readingJson } from '../_shared/reading-auth.ts';
 
-const DRIVE_FOLDER = 'application/vnd.google-apps.folder';
-const DEFAULT_PAGE_SIZE = 200;
-const MAX_PAGE_SIZE = 500;
-const MAX_FOLDERS_PER_CALL = 40;
-const MAX_ITEMS_PER_CALL = 4000;
-
-function folderId(value: unknown) {
-  const text = String(value || '').trim();
-  return text.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1] || (/^[a-zA-Z0-9_-]{10,}$/.test(text) ? text : '');
-}
-function safeText(value: unknown, max = 1000) { return String(value || '').trim().slice(0, max); }
-function extension(name: string) { const m = name.toLowerCase().match(/\.([a-z0-9]{1,10})$/); return m?.[1] || ''; }
-function kind(name: string, mime = '') {
-  if (mime === DRIVE_FOLDER) return 'folder';
-  const ext = extension(name);
-  if (['cbr','cbz','zip','rar','7z'].includes(ext)) return 'comic';
-  if (['pdf','epub','mobi','azw','azw3','djvu'].includes(ext)) return 'book';
-  if (['jpg','jpeg','png','webp','avif','gif','bmp'].includes(ext)) return 'image';
-  if (['mp4','mkv','webm','mov','m4v'].includes(ext)) return 'video';
-  if (['mp3','m4a','aac','ogg','flac','wav'].includes(ext)) return 'audio';
-  return 'file';
-}
-function encodeQuery(value: string) { return encodeURIComponent(value).replace(/%27/g, "'"); }
-
-async function driveList(parentId: string, pageToken: string, pageSize: number, signal: AbortSignal) {
-  const key = Deno.env.get('GOOGLE_DRIVE_API_KEY');
-  if (!key) throw { status: 503, message: 'Configure GOOGLE_DRIVE_API_KEY no Supabase para ativar o scanner.' };
-  const q = `'${parentId.replace(/'/g, "\\'")}' in parents and trashed = false`;
-  const fields = 'nextPageToken,files(id,name,mimeType,size,modifiedTime,createdTime,md5Checksum,webViewLink,thumbnailLink,iconLink)';
-  const params = [`q=${encodeQuery(q)}`, `fields=${encodeURIComponent(fields)}`, `pageSize=${pageSize}`, 'supportsAllDrives=true', 'includeItemsFromAllDrives=true', `key=${encodeURIComponent(key)}`];
-  if (pageToken) params.push(`pageToken=${encodeURIComponent(pageToken)}`);
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.join('&')}`, { signal });
-  let data: any = null; try { data = await response.json(); } catch (_) {}
-  if (!response.ok) {
-    const reason = safeText(data?.error?.message || `Google Drive respondeu ${response.status}.`, 500);
-    if (response.status === 403 || response.status === 404) throw { status: 400, message: `A pasta não pôde ser lida. Confirme que está pública e que a Drive API está habilitada. ${reason}` };
-    throw { status: 502, message: `Falha ao consultar Google Drive. ${reason}` };
-  }
-  return { files: Array.isArray(data?.files) ? data.files : [], nextPageToken: safeText(data?.nextPageToken, 500) };
-}
-
-Deno.serve(async (request: Request) => {
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: readingHeaders });
-  if (request.method !== 'POST') return readingJson({ error: 'Método não permitido.' }, 405);
-  try {
-    let body: any; try { body = await request.json(); } catch { return readingJson({ error: 'JSON inválido.' }, 400); }
-    await readingAuth(body, true);
-    const rootId = folderId(body.folderUrl || body.folderId);
-    if (!rootId) return readingJson({ error: 'Pasta do Google Drive inválida.' }, 400);
-    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(25, Number(body.pageSize) || DEFAULT_PAGE_SIZE));
-    const supplied = Array.isArray(body.queue) ? body.queue : [];
-    const queue: any[] = supplied.length ? supplied.slice(0, 10000) : [{ id: rootId, path: '', pageToken: '' }];
-    const items: any[] = [];
-    let foldersProcessed = 0;
-
-    while (queue.length && foldersProcessed < MAX_FOLDERS_PER_CALL && items.length < MAX_ITEMS_PER_CALL) {
-      const current = queue.shift();
-      const id = safeText(current?.id, 200);
-      const parentPath = safeText(current?.path, 2000);
-      const token = safeText(current?.pageToken, 500);
-      if (!id) continue;
-      const page = await driveList(id, token, pageSize, request.signal);
-      foldersProcessed += 1;
-      for (const raw of page.files) {
-        const name = safeText(raw?.name, 500);
-        const mimeType = safeText(raw?.mimeType, 200);
-        const isFolder = mimeType === DRIVE_FOLDER;
-        const path = [parentPath, name].filter(Boolean).join('/');
-        const item = {
-          externalId: safeText(raw?.id, 200), name, path, parentPath,
-          type: kind(name, mimeType), mimeType,
-          extension: isFolder ? '' : extension(name),
-          size: Number(raw?.size || 0) || 0,
-          modifiedAt: safeText(raw?.modifiedTime, 100) || null,
-          createdAt: safeText(raw?.createdTime, 100) || null,
-          checksum: safeText(raw?.md5Checksum, 100) || null,
-          webViewLink: safeText(raw?.webViewLink, 2048),
-          thumbnailLink: safeText(raw?.thumbnailLink, 2048),
-          sourceProvider: 'google-drive'
-        };
-        items.push(item);
-        if (isFolder && item.externalId) queue.push({ id: item.externalId, path, pageToken: '' });
-      }
-      if (page.nextPageToken) queue.unshift({ id, path: parentPath, pageToken: page.nextPageToken });
-    }
-
-    return readingJson({
-      rootId, items, queue,
-      done: queue.length === 0,
-      stats: { items: items.length, foldersProcessed, pendingFolders: queue.length },
-      cursorVersion: 1
-    });
-  } catch (error: any) {
-    console.error('[LUX-DRIVE-SCAN]', error);
-    return readingJson({ error: error?.status ? error.message : 'Não foi possível varrer a pasta do Google Drive.' }, error?.status || 500);
-  }
-});
+const DRIVE_FOLDER='application/vnd.google-apps.folder';
+const DEFAULT_PAGE_SIZE=200,MAX_PAGE_SIZE=500,MAX_FOLDERS_PER_CALL=40,MAX_ITEMS_PER_CALL=4000;
+function folderId(value:unknown){const text=String(value||'').trim();return text.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1]||(/^[a-zA-Z0-9_-]{10,}$/.test(text)?text:'');}
+function safeText(value:unknown,max=1000){return String(value||'').trim().slice(0,max);}
+function extension(name:string){return name.toLowerCase().match(/\.([a-z0-9]{1,10})$/)?.[1]||'';}
+function kind(name:string,mime=''){if(mime===DRIVE_FOLDER)return'folder';const ext=extension(name);if(['cbr','cbz','zip','rar','7z'].includes(ext))return'comic';if(['pdf','epub','mobi','azw','azw3','djvu'].includes(ext))return'book';if(['jpg','jpeg','png','webp','avif','gif','bmp'].includes(ext))return'image';if(['mp4','mkv','webm','mov','m4v'].includes(ext))return'video';if(['mp3','m4a','aac','ogg','flac','wav'].includes(ext))return'audio';return'file';}
+function encodeQuery(value:string){return encodeURIComponent(value).replace(/%27/g,"'");}
+function cleanGroup(value:string){return value.replace(/^\s*\[[^\]]+\]\s*[-–—]?\s*/,'').replace(/^\s*(?:19|20)\d{2}\s*[-–—]?\s*/,'').replace(/\s+/g,' ').trim().slice(0,300);}
+function groups(path:string,name:string){const parts=path.split('/').filter(Boolean);const franchise=cleanGroup(parts[0]||name.replace(/\.[^.]+$/,''))||'Biblioteca';const collection=cleanGroup(parts.length>1?parts[parts.length-2]:parts[0]||franchise)||franchise;const issue=name.replace(/\.[^.]+$/,'').trim().slice(0,300);return{franchise,collection,issue};}
+async function driveList(parentId:string,pageToken:string,pageSize:number,signal:AbortSignal){const key=Deno.env.get('GOOGLE_DRIVE_API_KEY');if(!key)throw{status:503,message:'Configure GOOGLE_DRIVE_API_KEY no Supabase para ativar o scanner.'};const q=`'${parentId.replace(/'/g,"\\'")}' in parents and trashed = false`;const fields='nextPageToken,files(id,name,mimeType,size,modifiedTime,createdTime,md5Checksum,webViewLink,thumbnailLink,iconLink)';const params=[`q=${encodeQuery(q)}`,`fields=${encodeURIComponent(fields)}`,`pageSize=${pageSize}`,'supportsAllDrives=true','includeItemsFromAllDrives=true',`key=${encodeURIComponent(key)}`];if(pageToken)params.push(`pageToken=${encodeURIComponent(pageToken)}`);const response=await fetch(`https://www.googleapis.com/drive/v3/files?${params.join('&')}`,{signal});let data:any=null;try{data=await response.json();}catch{}if(!response.ok){const reason=safeText(data?.error?.message||`Google Drive respondeu ${response.status}.`,500);if(response.status===403||response.status===404)throw{status:400,message:`A pasta não pôde ser lida. Confirme que está pública e que a Drive API está habilitada. ${reason}`};throw{status:502,message:`Falha ao consultar Google Drive. ${reason}`};}return{files:Array.isArray(data?.files)?data.files:[],nextPageToken:safeText(data?.nextPageToken,500)};}
+Deno.serve(async(request:Request)=>{if(request.method==='OPTIONS')return new Response(null,{status:204,headers:readingHeaders});if(request.method!=='POST')return readingJson({error:'Método não permitido.'},405);try{let body:any;try{body=await request.json();}catch{return readingJson({error:'JSON inválido.'},400);}const auth=await readingAuth(body,true),db=auth.db;const rootId=folderId(body.folderUrl||body.folderId);if(!rootId)return readingJson({error:'Pasta do Google Drive inválida.'},400);const sourceKey=`drive:${rootId}`,generation=safeText(body.scanGeneration,100)||crypto.randomUUID();const pageSize=Math.min(MAX_PAGE_SIZE,Math.max(25,Number(body.pageSize)||DEFAULT_PAGE_SIZE));const supplied=Array.isArray(body.queue)?body.queue:[];const queue:any[]=supplied.length?supplied.slice(0,10000):[{id:rootId,path:'',pageToken:''}];const items:any[]=[];let foldersProcessed=0;
+ while(queue.length&&foldersProcessed<MAX_FOLDERS_PER_CALL&&items.length<MAX_ITEMS_PER_CALL){const current=queue.shift(),id=safeText(current?.id,200),parentPath=safeText(current?.path,2000),token=safeText(current?.pageToken,500);if(!id)continue;const page=await driveList(id,token,pageSize,request.signal);foldersProcessed++;for(const raw of page.files){const name=safeText(raw?.name,500),mimeType=safeText(raw?.mimeType,200),isFolder=mimeType===DRIVE_FOLDER,path=[parentPath,name].filter(Boolean).join('/'),type=kind(name,mimeType),g=groups(path,name);const item={externalId:safeText(raw?.id,200),name,path,parentPath,type,mimeType,extension:isFolder?'':extension(name),size:Number(raw?.size||0)||0,modifiedAt:safeText(raw?.modifiedTime,100)||null,createdAt:safeText(raw?.createdTime,100)||null,checksum:safeText(raw?.md5Checksum,100)||null,webViewLink:safeText(raw?.webViewLink,2048),thumbnailLink:safeText(raw?.thumbnailLink,2048),sourceProvider:'google-drive',franchise:g.franchise,collectionName:g.collection,issueLabel:g.issue};items.push(item);if(isFolder&&item.externalId)queue.push({id:item.externalId,path,pageToken:''});}if(page.nextPageToken)queue.unshift({id,path:parentPath,pageToken:page.nextPageToken});}
+ const persist=items.filter(i=>['folder','comic','book'].includes(i.type)&&i.externalId).map(i=>({source_key:sourceKey,provider:'google-drive',root_external_id:rootId,external_id:i.externalId,parent_path:i.parentPath,path:i.path,name:i.name,item_type:i.type,format:i.extension,mime_type:i.mimeType,size_bytes:i.size,modified_at:i.modifiedAt,checksum:i.checksum||'',franchise:i.franchise,collection_name:i.collectionName,issue_label:i.issueLabel,scan_generation:generation,active:true,updated_at:new Date().toISOString()}));
+ if(persist.length){const{error}=await db.from('reading_source_items').upsert(persist,{onConflict:'source_key,external_id'});if(error)throw error;}
+ const done=queue.length===0;await db.from('reading_sources').upsert({source_key:sourceKey,provider:'google-drive',name:safeText(body.sourceName,200)||'Biblioteca Google Drive',root_external_id:rootId,root_url:safeText(body.folderUrl,2048),scan_generation:generation,last_scan_at:done?new Date().toISOString():null,active:true,updated_at:new Date().toISOString()},{onConflict:'source_key'});if(done){await db.from('reading_source_items').update({active:false,updated_at:new Date().toISOString()}).eq('source_key',sourceKey).neq('scan_generation',generation);const{count}=await db.from('reading_source_items').select('id',{count:'exact',head:true}).eq('source_key',sourceKey).eq('active',true).in('item_type',['comic','book']);await db.from('reading_sources').update({item_count:count||0,last_scan_at:new Date().toISOString()}).eq('source_key',sourceKey);}
+ return readingJson({rootId,sourceKey,scanGeneration:generation,items,queue,done,stats:{items:items.length,foldersProcessed,pendingFolders:queue.length},cursorVersion:2});}catch(error:any){console.error('[LUX-DRIVE-SCAN]',error);return readingJson({error:error?.status?error.message:'Não foi possível varrer a pasta do Google Drive.'},error?.status||500);}});
