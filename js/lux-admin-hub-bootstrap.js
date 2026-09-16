@@ -1,18 +1,16 @@
 (() => {
   'use strict';
   if (window.__luxAdminHubBootstrapInstalled) return;
-  window.__luxAdminHubBootstrapInstalled = '20260916-4';
+  window.__luxAdminHubBootstrapInstalled = '20260916-5';
   const scripts = [
     ['js/admin-panel-polish.js?v=20260916-admin-hub3', 'lux-admin-hub'],
     ['js/lux-source-hub-loader.js?v=20260916-drive-hq3', 'lux-source-loader'],
-    ['js/home-featured-live-channel-picker.js?v=20260915-featured-live-picker1', 'lux-featured-live-picker']
+    ['js/home-featured-live-channel-picker.js?v=20260915-featured-live-picker1', 'lux-featured-live-picker'],
+    ['js/reading-source-library.js?v=20260916-source-reading1', 'lux-reading-source-library']
   ];
   scripts.forEach(([src, marker]) => {
     if (document.querySelector(`script[data-${marker}]`)) return;
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = false;
-    script.setAttribute(`data-${marker}`, '1');
-    document.head.appendChild(script);
+    const script = document.createElement('script'); script.src = src; script.async = false;
+    script.setAttribute(`data-${marker}`, '1'); document.head.appendChild(script);
   });
 })();
