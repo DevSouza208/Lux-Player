@@ -2890,6 +2890,16 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     function setSection(section) {
       if (currentSection !== section) animateDashboardEntry();
       currentSection = section;
+
+      // Cada seção pode pedir seu próprio domínio sem bloquear a navegação.
+      // O coordenador deduplica tarefas já prontas.
+      if (window.LuxLoader) {
+        if (section === 'games') window.LuxLoader.run('games').catch?.(() => {});
+        else if (section === 'reading') window.LuxLoader.run('reading').catch?.(() => {});
+        else if (section === 'home' || section === 'live' || section === 'movies' || section === 'series') {
+          window.LuxLoader.run('media').catch?.(() => {});
+        }
+      }
       
       // Zera a pesquisa APENAS se o usuário clicar em "Início" (home)
       if (section === 'home') {
