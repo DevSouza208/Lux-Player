@@ -128,6 +128,29 @@ async function authenticateAdmin(env, username, credential) {
   return account;
 }
 
+async function authenticateUser(env, username, credential) {
+  const account = await resolveLuxAccount(env, username, credential);
+  if (!account || typeof account !== "object") throw new Error("Credenciais inválidas.");
+  return account;
+}
+
+function addEpisodePlaybackUrls(source, episodes) {
+  const user = encodeURIComponent(source.username);
+  const pass = encodeURIComponent(source.password);
+  const result = {};
+  for (const [season, rows] of Object.entries(episodes || {})) {
+    result[season] = (Array.isArray(rows) ? rows : []).map(row => {
+      const id = String(row?.id ?? "").trim();
+      const ext = String(row?.container_extension || "mp4").replace(/^\./, "") || "mp4";
+      return {
+        ...row,
+        url: id ? `${source.server}/series/${user}/${pass}/${id}.${ext}` : ""
+      };
+    });
+  }
+  return result;
+}
+
 function getXtreamSource(sourceUrl) {
   try {
     const url = new URL(sourceUrl);
@@ -585,7 +608,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.8.1" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.8.2" });
     }
 
     if (
@@ -593,6 +616,36 @@ export default {
       (url.pathname.startsWith("/listas/") || url.pathname.startsWith("/catalogos/") || url.pathname.startsWith("/fontes/"))
     ) {
       return serveR2Object(request, env);
+    }
+
+    // Cliente web: detalhes de uma única série, resolvidos pelo Worker.
+    // O navegador nunca precisa consultar o Xtream HTTP diretamente nem analisar a M3U inteira.
+    if (request.method === "POST" && url.pathname === "/series-info") {
+      const body = await readJsonBody(request);
+      try {
+        const credential = body.credential ?? body.password;
+        const account = await authenticateUser(env, body.username, credential);
+        const seriesId = String(body.seriesId || "").trim();
+        if (!/^\d+$/.test(seriesId)) throw new Error("Série inválida.");
+
+        const user = await getUserByUsername(env, account.usuario || body.username);
+        const source = getXtreamSource(user?.lista_m3u || "");
+        if (!source) throw new Error("Esta conta não possui uma fonte Xtream reconhecível.");
+
+        const response = await fetchWithTimeout(
+          xtreamUrl(source, "get_series_info") + "&series_id=" + encodeURIComponent(seriesId),
+          { headers: { "User-Agent": "Lux-Playlist-Sync/1.8" } },
+          30000
+        );
+        if (!response.ok) throw new Error(`Fornecedor respondeu HTTP ${response.status}`);
+        const data = await response.json();
+        data.episodes = addEpisodePlaybackUrls(source, data?.episodes || {});
+        return json({ ok: true, seriesId, data });
+      } catch (error) {
+        const message = error?.message || "Falha ao carregar episódios.";
+        const status = /Credenciais/i.test(message) ? 401 : 502;
+        return json({ ok: false, error: message }, status);
+      }
     }
 
     // Painel Admin: valida senha legada OU sessão luxsess_ e sincroniza a conta escolhida.
@@ -635,7 +688,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.8.1"
+      version: "1.8.2"
     });
   },
 
