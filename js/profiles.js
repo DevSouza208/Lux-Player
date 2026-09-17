@@ -175,7 +175,10 @@ async function activateAccountProfile(profile) {
     document.getElementById('liveCurrentName').textContent='Selecione um canal';
     document.getElementById('liveCurrentGroup').textContent='';
     document.getElementById('liveCurrentLogo').replaceChildren();
-    await syncCloudProgress();
+    // Não bloqueia a troca de perfil esperando a nuvem. O progresso do
+    // perfil anterior é sincronizado em segundo plano pelo coordenador.
+    Promise.resolve(typeof syncCloudProgress === 'function' ? syncCloudProgress() : null)
+      .catch(error => console.warn('[Lux Play] Sincronização do perfil anterior em segundo plano indisponível.', error));
     if(currentUser!==switchingUser)return;
     window.LuxReadingAdmin?.stop();
     window.LuxReader?.close();
