@@ -103,8 +103,15 @@ function removeLocalProfileSaves(user) {
   });
 }
 
-// Game services bootstrap: keep emulator performance tuning outside index.html and load it
-// before a game session begins. The runtime waits for emulator.js before applying patches.
+// Game services bootstrap: hybrid ROM storage and emulator performance tuning stay outside index.html.
+if (!document.querySelector('script[data-lux-rom-hybrid-storage]')) {
+  const romStorageScript = document.createElement('script');
+  romStorageScript.src = 'js/game-rom-hybrid-storage.js?v=20260916-hybrid-rom-storage1';
+  romStorageScript.async = true;
+  romStorageScript.dataset.luxRomHybridStorage = '1';
+  document.head.appendChild(romStorageScript);
+}
+
 if (!document.querySelector('script[data-lux-emulator-performance]')) {
   const emulatorPerformanceScript = document.createElement('script');
   emulatorPerformanceScript.src = 'js/emulator-speed-fix.js?v=20260916-emulator-performance5';
