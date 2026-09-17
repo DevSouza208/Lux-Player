@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-r2-rom-cache4';
+  const VERSION = '20260917-r2-rom-cache5-pinned-ui';
   const OVERLAY_ID = 'luxGameCacheOverlay';
   const STYLE_ID = 'luxGameCacheOverlayStyle';
   const MAX_REVIEW_LENGTH = 500;
@@ -268,6 +268,22 @@
     return panel;
   }
 
+  function userSelectedStorageMode(game) {
+    try {
+      const policyMode = window.LuxLocalFirstRoms?.mode?.(game);
+      if (policyMode === 'local' || policyMode === 'cloud') return policyMode;
+    } catch (_) {}
+
+    try {
+      const source = resolvedSource(game) || {};
+      const identity = String(game?.id || source.path || source.url || game?.name || game?.title || '').slice(0, 700);
+      const stored = localStorage.getItem('lux-play:rom-mode:v3:' + encodeURIComponent(identity));
+      return stored === 'permanent' ? 'local' : 'cloud';
+    } catch (_) {
+      return 'cloud';
+    }
+  }
+
   async function refreshStoragePanel(game = currentGame()) {
     const cloud = document.getElementById('gameStorageCloud');
     const local = document.getElementById('gameStorageLocal');
@@ -280,8 +296,9 @@
     }
     const status = await cachedStatus(game);
     if (currentGame() !== game) return;
-    cloud.classList.toggle('active', !status);
-    local.classList.toggle('active', Boolean(status));
+    const selected = userSelectedStorageMode(game);
+    cloud.classList.toggle('active', selected !== 'local');
+    local.classList.toggle('active', selected === 'local');
     cloud.disabled = false; local.disabled = false;
     if (clear) clear.disabled = !status;
     try { window.lucide?.createIcons?.(); } catch (_) {}
