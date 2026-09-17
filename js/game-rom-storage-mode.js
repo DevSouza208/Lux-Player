@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-rom-storage-mode3-local-first';
+  const VERSION = '20260917-rom-storage-mode4-pinned-ui';
   const DB_NAME = 'lux-game-local-first-cache';
   const DB_VERSION = 1;
   const STORE_NAME = 'roms';
@@ -54,6 +54,10 @@
 
   function saveMode(game, mode) {
     try { localStorage.setItem(modeKey(game), mode === 'permanent' ? 'permanent' : 'temporary'); } catch (_) {}
+  }
+
+  function selectedStorageMode(game) {
+    return explicitMode(game) === 'permanent' ? 'local' : 'cloud';
   }
 
   function openDb() {
@@ -402,9 +406,9 @@
 
     const materialized = await materializeRecord(game, false).catch(() => null);
     if (currentGame() !== game) return;
-    const permanent = materialized?.record?.retention === 'permanent';
-    cloud.classList.toggle('active', !permanent);
-    local.classList.toggle('active', permanent);
+    const localSelected = selectedStorageMode(game) === 'local';
+    cloud.classList.toggle('active', !localSelected);
+    local.classList.toggle('active', localSelected);
     cloud.title = 'Nuvem: a ROM é baixada para jogar e removida após 7 dias sem uso.';
     local.title = 'Local: a ROM permanece no dispositivo até você limpar manualmente.';
     cloud.disabled = modeBusy;
@@ -436,7 +440,6 @@
       scheduleUiRefresh();
       try {
         if (mode === 'local') {
-          saveMode(game, 'permanent');
           let record = await materializeRecord(game, true).catch(() => null);
           if (!record) {
             ensureOverlay(game);
@@ -582,8 +585,10 @@
     cleanup: cleanupExpired,
     setRetention,
     refreshUi: refreshStorageUi,
+    mode: selectedStorageMode,
+    isLocal: game => selectedStorageMode(game) === 'local',
     coreCacheMaxAgeMins: CORE_CACHE_MAX_AGE_MINS
   };
 
-  console.info('[Lux Local First] ROM sempre local antes de jogar; Nuvem = cache 7 dias, Local = permanente; núcleo em cache persistente.');
+  console.info('[Lux Local First] Nuvem continua selecionada para cache temporário; Local só fica ativo quando o usuário fixa a ROM.');
 })();
