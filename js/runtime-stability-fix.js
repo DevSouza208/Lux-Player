@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260917-stability4-loader';
+  window.__luxRuntimeStabilityFixInstalled = '20260917-stability5-client-ready';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -77,6 +77,17 @@
 
   const repairSyncedPlaybackUrls = async () => {
     if (!window.__luxSyncedXtreamActive || typeof allMediaItems === 'undefined' || !Array.isArray(allMediaItems)) return;
+
+    const manifest = window.__luxSyncedXtreamManifest;
+    if (manifest?.clientReady === true || Number(manifest?.schemaVersion || 0) >= 4) {
+      if (window.__luxSyncedXtreamStats) {
+        window.__luxSyncedXtreamStats.playbackRepaired = 0;
+        window.__luxSyncedXtreamStats.playbackDirectFallbacks = 0;
+        window.__luxSyncedXtreamStats.playbackMissing = 0;
+      }
+      console.info('[Lux Play] Catálogo HTTPS já contém URLs de reprodução prontas.');
+      return;
+    }
 
     const pendingItems = allMediaItems.filter(item => {
       if (item?.source !== 'synced-xtream') return false;
