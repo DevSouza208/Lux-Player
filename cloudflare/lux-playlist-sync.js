@@ -234,11 +234,28 @@ async function saveRemoteResponseToR2(env, key, response, contentType) {
   return buffer.byteLength;
 }
 
+function xtreamPlaybackUrl(source, kind, item) {
+  const streamId = String(item?.stream_id ?? "").trim();
+  if (!streamId) return "";
+  const user = encodeURIComponent(source.username);
+  const pass = encodeURIComponent(source.password);
+
+  if (kind === "live") {
+    const ext = String(item?.container_extension || "m3u8").replace(/^\./, "") || "m3u8";
+    return `${source.server}/live/${user}/${pass}/${streamId}.${ext}`;
+  }
+  if (kind === "movies") {
+    const ext = String(item?.container_extension || "mp4").replace(/^\./, "") || "mp4";
+    return `${source.server}/movie/${user}/${pass}/${streamId}.${ext}`;
+  }
+  return "";
+}
+
 async function syncCatalogPart(env, source, versionPrefix, part) {
   const [name, action, filename] = part;
   const response = await fetchWithTimeout(
     xtreamUrl(source, action),
-    { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } }
+    { headers: { "User-Agent": "Lux-Playlist-Sync/1.8" } }
   );
 
   if (!response.ok) {
@@ -246,6 +263,29 @@ async function syncCatalogPart(env, source, versionPrefix, part) {
   }
 
   const key = `${versionPrefix}/${filename}`;
+
+  // Live e filmes já são publicados com a URL de reprodução pronta.
+  // Assim o navegador não precisa baixar e analisar a M3U inteira no login.
+  if (name === "live" || name === "movies") {
+    const rows = await response.json();
+    if (!Array.isArray(rows)) throw new Error(`${action}: resposta inválida`);
+    const enriched = rows.map(item => ({
+      ...item,
+      playback_url: xtreamPlaybackUrl(source, name, item)
+    }));
+    const body = JSON.stringify(enriched);
+    await env.LISTS_BUCKET.put(key, body, {
+      httpMetadata: r2HttpMetadata("application/json; charset=utf-8")
+    });
+    return {
+      name,
+      filename,
+      bytes: new TextEncoder().encode(body).byteLength,
+      count: enriched.length,
+      clientReady: true
+    };
+  }
+
   const bytes = await saveRemoteResponseToR2(
     env,
     key,
@@ -285,11 +325,12 @@ async function syncXtreamCatalog(env, sourceKey, source, playlistUrl) {
   });
 
   const manifest = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     sourceKey,
     version,
     syncedAt: new Date().toISOString(),
     playlist: playlistUrl,
+    clientReady: saved.some(part => part.clientReady === true),
     files,
     bytes
   };
@@ -495,7 +536,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.7.0" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.8.0" });
     }
 
     if (
@@ -545,7 +586,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.7.0"
+      version: "1.8.0"
     });
   },
 
