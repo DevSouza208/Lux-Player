@@ -1192,31 +1192,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     function getResumeEntries() {
       const entries = new Map();
 
-      allMediaItems.forEach(item => {
-        if (!item || item.type === 'live') return;
-        if (item.type === 'series') return;
-        const resumeKey = getResumeKey(item);
-        const rawProgress = userProgressStorage.getItem(resumeKey);
-        const progress = Number.parseFloat(rawProgress);
-        if (!Number.isFinite(progress) || progress <= 0) return;
-
-        let itemForResume = item;
-        let updatedAt = 0;
-
-        const metaRaw = userProgressStorage.getItem(getResumeMetaKey(resumeKey));
-        if (metaRaw) {
-          try {
-            const meta = JSON.parse(metaRaw);
-            if (meta && typeof meta === 'object') {
-              itemForResume = { ...item, ...meta, resumeKey };
-              updatedAt = Number(meta.updatedAt) || 0;
-            }
-          } catch (e) {}
-        }
-
-        entries.set(resumeKey, { item: itemForResume, progress, updatedAt });
-      });
-
+      // O histórico já grava metadados junto do progresso. Ler essas poucas
+      // chaves é muito mais barato que consultar localStorage para cada item
+      // de um catálogo com dezenas de milhares de títulos.
       for (let i = 0; i < userProgressStorage.length; i++) {
         const key = userProgressStorage.key(i);
         if (!key || !key.startsWith('lux_progress_') || key.endsWith('_meta') || key.startsWith('lux_progress_series_episode_')) continue;
@@ -1235,10 +1213,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             progress,
             updatedAt: Number(meta.updatedAt) || 0
           });
-        } catch (e) {}
+        } catch (_) {}
       }
 
-      // Uma única entrada por série, sempre apontando para o episódio atual.
+      // Normalmente existem pouquíssimas séries em andamento. Só para elas
+      // fazemos uma busca no catálogo atual.
       for (let i = 0; i < userProgressStorage.length; i++) {
         const key = userProgressStorage.key(i);
         if (!key || !key.startsWith('lux_series_resume_')) continue;
@@ -1250,14 +1229,14 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             ...(series || {}),
             id: state.seriesId,
             series_id: state.seriesId,
-            name: state.seriesName || (series && series.name) || 'Série',
-            logo: state.seriesLogo || (series && series.logo) || '',
-            group: state.seriesGroup || (series && series.group) || '',
+            name: state.seriesName || series?.name || 'Série',
+            logo: state.seriesLogo || series?.logo || '',
+            group: state.seriesGroup || series?.group || '',
             type: 'series',
             seriesResumeState: state
           };
           entries.set(key, { item, progress: Number(state.progress), updatedAt: Number(state.updatedAt) || 0 });
-        } catch (e) {}
+        } catch (_) {}
       }
 
       return Array.from(entries.values())
@@ -1619,6 +1598,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       restoreAccountProgress();
       sharedVodCatalog = [];
       allMediaItems = [];
+
       document.getElementById('userNameBadge').innerText = currentUser.profile?.name || currentUser.name;
       renderProfileHeader();
       document.getElementById('userExpiryBadge').innerText = currentUser.dueDate ? `Val: ${currentUser.dueDate}` : 'Val: Ilimitada';
@@ -1634,30 +1614,31 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
 
       const liveContainer = document.getElementById('liveItemsContainer');
-      liveContainer.onscroll = () => handleScroll(liveContainer);
+      if (liveContainer) liveContainer.onscroll = () => handleScroll(liveContainer);
 
       const vodContainer = document.getElementById('vodGridContainer');
-      vodContainer.onscroll = () => handleScroll(vodContainer);
+      if (vodContainer) vodContainer.onscroll = () => handleScroll(vodContainer);
 
       const statusMsg = document.getElementById('splashStatusMessage');
-      if (statusMsg) statusMsg.innerText = "Configurando sua experiência... O primeiro acesso pode demorar cerca de 1 min.";
+      if (statusMsg) statusMsg.innerText = 'Abrindo seu espaço...';
 
-      const mediaLoaded = await loadMediaSourcesInPriority();
-      if (!mediaLoaded && statusMsg) {
-        statusMsg.innerText = 'Nenhuma lista principal configurada. Você ainda pode usar Jogos e Leitura.';
+      // A interface não espera IPTV, jogos, leitura, VOD ou nuvem.
+      // O LuxLoader executa cada carga separadamente e em sequência.
+      if (window.LuxLoader?.start) {
+        return window.LuxLoader.start();
       }
-
-      try { await loadSharedVodCatalog(); } catch (error) { alert(error.message); }
-      await syncCloudProgress();
-      retryPendingGameSaves();
-
-      if (statusMsg) statusMsg.innerText = "Tudo pronto! Iniciando o Lux Play...";
-      await new Promise(resolve => setTimeout(resolve, 640));
 
       setSection('home');
       hideSplashScreen();
       lucide.createIcons();
-      loadAndShowNotifications();
+      setTimeout(() => {
+        Promise.resolve(loadMediaSourcesInPriority()).catch(() => {});
+        Promise.resolve(syncCloudProgress()).catch(() => {});
+        Promise.resolve(loadSharedVodCatalog()).catch(() => {});
+        Promise.resolve(loadAndShowNotifications()).catch(() => {});
+        Promise.resolve(retryPendingGameSaves()).catch(() => {});
+      }, 0);
+      return true;
     }
 
     function handleScroll(container) {
@@ -1669,22 +1650,35 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
-    async function reloadUserData() {
+    async function reloadUserData(options = {}) {
       if (!currentUser) return;
-      showSplashScreen();
       try {
         const rows = await fetchUsersFromSupabase();
         const users = parseSupabaseUsers(rows);
         const updated = users.find(u => u.user.toLowerCase() === currentUser.user.toLowerCase());
         if (updated) {
           currentUser = {...updated,accountRole:updated.role,profile:currentUser.profile,role:currentUser.profile?.is_child?'user':updated.role};
-          await loadMediaSourcesInPriority();
+          document.getElementById('userNameBadge').innerText = currentUser.profile?.name || currentUser.name;
+          document.getElementById('userExpiryBadge').innerText = currentUser.dueDate ? `Val: ${currentUser.dueDate}` : 'Val: Ilimitada';
+          renderProfileHeader();
         }
-        await loadSharedVodCatalog();
-        setSection(currentSection);
-      } catch (e) { alert(e.message); }
-      hideSplashScreen();
-      loadAndShowNotifications();
+      } catch (e) {
+        console.warn('[Lux Play] Não foi possível atualizar os dados da conta.', e);
+      }
+
+      if (window.LuxLoader?.refreshAll) {
+        const job = window.LuxLoader.refreshAll({ reason: options.reason || 'manual' });
+        if (options.wait === true) await job;
+        return job;
+      }
+
+      setTimeout(() => {
+        Promise.resolve(loadMediaSourcesInPriority()).catch(() => {});
+        Promise.resolve(loadSharedVodCatalog()).catch(() => {});
+        Promise.resolve(syncCloudProgress()).catch(() => {});
+        Promise.resolve(loadAndShowNotifications()).catch(() => {});
+      }, 0);
+      return true;
     }
 
     function toggleSidebar() {
@@ -3102,36 +3096,31 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         };
 
         const matchedTrends = [];
+        const titleIndex = new Map();
+        const normalizedCatalog = [];
+
+        for (const item of allMediaItems) {
+          if (!item || item.type === 'live') continue;
+          const title = normalizeTitle(item.name);
+          if (!title) continue;
+          if (!titleIndex.has(title)) titleIndex.set(title, item);
+          normalizedCatalog.push([title, item]);
+        }
 
         for (const tmdb of tmdbResults) {
           const tmdbTitle = normalizeTitle(tmdb.title || tmdb.name);
           if (!tmdbTitle) continue;
 
-          const candidates = allMediaItems
-            .filter(item => item.type !== 'live')
-            .map(item => {
-              const localTitle = normalizeTitle(item.name);
-              let score = 0;
-
-              if (localTitle === tmdbTitle) {
-                score = 100;
-              } else if (localTitle.startsWith(tmdbTitle + ' ')) {
-                score = 80;
-              }
-
-              return { item, score };
-            })
-            .filter(result => result.score > 0)
-            .sort((a, b) => b.score - a.score);
-
-          const found = candidates.length > 0 ? candidates[0].item : null;
-
-          if (found) {
-            if (!matchedTrends.find(m => m.id === found.id)) {
-              matchedTrends.push({ ...found, tmdb });
-            }
+          let found = titleIndex.get(tmdbTitle) || null;
+          if (!found) {
+            const prefix = normalizedCatalog.find(([title]) => title.startsWith(tmdbTitle + ' '));
+            found = prefix?.[1] || null;
           }
-          if (matchedTrends.length >= 5) break; 
+
+          if (found && !matchedTrends.find(m => m.id === found.id)) {
+            matchedTrends.push({ ...found, tmdb });
+          }
+          if (matchedTrends.length >= 5) break;
         }
 
         if (matchedTrends.length > 0) {
