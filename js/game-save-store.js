@@ -102,3 +102,13 @@ function removeLocalProfileSaves(user) {
     return request;
   });
 }
+
+// Game services bootstrap: keep emulator performance tuning outside index.html and load it
+// before a game session begins. The runtime waits for emulator.js before applying patches.
+if (!document.querySelector('script[data-lux-emulator-performance]')) {
+  const emulatorPerformanceScript = document.createElement('script');
+  emulatorPerformanceScript.src = 'js/emulator-speed-fix.js?v=20260916-emulator-performance5';
+  emulatorPerformanceScript.async = true;
+  emulatorPerformanceScript.dataset.luxEmulatorPerformance = '1';
+  document.head.appendChild(emulatorPerformanceScript);
+}
