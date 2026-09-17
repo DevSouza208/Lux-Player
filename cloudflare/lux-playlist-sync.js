@@ -252,6 +252,57 @@ function xtreamPlaybackUrl(source, kind, item) {
   return "";
 }
 
+function compactCatalogItem(kind, item, source) {
+  if (kind === "live") {
+    return {
+      stream_id: item?.stream_id ?? null,
+      name: item?.name || "",
+      category_id: item?.category_id ?? null,
+      stream_icon: item?.stream_icon || "",
+      playback_url: xtreamPlaybackUrl(source, kind, item),
+      direct_source: item?.direct_source || "",
+      is_adult: item?.is_adult ?? item?.adult ?? 0,
+      added: item?.added || ""
+    };
+  }
+
+  if (kind === "movies") {
+    return {
+      stream_id: item?.stream_id ?? null,
+      name: item?.name || "",
+      category_id: item?.category_id ?? null,
+      stream_icon: item?.stream_icon || "",
+      playback_url: xtreamPlaybackUrl(source, kind, item),
+      direct_source: item?.direct_source || "",
+      container_extension: item?.container_extension || "mp4",
+      rating: item?.rating ?? item?.rating_5based ?? "",
+      plot: item?.plot || "",
+      genre: item?.genre || "",
+      releaseDate: item?.releaseDate || item?.release_date || "",
+      is_adult: item?.is_adult ?? item?.adult ?? 0,
+      added: item?.added || ""
+    };
+  }
+
+  if (kind === "series") {
+    return {
+      series_id: item?.series_id ?? null,
+      name: item?.name || "",
+      category_id: item?.category_id ?? null,
+      cover: item?.cover || item?.stream_icon || "",
+      backdrop_path: Array.isArray(item?.backdrop_path) ? item.backdrop_path.slice(0, 2) : [],
+      rating: item?.rating ?? item?.rating_5based ?? "",
+      plot: item?.plot || "",
+      genre: item?.genre || "",
+      releaseDate: item?.releaseDate || item?.release_date || "",
+      last_modified: item?.last_modified || "",
+      is_adult: item?.is_adult ?? item?.adult ?? 0
+    };
+  }
+
+  return item;
+}
+
 async function syncCatalogPart(env, source, versionPrefix, part) {
   const [name, action, filename] = part;
   const response = await fetchWithTimeout(
@@ -265,16 +316,13 @@ async function syncCatalogPart(env, source, versionPrefix, part) {
 
   const key = `${versionPrefix}/${filename}`;
 
-  // Live e filmes já são publicados com a URL de reprodução pronta.
-  // Assim o navegador não precisa baixar e analisar a M3U inteira no login.
-  if (name === "live" || name === "movies") {
+  // O catálogo público já sai compacto e pronto para o cliente.
+  // O navegador não precisa carregar a M3U nem manter o payload bruto do Xtream.
+  if (name === "live" || name === "movies" || name === "series") {
     const rows = await response.json();
     if (!Array.isArray(rows)) throw new Error(`${action}: resposta inválida`);
-    const enriched = rows.map(item => ({
-      ...item,
-      playback_url: xtreamPlaybackUrl(source, name, item)
-    }));
-    const body = JSON.stringify(enriched);
+    const compact = rows.map(item => compactCatalogItem(name, item, source));
+    const body = JSON.stringify(compact);
     await env.LISTS_BUCKET.put(key, body, {
       httpMetadata: r2HttpMetadata("application/json; charset=utf-8")
     });
@@ -282,7 +330,7 @@ async function syncCatalogPart(env, source, versionPrefix, part) {
       name,
       filename,
       bytes: new TextEncoder().encode(body).byteLength,
-      count: enriched.length,
+      count: compact.length,
       clientReady: true
     };
   }
@@ -537,7 +585,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.8.0" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.8.1" });
     }
 
     if (
@@ -587,7 +635,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.8.0"
+      version: "1.8.1"
     });
   },
 
