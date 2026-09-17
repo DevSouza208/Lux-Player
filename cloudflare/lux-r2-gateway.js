@@ -16,6 +16,8 @@ const PUBLIC_BUCKETS = {
 const MAX_SAVE_BYTES = 6 * 1024 * 1024;
 const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 const GAME_CATALOG_KEY = 'games-catalog.json';
+const GAME_CATALOG_DIRECTORY = 'games';
+const GAME_CATALOG_MANIFEST_KEY = `${GAME_CATALOG_DIRECTORY}/manifest.json`;
 const GAME_CATALOG_PAGE_SIZE = 1000;
 
 function response(body, init = {}) {
@@ -400,6 +402,42 @@ async function loadApprovedGamesForPublishedCatalog(env) {
   return games;
 }
 
+function publishedConsoleId(value) {
+  const compact = String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const aliases = {
+    md: 'megadrive',
+    genesis: 'megadrive',
+    segamegadrive: 'megadrive',
+    ms: 'mastersystem',
+    sms: 'mastersystem',
+    segamastersystem: 'mastersystem',
+    gameboy: 'gb',
+    gameboycolor: 'gbc',
+    gameboyadvance: 'gba',
+    supernintendo: 'snes',
+    supernes: 'snes',
+    nintendo64: 'n64',
+    nintendods: 'nds',
+  };
+  return aliases[compact] || compact || 'outros';
+}
+
+async function putPublishedCatalogJson(bucket, key, payload, metadata = {}) {
+  const serialized = JSON.stringify(payload);
+  await bucket.put(key, serialized, {
+    httpMetadata: {
+      contentType: 'application/json; charset=utf-8',
+      cacheControl: 'public, max-age=300',
+    },
+    customMetadata: {
+      generatedAt: String(payload.generatedAt || ''),
+      count: String(payload.count ?? payload.totalCount ?? 0),
+      ...metadata,
+    },
+  });
+  return new TextEncoder().encode(serialized).byteLength;
+}
+
 async function handleGameCatalogPublish(request, env, url) {
   if (request.method !== 'POST') return json({ error: 'Método não permitido.' }, 405);
   if (!env.CATALOG) return json({ error: 'Binding CATALOG indisponível.' }, 500);
@@ -415,45 +453,86 @@ async function handleGameCatalogPublish(request, env, url) {
   const auth = await requireGameCatalogAdmin(env, body);
   if (auth.error) return auth.error;
 
-  const games = await loadApprovedGamesForPublishedCatalog(env);
-
-  // Evita substituir um catálogo válido por um arquivo vazio caso haja
-  // problema de status, schema ou leitura no Supabase.
-  if (!games.length) {
+  const sourceGames = await loadApprovedGamesForPublishedCatalog(env);
+  if (!sourceGames.length) {
     return json({
       error: 'Nenhum jogo aprovado foi encontrado. O catálogo publicado anteriormente foi preservado.',
     }, 409);
   }
 
   const generatedAt = new Date().toISOString();
-  const payload = {
-    schemaVersion: 1,
-    generatedAt,
-    count: games.length,
-    games,
-  };
-  const serialized = JSON.stringify(payload);
-
-  await env.CATALOG.put(GAME_CATALOG_KEY, serialized, {
-    httpMetadata: {
-      contentType: 'application/json; charset=utf-8',
-      cacheControl: 'public, max-age=300',
-    },
-    customMetadata: {
-      generatedAt,
-      count: String(games.length),
-      source: 'supabase-approved-games',
-    },
+  const groups = new Map();
+  const games = sourceGames.map(game => {
+    const consoleId = publishedConsoleId(game?.console);
+    const normalized = { ...game, console: consoleId };
+    if (!groups.has(consoleId)) groups.set(consoleId, []);
+    groups.get(consoleId).push(normalized);
+    return normalized;
   });
+
+  const consoles = [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([id, rows]) => ({
+      id,
+      count: rows.length,
+      file: id + '.json',
+      key: GAME_CATALOG_DIRECTORY + '/' + id + '.json',
+    }));
+
+  let bytes = 0;
+  for (const item of consoles) {
+    const rows = groups.get(item.id) || [];
+    bytes += await putPublishedCatalogJson(
+      env.CATALOG,
+      item.key,
+      {
+        schemaVersion: 2,
+        generatedAt,
+        console: item.id,
+        count: rows.length,
+        games: rows,
+      },
+      { source: 'supabase-approved-games', console: item.id },
+    );
+  }
+
+  // Mantém o arquivo antigo como fallback durante a migração.
+  bytes += await putPublishedCatalogJson(
+    env.CATALOG,
+    GAME_CATALOG_KEY,
+    {
+      schemaVersion: 1,
+      generatedAt,
+      count: games.length,
+      games,
+    },
+    { source: 'supabase-approved-games-legacy' },
+  );
+
+  const manifest = {
+    schemaVersion: 2,
+    generatedAt,
+    totalCount: games.length,
+    consoles: consoles.map(({ id, count, file }) => ({ id, count, file })),
+  };
+  bytes += await putPublishedCatalogJson(
+    env.CATALOG,
+    GAME_CATALOG_MANIFEST_KEY,
+    manifest,
+    { source: 'supabase-approved-games-manifest' },
+  );
 
   return json({
     ok: true,
     published: true,
     count: games.length,
     generatedAt,
-    key: GAME_CATALOG_KEY,
-    url: `${url.origin}/r2/catalog/${GAME_CATALOG_KEY}`,
-    bytes: new TextEncoder().encode(serialized).byteLength,
+    manifest: GAME_CATALOG_MANIFEST_KEY,
+    consoles: manifest.consoles,
+    url: url.origin + '/r2/catalog/' + GAME_CATALOG_MANIFEST_KEY,
+    legacyUrl: url.origin + '/r2/catalog/' + GAME_CATALOG_KEY,
+    files: manifest.consoles.length + 2,
+    bytes,
   });
 }
 
@@ -727,7 +806,8 @@ export default {
           saves: '/api/saves',
           gameCatalogSync: '/api/games/sync (POST, administrador)',
           gameCatalogPublish: '/api/games/catalog/publish (POST, administrador)',
-          gameCatalog: '/r2/catalog/games-catalog.json',
+          gameCatalog: '/r2/catalog/games/manifest.json',
+          gameCatalogLegacy: '/r2/catalog/games-catalog.json',
         },
       });
     }
