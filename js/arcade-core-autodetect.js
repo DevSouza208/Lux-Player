@@ -1,20 +1,22 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-arcade-core-auto3';
-  const MAME2000_ENGINE = 'nostalgist:mame2000';
+  const VERSION = '20260917-arcade-core-auto4';
+  const ENGINE_PREFIX = 'nostalgist:';
+  const MAME2000_ENGINE = `${ENGINE_PREFIX}mame2000`;
+  const MAME2003PLUS_ENGINE = `${ENGINE_PREFIX}mame2003_plus`;
+  const FBNEO_ENGINE = `${ENGINE_PREFIX}fbneo`;
   const CORE_CANDIDATES = [
     MAME2000_ENGINE,
-    'mame2003_plus',
-    'mame2003',
-    'fbneo',
+    MAME2003PLUS_ENGINE,
+    FBNEO_ENGINE,
     'fbalpha2012_cps2',
     'fbalpha2012_cps1'
   ];
+  const NOSTALGIST_TIMEOUT_MS = 28000;
+  const NOSTALGIST_VALIDATION_MS = 2800;
   const EJS_ATTEMPT_TIMEOUT_MS = 16000;
-  const MAME2000_ATTEMPT_TIMEOUT_MS = 26000;
-  const MAME2000_VALIDATION_MS = 2600;
-  const RETRY_GAP_MS = 220;
+  const RETRY_GAP_MS = 250;
   const NOSTALGIST_SRC = 'https://cdn.jsdelivr.net/npm/nostalgist@0.22.0';
 
   let probeToken = 0;
@@ -45,7 +47,7 @@
   }
 
   function preferredCoreStorageKey(game) {
-    return `lux-play:arcade-core:v3:${encodeURIComponent(gameIdentity(game))}`;
+    return `lux-play:arcade-core:v4:${encodeURIComponent(gameIdentity(game))}`;
   }
 
   function readPreferredCore(game) {
@@ -71,13 +73,18 @@
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+  function candidateLabel(candidate) {
+    if (candidate === MAME2000_ENGINE) return 'MAME 2000';
+    if (candidate === MAME2003PLUS_ENGINE) return 'MAME 2003-Plus';
+    if (candidate === FBNEO_ENGINE) return 'FBNeo';
+    if (candidate === 'fbalpha2012_cps2') return 'FB Alpha CPS2';
+    if (candidate === 'fbalpha2012_cps1') return 'FB Alpha CPS1';
+    return candidate;
+  }
+
   function setArcadeStatus(game, text) {
     const title = document.getElementById('emulatorGameTitle');
     if (title) title.textContent = text || game?.name || 'Arcade';
-  }
-
-  function candidateLabel(candidate) {
-    return candidate === MAME2000_ENGINE ? 'MAME 2000 (0.37b5)' : candidate;
   }
 
   async function stopNostalgist() {
@@ -96,48 +103,10 @@
     document.getElementById('ejs-script')?.remove();
     const container = document.getElementById('emulatorContainer');
     if (container) container.innerHTML = '';
-    for (const key of ['EJS_emulator', 'EJS_load', 'EJS_onGameStart']) {
+    for (const key of ['EJS_emulator', 'EJS_load', 'EJS_onGameStart', 'EJS_gameParentUrl']) {
       try { delete window[key]; } catch (_) { window[key] = undefined; }
     }
     await sleep(RETRY_GAP_MS);
-  }
-
-  function configureAttempt(game, core) {
-    window.EJS_player = '#emulatorContainer';
-    window.EJS_gameUrl = game.url || game.localUrl;
-    window.EJS_core = core;
-    window.EJS_threads = false;
-    window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
-    window.EJS_color = '#7c3aed';
-    window.EJS_gameName = getGameSaveKey(game);
-    window.EJS_defaultOptions = { 'save-state-location': 'browser' };
-    window.EJS_startOnLoaded = true;
-  }
-
-  async function finishSuccessfulStart(game, candidate, engine = 'emulatorjs') {
-    savePreferredCore(game, candidate);
-    setArcadeStatus(game, game.name || 'Arcade');
-    startGamePlayTimer(game);
-    const controlsButton = document.getElementById('emulatorControlsBtn');
-    const fastForwardButton = document.getElementById('emulatorFastForward');
-    if (engine === 'emulatorjs') {
-      controlsButton?.classList.remove('hidden');
-      if (fastForwardButton) fastForwardButton.disabled = false;
-      try {
-        if (game.loadSource !== 'state' && game.loadSource !== 'new') await loadNativeGameSave(game);
-        await loadRequestedGameSlot();
-      } catch (error) {
-        console.warn('[Lux Arcade] Jogo iniciou, mas houve falha ao restaurar save:', error);
-      }
-    } else {
-      controlsButton?.classList.add('hidden');
-      if (fastForwardButton) {
-        fastForwardButton.disabled = true;
-        fastForwardButton.textContent = 'MAME 2000';
-        fastForwardButton.title = 'Modo de compatibilidade MAME 2000';
-      }
-    }
-    console.info(`[Lux Arcade] Motor aprendido para ${game.name || gameIdentity(game)}: ${candidate}`);
   }
 
   async function ensureNostalgist() {
@@ -158,7 +127,7 @@
       script.async = true;
       script.dataset.luxNostalgist = '1';
       script.onload = () => window.Nostalgist?.launch ? resolve(window.Nostalgist) : reject(new Error('Nostalgist carregou sem expor a API.'));
-      script.onerror = () => reject(new Error('Falha ao carregar o motor MAME 2000.'));
+      script.onerror = () => reject(new Error('Falha ao carregar o runtime Arcade.'));
       document.head.appendChild(script);
     }).catch(error => { nostalgistLoaderPromise = null; throw error; });
     return nostalgistLoaderPromise;
@@ -175,16 +144,16 @@
     return { blob, fileName: romFileName(game) };
   }
 
-  function installMameRuntimeGuard(onFault) {
+  function installRuntimeGuard(onFault) {
     let fired = false;
-    const matches = value => /memory access out of bounds|out of bounds memory access|wasm.*runtimeerror/i.test(String(value || ''));
+    const matches = value => /memory access out of bounds|out of bounds memory access|wasm.*runtimeerror|abort\(|unreachable/i.test(String(value || ''));
     const fail = (message, event) => {
       if (!matches(message)) return false;
       try { event?.preventDefault?.(); } catch (_) {}
       try { event?.stopImmediatePropagation?.(); } catch (_) {}
       if (!fired) {
         fired = true;
-        onFault(new Error(String(message || 'MAME 2000 WebAssembly crash')));
+        onFault(new Error(String(message || 'Arcade WebAssembly crash')));
       }
       return true;
     };
@@ -198,14 +167,49 @@
     };
   }
 
-  async function tryMame2000(game, index, total, token) {
+  async function finishSuccessfulStart(game, candidate, engine = 'nostalgist') {
+    savePreferredCore(game, candidate);
+    setArcadeStatus(game, game.name || 'Arcade');
+    startGamePlayTimer(game);
+
+    const controlsButton = document.getElementById('emulatorControlsBtn');
+    const fastForwardButton = document.getElementById('emulatorFastForward');
+    if (engine === 'emulatorjs') {
+      controlsButton?.classList.remove('hidden');
+      if (fastForwardButton) {
+        fastForwardButton.disabled = false;
+        fastForwardButton.textContent = 'Fast-forward';
+        fastForwardButton.title = '';
+      }
+      try {
+        if (game.loadSource !== 'state' && game.loadSource !== 'new') await loadNativeGameSave(game);
+        await loadRequestedGameSlot();
+      } catch (error) {
+        console.warn('[Lux Arcade] Jogo iniciou, mas houve falha ao restaurar save:', error);
+      }
+    } else {
+      controlsButton?.classList.add('hidden');
+      if (fastForwardButton) {
+        fastForwardButton.disabled = true;
+        fastForwardButton.textContent = candidateLabel(candidate);
+        fastForwardButton.title = `Arcade usando ${candidateLabel(candidate)}`;
+      }
+    }
+    console.info(`[Lux Arcade] Motor aprendido para ${game.name || gameIdentity(game)}: ${candidateLabel(candidate)}`);
+  }
+
+  async function tryNostalgistCore(game, candidate, index, total, token) {
     await teardownAttempt();
     if (token !== probeToken) return false;
-    setArcadeStatus(game, `${game.name || 'Arcade'} · testando MAME 2000 (0.37b5) (${index + 1}/${total})`);
+
+    const label = candidateLabel(candidate);
+    const core = candidate.slice(ENGINE_PREFIX.length);
+    setArcadeStatus(game, `${game.name || 'Arcade'} · testando ${label} (${index + 1}/${total})`);
+
     const container = document.getElementById('emulatorContainer');
     if (!container) return false;
     const canvas = document.createElement('canvas');
-    canvas.id = 'luxArcadeMame2000Canvas';
+    canvas.id = 'luxArcadeNostalgistCanvas';
     canvas.style.width = '100%';
     canvas.style.height = '100%';
     canvas.style.display = 'block';
@@ -215,8 +219,8 @@
     let timeoutId = null;
     let runtimeFaultReject;
     const runtimeFaultPromise = new Promise((_, reject) => { runtimeFaultReject = reject; });
-    const removeRuntimeGuard = installMameRuntimeGuard(error => {
-      console.warn(`[Lux Arcade] MAME 2000 caiu em ${game.name || gameIdentity(game)}; tentando próximo core.`);
+    const removeRuntimeGuard = installRuntimeGuard(error => {
+      console.warn(`[Lux Arcade] ${label} caiu em ${game.name || gameIdentity(game)}; tentando próximo core.`);
       runtimeFaultReject(error);
       stopNostalgist().catch(() => {});
     });
@@ -226,15 +230,20 @@
       if (token !== probeToken) return false;
       const rom = await materializeArcadeRom(game);
       if (token !== probeToken) return false;
-      setArcadeStatus(game, `${game.name || 'Arcade'} · ROM pronta · iniciando MAME 2000`);
+      setArcadeStatus(game, `${game.name || 'Arcade'} · ROM pronta · iniciando ${label}`);
 
       const launchPromise = Nostalgist.launch({
-        core: 'mame2000',
+        core,
         rom: { fileName: rom.fileName || romFileName(game), fileContent: rom.blob },
         element: canvas,
         cache: { core: true, rom: false, bios: false, shader: false },
         respondToGlobalEvents: true,
-        retroarchConfig: { input_autodetect_enable: true, menu_driver: 'null' }
+        retroarchConfig: {
+          input_autodetect_enable: true,
+          menu_driver: 'null',
+          menu_show_load_core: false,
+          menu_show_load_content: false
+        }
       }).then(instance => {
         activeNostalgist = instance;
         window.__luxArcadeNostalgist = instance;
@@ -242,22 +251,22 @@
       });
 
       const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`timeout após ${Math.round(MAME2000_ATTEMPT_TIMEOUT_MS / 1000)}s`)), MAME2000_ATTEMPT_TIMEOUT_MS);
+        timeoutId = setTimeout(() => reject(new Error(`timeout após ${Math.round(NOSTALGIST_TIMEOUT_MS / 1000)}s`)), NOSTALGIST_TIMEOUT_MS);
       });
 
       const instance = await Promise.race([launchPromise, timeoutPromise, runtimeFaultPromise]);
       if (timeoutId) clearTimeout(timeoutId);
       if (token !== probeToken) return false;
 
-      await Promise.race([sleep(MAME2000_VALIDATION_MS), runtimeFaultPromise]);
+      await Promise.race([sleep(NOSTALGIST_VALIDATION_MS), runtimeFaultPromise]);
       const status = typeof instance?.getStatus === 'function' ? instance.getStatus() : 'running';
       if (status !== 'running' && status !== 'paused') throw new Error(`RetroArch terminou com status ${status}`);
 
-      await finishSuccessfulStart(game, MAME2000_ENGINE, 'nostalgist');
+      await finishSuccessfulStart(game, candidate, 'nostalgist');
       return true;
     } catch (error) {
       if (timeoutId) clearTimeout(timeoutId);
-      console.warn(`[Lux Arcade] MAME 2000 rejeitado para ${game.name || gameIdentity(game)}: ${error?.message || error}`);
+      console.warn(`[Lux Arcade] ${label} rejeitado para ${game.name || gameIdentity(game)}: ${error?.message || error}`);
       await stopNostalgist();
       if (container) container.innerHTML = '';
       return false;
@@ -266,11 +275,24 @@
     }
   }
 
+  function configureEjsAttempt(game, core) {
+    window.EJS_player = '#emulatorContainer';
+    window.EJS_gameUrl = game.url || game.localUrl;
+    window.EJS_core = core;
+    window.EJS_threads = false;
+    window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+    window.EJS_color = '#7c3aed';
+    window.EJS_gameName = getGameSaveKey(game);
+    window.EJS_defaultOptions = { 'save-state-location': 'browser' };
+    window.EJS_startOnLoaded = true;
+  }
+
   async function tryEjsCore(game, core, index, total, token) {
     await teardownAttempt();
     if (token !== probeToken) return false;
-    setArcadeStatus(game, `${game.name || 'Arcade'} · testando ${core} (${index + 1}/${total})`);
-    configureAttempt(game, core);
+    setArcadeStatus(game, `${game.name || 'Arcade'} · testando ${candidateLabel(core)} (${index + 1}/${total})`);
+    configureEjsAttempt(game, core);
+
     return new Promise(resolve => {
       let settled = false;
       let timer = null;
@@ -282,6 +304,11 @@
         resolve(success);
       };
       window.EJS_onGameStart = async () => {
+        if (token !== probeToken || settled) return;
+        // These are only official EmulatorJS Arcade fallback cores. The MAME cores are
+        // intentionally handled by Nostalgist because EJS_onGameStart can fire while
+        // RetroArch is sitting in its menu without content loaded.
+        await sleep(900);
         if (token !== probeToken || settled) return;
         finish(true);
         await finishSuccessfulStart(game, core, 'emulatorjs');
@@ -297,9 +324,8 @@
   }
 
   async function tryCandidate(game, candidate, index, total, token) {
-    return candidate === MAME2000_ENGINE
-      ? tryMame2000(game, index, total, token)
-      : tryEjsCore(game, candidate, index, total, token);
+    if (candidate.startsWith(ENGINE_PREFIX)) return tryNostalgistCore(game, candidate, index, total, token);
+    return tryEjsCore(game, candidate, index, total, token);
   }
 
   async function runArcadeProbe(game) {
@@ -307,7 +333,12 @@
     document.getElementById('emulatorIntro')?.classList.add('hidden');
     const candidates = orderedCandidates(game);
     const remembered = readPreferredCore(game);
-    console.info('[Lux Arcade] Procurando motor compatível.', { game: game.name || gameIdentity(game), romFile: romFileName(game), remembered: remembered || null, candidates });
+    console.info('[Lux Arcade] Procurando motor compatível.', {
+      game: game.name || gameIdentity(game),
+      romFile: romFileName(game),
+      remembered: remembered || null,
+      candidates: candidates.map(candidateLabel)
+    });
 
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
@@ -327,7 +358,7 @@
           <div class="max-w-md rounded-2xl border border-rose-900/50 bg-rose-950/20 p-5 text-rose-100">
             <p class="font-bold">Nenhum motor Arcade conseguiu iniciar esta ROM.</p>
             <p class="mt-2 text-xs text-rose-200/80">Testados: ${CORE_CANDIDATES.map(candidateLabel).join(', ')}.</p>
-            <p class="mt-2 text-[10px] text-rose-200/60">O Lux descartou automaticamente cores que travaram ou não iniciaram.</p>
+            <p class="mt-2 text-[10px] text-rose-200/60">Se a ROM for clone ou split set, pode ser necessário carregar também a ROM-pai/BIOS.</p>
           </div>
         </div>`;
     }
@@ -362,17 +393,18 @@
     window.LuxArcadeCores = {
       version: VERSION,
       cores: [...CORE_CANDIDATES],
+      labels: CORE_CANDIDATES.map(candidateLabel),
       preferred: readPreferredCore,
       clear: clearPreferredCore,
       forget(game) { clearPreferredCore(game); },
       identify: gameIdentity,
       romFileName,
-      engine() { return activeNostalgist ? MAME2000_ENGINE : 'emulatorjs'; }
+      engine() { return activeNostalgist ? 'nostalgist' : 'emulatorjs'; }
     };
 
     installed = true;
     window.__luxArcadeCoreAutodetectVersion = VERSION;
-    console.info('[Lux Arcade] Detecção automática v3 ativa.', CORE_CANDIDATES);
+    console.info('[Lux Arcade] Detecção automática v4 ativa.', CORE_CANDIDATES.map(candidateLabel));
     return true;
   }
 
