@@ -49,7 +49,6 @@ async function markGameSaveUploaded(record) {
     const store = transaction.objectStore('saves');
     const request = store.get(record.key);
     request.onsuccess = () => {
-      // A newer local save may have been created while the request was in flight.
       if (request.result?.updatedAt === record.updatedAt) store.put({ ...request.result, pending: false, cloudBaseAt: record.cloudBaseAt ?? record.updatedAt });
     };
     transaction.oncomplete = resolve;
@@ -82,7 +81,7 @@ function retryPendingGameSaves() {
       if (currentUser !== user) break;
       if (record.pending) await uploadLocalGameSave(record, user);
     }
-  })().catch(() => { /* Keep pending data on disk; retry on login, online or next game. */ })
+  })().catch(() => {})
     .finally(() => { pendingGameSaveSync = null; });
   return pendingGameSaveSync;
 }
@@ -103,7 +102,6 @@ function removeLocalProfileSaves(user) {
   });
 }
 
-// Game services bootstrap: hybrid ROM storage, storage mode, local-file playback, cleanup, manual clearing and emulator performance stay outside index.html.
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-hybrid-storage]')) {
   const romStorageScript = document.createElement('script');
   romStorageScript.src = 'js/game-rom-hybrid-storage.js?v=20260916-hybrid-rom-storage1';
@@ -162,7 +160,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-arcade-core-autodetect]')) {
   const arcadeCoreScript = document.createElement('script');
-  arcadeCoreScript.src = 'js/arcade-core-autodetect.js?v=20260917-arcade-core-auto3';
+  arcadeCoreScript.src = 'js/arcade-core-autodetect.js?v=20260917-arcade-core-auto4';
   arcadeCoreScript.async = true;
   arcadeCoreScript.dataset.luxArcadeCoreAutodetect = '1';
   document.head.appendChild(arcadeCoreScript);
