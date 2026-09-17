@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-rom-storage-mode1';
+  const VERSION = '20260917-rom-storage-mode2';
   const FALLBACK_THRESHOLD = 100 * 1024 * 1024;
   const PLAN_CACHE_MS = 5 * 60 * 1000;
   const INSTALL_ATTEMPTS = 240;
@@ -10,6 +10,7 @@
   window.__luxRomStorageModeVersion = VERSION;
 
   const planCache = new Map();
+  let storageModeBusy = false;
 
   function currentGame() {
     try { return typeof currentGameDetails !== 'undefined' ? currentGameDetails : null; }
@@ -85,6 +86,15 @@
     };
   }
 
+  function setStorageButtonsBusy(busy) {
+    const cloud = document.getElementById('gameStorageCloud');
+    const local = document.getElementById('gameStorageLocal');
+    const clear = document.getElementById('gameClearTempButton');
+    if (cloud) cloud.disabled = Boolean(busy);
+    if (local) local.disabled = Boolean(busy);
+    if (clear && busy) clear.disabled = true;
+  }
+
   async function refreshStorageToggle(game = currentGame()) {
     const cloud = document.getElementById('gameStorageCloud');
     const local = document.getElementById('gameStorageLocal');
@@ -148,19 +158,37 @@
     const patchedSetMode = async function (mode) {
       const game = currentGame();
       if (!game || game.external) return originalSetMode.apply(this, arguments);
+      if (storageModeBusy) return undefined;
 
-      if (mode === 'local') {
-        const plan = await storagePlan(game).catch(() => ({ large: false, directoryPickerSupported: true }));
-        if (plan.large && !plan.directoryPickerSupported) {
-          window.alert?.('Este jogo é grande demais para o cache normal. Abra o Lux Play no Chrome ou Edge para escolher uma pasta e salvá-lo localmente.');
-          await refreshStorageToggle(game);
-          return undefined;
+      storageModeBusy = true;
+      setStorageButtonsBusy(true);
+
+      try {
+        if (mode === 'local') {
+          // Explicit Local clicks re-check the real ROM size. Large ROMs ask for
+          // the destination first, before the download overlay starts.
+          const plan = await storagePlan(game, true).catch(() => ({ large: false, directoryPickerSupported: true }));
+          if (plan.large) {
+            if (!plan.directoryPickerSupported) {
+              window.alert?.('Este jogo é grande demais para o cache normal. Abra o Lux Play no Chrome ou Edge para escolher uma pasta e salvá-lo localmente.');
+              return undefined;
+            }
+            if (typeof cache.chooseLargeRomFolder === 'function') {
+              await cache.chooseLargeRomFolder();
+            }
+          }
         }
-      }
 
-      const result = await originalSetMode.apply(this, arguments);
-      await refreshStorageToggle(game);
-      return result;
+        return await originalSetMode.apply(this, arguments);
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.warn('[Lux ROM Mode] Não foi possível alterar o modo de armazenamento:', error);
+        }
+        return undefined;
+      } finally {
+        storageModeBusy = false;
+        await refreshStorageToggle(game).catch(() => {});
+      }
     };
     patchedSetMode.__luxStorageModePatched = VERSION;
     patchedSetMode.__luxStorageModeOriginal = originalSetMode;
@@ -182,13 +210,15 @@
 
       const plan = await storagePlan(game).catch(() => ({ large: false, known: false }));
 
-      // Small/unknown games remain cloud-first. Selecting Local explicitly will
-      // download them as Blob through the hybrid cache, matching the old main flow.
+      // Small/unknown games stay cloud-first. Selecting Local explicitly downloads
+      // them as Blob, matching the old main behavior that was already reliable.
       if (!plan.large) return launchBase(game, args);
 
-      // Large games are prepared locally before launch so Chromium can stream the
-      // R2 response into a real user-selected file instead of a giant IndexedDB Blob.
+      // A large game must really become local before launch. If the player cancels
+      // the folder picker, do not silently fall back to a giant remote/local blob.
       await window.setCurrentGameStorageMode('local');
+      const prepared = await cache.status(game).catch(() => null);
+      if (!prepared) return undefined;
       return launchBase(game, args);
     };
     patchedStart.__luxStorageModePatched = VERSION;
