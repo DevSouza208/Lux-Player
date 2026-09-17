@@ -4,10 +4,14 @@ create table if not exists public.game_ratings (
   profile_slot smallint not null check (profile_slot between 1 and 4),
   profile_key text not null default '',
   rating smallint not null check (rating between 1 and 5),
+  comment text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (game_id, user_name, profile_key)
 );
+
+alter table public.game_ratings
+  add column if not exists comment text;
 
 alter table public.game_ratings enable row level security;
 revoke all on public.game_ratings from anon, authenticated;
