@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-home-featured-1';
+  const VERSION = '20260917-home-featured-loader1';
   if (window.__luxHomeFeaturedVersion === VERSION) return;
   window.__luxHomeFeaturedVersion = VERSION;
 
@@ -71,16 +71,23 @@
       });
       const media = localMedia();
       const matched = [];
+      const byTitle = new Map();
+      const normalized = [];
+      for (const item of media) {
+        if (!item || item.type === 'live') continue;
+        const title = normalizeTitle(item.name);
+        if (!title) continue;
+        if (!byTitle.has(title)) byTitle.set(title, item);
+        normalized.push([title, item]);
+      }
+
       for (const tmdb of trends) {
         const target = normalizeTitle(tmdb.title || tmdb.name);
         if (!target) continue;
-        let best = null;
-        let score = 0;
-        for (const item of media) {
-          if (item?.type === 'live') continue;
-          const local = normalizeTitle(item?.name);
-          const candidateScore = local === target ? 100 : local.startsWith(target + ' ') ? 80 : 0;
-          if (candidateScore > score) { score = candidateScore; best = item; }
+        let best = byTitle.get(target) || null;
+        if (!best) {
+          const prefix = normalized.find(([title]) => title.startsWith(target + ' '));
+          best = prefix?.[1] || null;
         }
         if (best && !matched.some(entry => String(entry.item.id) === String(best.id))) {
           matched.push({ source: 'tmdb', item: best, tmdb });
