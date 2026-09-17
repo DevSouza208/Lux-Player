@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-r2-rom-cache2';
+  const VERSION = '20260916-r2-rom-cache3';
   const OVERLAY_ID = 'luxGameCacheOverlay';
   const STYLE_ID = 'luxGameCacheOverlayStyle';
 
@@ -14,9 +14,7 @@
   }
 
   function normalizedConsole(game) {
-    return String(game?.console || game?.consoleLabel || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
+    return String(game?.console || game?.consoleLabel || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
   function isN64(game) {
@@ -50,7 +48,28 @@
       #${OVERLAY_ID} .lux-game-cache-track{height:8px;margin-top:12px;overflow:hidden;border-radius:999px;background:rgba(88,28,135,.42)}
       #${OVERLAY_ID} .lux-game-cache-bar{width:3%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7c3aed,#c084fc);transition:width .18s ease}
       #${OVERLAY_ID} .lux-game-cache-meta{margin-top:10px;font-size:11px;color:#a78bfa}
-      #${OVERLAY_ID} .lux-game-cache-note{margin-top:20px;font-size:11px;line-height:1.55;color:#7e6b9f}
+      #${OVERLAY_ID} .lux-game-cache-note{margin-top:20px;font-size:11px;line-height:1.55;color:#9f8bbd}
+      #gameDetailsCover{position:relative}
+      #gameDetailsFavoriteHeart{position:absolute;top:12px;right:12px;z-index:4;width:42px;height:42px;border-radius:999px;display:grid;place-items:center;background:rgba(12,8,20,.88);border:1px solid rgba(126,34,206,.55);color:#ddd6fe;backdrop-filter:blur(8px);transition:.18s ease}
+      #gameDetailsFavoriteHeart:hover{transform:scale(1.06);color:#fb7185;border-color:rgba(251,113,133,.7)}
+      #gameDetailsFavoriteHeart.is-favorite{color:#fb7185;border-color:rgba(251,113,133,.7);background:rgba(76,5,25,.82)}
+      .lux-game-storage-panel{margin-top:12px;display:grid;gap:8px}
+      .lux-game-storage-toggle{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:14px;background:#0c0814;border:1px solid rgba(88,28,135,.68)}
+      .lux-game-storage-option{display:flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:10px;padding:10px 8px;background:transparent;color:#8b7ba8;font-size:12px;font-weight:800;transition:.18s ease}
+      .lux-game-storage-option.active{background:#2e1065;color:#f3e8ff;box-shadow:0 6px 18px rgba(88,28,135,.32)}
+      .lux-game-storage-option:disabled{opacity:.55;cursor:wait}
+      .lux-game-cache-clear{display:flex;width:100%;align-items:center;justify-content:center;gap:7px;border:1px solid rgba(88,28,135,.55);border-radius:12px;padding:9px 10px;background:rgba(46,16,101,.25);color:#c4b5fd;font-size:11px;font-weight:800;transition:.18s ease}
+      .lux-game-cache-clear:hover:not(:disabled){background:rgba(88,28,135,.42);color:#fff}
+      .lux-game-cache-clear:disabled{opacity:.42;cursor:not-allowed}
+      #gameDetailsAboutSection,#gameDetailsReviewsSection{grid-column:1/-1;width:100%;border-top:1px solid rgba(88,28,135,.42);padding-top:22px}
+      #gameDetailsAboutSection{margin-top:2px}
+      #gameDetailsReviewsSection{margin-top:2px;padding-bottom:4px}
+      .lux-game-section-title{font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.09em;color:#c084fc;margin-bottom:12px}
+      #gameDetailsAboutMeta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+      #gameDetailsAboutSynopsis{margin-top:0}
+      #gameDetailsAboutSynopsis #gameDetailsSynopsis{max-height:none;overflow:visible;font-size:14px;line-height:1.75}
+      #gameDetailsReviewsSection #gameDetailsRating{margin-top:0;min-height:0}
+      @media(max-width:767px){#gameDetailsAboutSection,#gameDetailsReviewsSection{grid-column:1}.lux-game-storage-panel{max-width:330px;margin-left:auto;margin-right:auto}}
     `;
     document.head.appendChild(style);
   }
@@ -67,10 +86,10 @@
           <div class="lux-game-cache-icon">🎮</div>
           <div class="lux-game-cache-title">Preparando jogo</div>
           <div class="lux-game-cache-game"></div>
-          <div class="lux-game-cache-status">Verificando ROM neste dispositivo...</div>
+          <div class="lux-game-cache-status">Verificando jogo...</div>
           <div class="lux-game-cache-track"><div class="lux-game-cache-bar"></div></div>
           <div class="lux-game-cache-meta">0%</div>
-          <div class="lux-game-cache-note">Depois do primeiro download, a ROM abre deste dispositivo. Cada uso renova o prazo. Após 7 dias completos sem uso, ela é removida automaticamente e, no próximo acesso, será baixada novamente.</div>
+          <div class="lux-game-cache-note"><strong>O primeiro carregamento pode demorar um pouco mais.</strong><br>Estamos baixando e preparando o jogo para rodar no seu dispositivo.</div>
         </div>`;
       document.body.appendChild(overlay);
     }
@@ -87,9 +106,7 @@
       const value = Math.max(0, Math.min(1, progress));
       overlay.querySelector('.lux-game-cache-bar').style.width = `${Math.max(3, Math.round(value * 100))}%`;
       overlay.querySelector('.lux-game-cache-meta').textContent = meta || `${Math.round(value * 100)}%`;
-    } else if (meta) {
-      overlay.querySelector('.lux-game-cache-meta').textContent = meta;
-    }
+    } else if (meta) overlay.querySelector('.lux-game-cache-meta').textContent = meta;
   }
 
   function hideOverlay(delay = 120) {
@@ -106,112 +123,226 @@
 
   async function prepareGame(game) {
     if (!shouldAutoCache(game)) return { cached: false, skipped: true };
-
     const existing = await cachedStatus(game);
     if (existing) return { cached: true, skipped: false, size: existing.size || 0 };
-
     ensureOverlay(game);
     const source = resolvedSource(game);
-    updateOverlay(source?.source === 'r2' ? 'Baixando ROM do Lux R2...' : 'Baixando ROM...', 0.03, 'Preparando download');
-
+    updateOverlay(source?.source === 'r2' ? 'Baixando ROM...' : 'Baixando jogo...', 0.03, 'Preparando download');
     await window.LuxRomCache.download(game, ratio => {
       const progress = Number.isFinite(ratio) ? ratio : 0;
-      updateOverlay(
-        source?.source === 'r2' ? 'Baixando ROM do Lux R2...' : 'Baixando ROM...',
-        0.03 + progress * 0.90,
-        progress > 0 ? `${Math.round(progress * 100)}% da ROM` : 'Baixando...'
-      );
+      updateOverlay('Baixando ROM...', 0.03 + progress * 0.90, progress > 0 ? `${Math.round(progress * 100)}%` : 'Baixando...');
     });
-
     const saved = await cachedStatus(game);
     if (!saved) throw new Error('A ROM foi baixada, mas não ficou disponível no armazenamento local.');
     return { cached: false, skipped: false, size: saved.size || 0 };
   }
 
-  async function refreshClearButton(game = currentGame()) {
-    const button = document.getElementById('gameClearTempButton');
-    if (!button || !game || game.external) return;
+  function favoriteState(game) {
+    try { return typeof isGameFavorite === 'function' ? Boolean(isGameFavorite(game)) : false; }
+    catch (_) { return false; }
+  }
+
+  function ensureFavoriteHeart(game) {
+    const cover = document.getElementById('gameDetailsCover');
+    if (!cover || game?.external) return;
+    cover.classList.add('relative');
+    let button = document.getElementById('gameDetailsFavoriteHeart');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'gameDetailsFavoriteHeart';
+      button.type = 'button';
+      cover.appendChild(button);
+    }
+    const favorite = favoriteState(game);
+    button.className = favorite ? 'is-favorite' : '';
+    button.title = favorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos';
+    button.setAttribute('aria-label', button.title);
+    button.setAttribute('aria-pressed', String(favorite));
+    button.innerHTML = `<i data-lucide="heart" class="w-5 h-5 ${favorite ? 'fill-current' : ''}"></i>`;
+    button.onclick = event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof window.toggleCurrentGameFavorite === 'function') window.toggleCurrentGameFavorite(event);
+      setTimeout(() => ensureFavoriteHeart(currentGame()), 0);
+    };
+  }
+
+  function ensureStoragePanel(game) {
+    const cover = document.getElementById('gameDetailsCover');
+    if (!cover) return null;
+    const column = cover.parentElement;
+    if (!column) return null;
+    let panel = document.getElementById('gameDetailsStoragePanel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'gameDetailsStoragePanel';
+      panel.className = 'lux-game-storage-panel';
+      panel.innerHTML = `
+        <div class="lux-game-storage-toggle" role="group" aria-label="Local da ROM">
+          <button id="gameStorageCloud" type="button" class="lux-game-storage-option"><i data-lucide="cloud" class="w-4 h-4"></i><span>Nuvem</span></button>
+          <button id="gameStorageLocal" type="button" class="lux-game-storage-option"><i data-lucide="smartphone" class="w-4 h-4"></i><span>Local</span></button>
+        </div>
+        <button id="gameClearTempButton" type="button" class="lux-game-cache-clear"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i><span>Limpar cache</span></button>`;
+      cover.insertAdjacentElement('afterend', panel);
+    }
+    const cloud = document.getElementById('gameStorageCloud');
+    const local = document.getElementById('gameStorageLocal');
+    const clear = document.getElementById('gameClearTempButton');
+    if (game.external) {
+      cloud?.classList.remove('active');
+      local?.classList.add('active');
+      if (cloud) cloud.disabled = true;
+      if (local) local.disabled = true;
+      if (clear) clear.disabled = true;
+      return panel;
+    }
+    if (cloud) cloud.onclick = () => window.setCurrentGameStorageMode?.('cloud');
+    if (local) local.onclick = () => window.setCurrentGameStorageMode?.('local');
+    if (clear) clear.onclick = () => window.clearCurrentGameTemporaryFiles?.();
+    return panel;
+  }
+
+  async function refreshStoragePanel(game = currentGame()) {
+    const cloud = document.getElementById('gameStorageCloud');
+    const local = document.getElementById('gameStorageLocal');
+    const clear = document.getElementById('gameClearTempButton');
+    if (!game || !cloud || !local) return;
+    if (game.external) {
+      cloud.classList.remove('active'); local.classList.add('active');
+      cloud.disabled = true; local.disabled = true; if (clear) clear.disabled = true;
+      return;
+    }
     const status = await cachedStatus(game);
-    button.disabled = !status;
-    button.classList.toggle('opacity-50', !status);
-    button.classList.toggle('cursor-not-allowed', !status);
-    const label = button.querySelector('span');
-    if (label) label.textContent = status ? 'Remover ROM deste dispositivo' : 'ROM ainda não baixada neste dispositivo';
-  }
-
-  function addClearButton(game) {
-    if (!game || game.external) return;
-    const actions = document.getElementById('gameDetailsActions');
-    if (!actions || document.getElementById('gameClearTempButton')) return;
-
-    const button = document.createElement('button');
-    button.id = 'gameClearTempButton';
-    button.type = 'button';
-    button.className = 'w-full mb-2 border border-purple-800/60 bg-purple-950/40 text-purple-200 hover:bg-purple-900/60 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-center items-center gap-2';
-    button.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4"></i><span>Verificando ROM neste dispositivo...</span>';
-    button.onclick = () => window.clearCurrentGameTemporaryFiles?.();
-
-    const downloadButton = document.getElementById('gameDownloadButton');
-    if (downloadButton?.parentNode === actions) downloadButton.insertAdjacentElement('afterend', button);
-    else actions.prepend(button);
+    if (currentGame() !== game) return;
+    cloud.classList.toggle('active', !status);
+    local.classList.toggle('active', Boolean(status));
+    cloud.disabled = false; local.disabled = false;
+    if (clear) clear.disabled = !status;
     try { window.lucide?.createIcons?.(); } catch (_) {}
-    refreshClearButton(game);
   }
+
+  function moveDetailsSections() {
+    const modal = document.getElementById('gameDetailsModal');
+    const cover = document.getElementById('gameDetailsCover');
+    const rating = document.getElementById('gameDetailsRating');
+    const synopsis = document.getElementById('gameDetailsSynopsis');
+    const consoleTag = document.getElementById('gameDetailsConsole');
+    if (!modal || !cover || !rating || !synopsis || !consoleTag) return;
+    const grid = cover.parentElement;
+    if (!grid) return;
+
+    let about = document.getElementById('gameDetailsAboutSection');
+    if (!about) {
+      about = document.createElement('section');
+      about.id = 'gameDetailsAboutSection';
+      about.innerHTML = '<h3 class="lux-game-section-title">Sobre o jogo</h3><div id="gameDetailsAboutMeta"></div><div id="gameDetailsAboutSynopsis"></div>';
+      grid.appendChild(about);
+    }
+    const meta = document.getElementById('gameDetailsAboutMeta');
+    const aboutSynopsis = document.getElementById('gameDetailsAboutSynopsis');
+    const tagRow = consoleTag.parentElement;
+    const synopsisWrap = synopsis.parentElement;
+    if (tagRow && meta && tagRow !== meta) meta.append(...Array.from(tagRow.children));
+    if (tagRow && tagRow !== meta && !tagRow.children.length) tagRow.remove();
+    if (synopsisWrap && aboutSynopsis && synopsisWrap !== aboutSynopsis) aboutSynopsis.appendChild(synopsisWrap);
+
+    let reviews = document.getElementById('gameDetailsReviewsSection');
+    if (!reviews) {
+      reviews = document.createElement('section');
+      reviews.id = 'gameDetailsReviewsSection';
+      reviews.innerHTML = '<h3 class="lux-game-section-title">Avaliações da comunidade</h3>';
+      grid.appendChild(reviews);
+    }
+    if (rating.parentElement !== reviews) reviews.appendChild(rating);
+  }
+
+  function cleanLegacyActions() {
+    const actions = document.getElementById('gameDetailsActions');
+    if (!actions) return;
+    const favorite = actions.querySelector('button[onclick*="toggleCurrentGameFavorite"]');
+    const download = document.getElementById('gameDownloadButton');
+    favorite?.remove();
+    download?.remove();
+    actions.classList.add('game-details-primary-actions');
+  }
+
+  async function applyGameDetailsRedesign(game) {
+    if (!game) return;
+    ensureStyle();
+    cleanLegacyActions();
+    ensureFavoriteHeart(game);
+    ensureStoragePanel(game);
+    moveDetailsSections();
+    await refreshStoragePanel(game);
+    try { window.lucide?.createIcons?.(); } catch (_) {}
+  }
+
+  window.setCurrentGameStorageMode = async function (mode) {
+    const game = currentGame();
+    if (!game || game.external || !window.LuxRomCache) return;
+    const cloud = document.getElementById('gameStorageCloud');
+    const local = document.getElementById('gameStorageLocal');
+    if (cloud) cloud.disabled = true;
+    if (local) local.disabled = true;
+    try {
+      if (mode === 'local') {
+        const existing = await cachedStatus(game);
+        if (!existing) {
+          ensureOverlay(game);
+          await prepareGame(game);
+          updateOverlay('Tudo pronto!', 1, 'Jogo disponível localmente');
+          hideOverlay(220);
+        }
+      } else if (mode === 'cloud') {
+        const existing = await cachedStatus(game);
+        if (existing) await window.LuxRomCache.remove(game);
+      }
+    } catch (error) {
+      console.warn('[Lux ROM Cache] Falha ao alterar armazenamento:', error);
+      hideOverlay(300);
+    } finally {
+      await refreshStoragePanel(game);
+    }
+  };
 
   window.clearCurrentGameTemporaryFiles = async function () {
     const game = currentGame();
     if (!game || game.external || !window.LuxRomCache?.remove) return;
-
     const exists = await cachedStatus(game);
-    if (!exists) {
-      await refreshClearButton(game);
-      return;
-    }
-
-    const confirmed = window.confirm?.('Remover a ROM deste jogo deste dispositivo? Saves, progresso e favoritos não serão apagados.') ?? true;
+    if (!exists) { await refreshStoragePanel(game); return; }
+    const confirmed = window.confirm?.('Limpar o cache deste jogo? Saves, progresso e favoritos não serão apagados.') ?? true;
     if (!confirmed) return;
-
     try {
       await window.LuxRomCache.remove(game);
-      await refreshClearButton(game);
-      const download = document.getElementById('gameDownloadButton');
-      const label = download?.querySelector('span');
-      if (label) label.textContent = 'Baixar ROM neste dispositivo';
-      if (download) download.disabled = false;
-      window.alert?.('ROM removida deste dispositivo.');
+      await refreshStoragePanel(game);
     } catch (error) {
-      console.warn('[Lux ROM Cache] Não foi possível remover a ROM:', error);
-      window.alert?.('Não foi possível remover a ROM deste dispositivo.');
+      console.warn('[Lux ROM Cache] Não foi possível limpar o cache:', error);
+      window.alert?.('Não foi possível limpar o cache deste jogo.');
     }
   };
 
   function patchStartGameFromDetails() {
     const original = window.startGameFromDetails;
     if (typeof original !== 'function' || original.__luxGameLocalCachePatched) return false;
-
     const patched = async function (...args) {
       const game = currentGame();
-
-      // N64 usa um fluxo local próprio e será migrado na etapa seguinte.
       if (!shouldAutoCache(game) || isN64(game)) return original.apply(this, args);
-
       try {
         const status = await cachedStatus(game);
         if (!status) {
           await prepareGame(game);
-          updateOverlay('Tudo pronto!', 1, 'ROM salva neste dispositivo');
+          updateOverlay('Iniciando emulador...', 1, 'Tudo pronto');
         }
         const result = await original.apply(this, args);
-        if (!status) hideOverlay(140);
+        if (!status) hideOverlay(180);
         return result;
       } catch (error) {
         console.warn('[Lux ROM Cache] Falha ao preparar ROM local; usando a fonte disponível:', error);
-        updateOverlay('Não foi possível armazenar a ROM local.', 1, 'Tentando abrir pela fonte disponível');
+        updateOverlay('Não foi possível preparar a cópia local.', 1, 'Tentando abrir pela nuvem');
         hideOverlay(600);
         return original.apply(this, args);
       }
     };
-
     patched.__luxGameLocalCachePatched = VERSION;
     patched.__luxGameLocalCacheOriginal = original;
     window.startGameFromDetails = patched;
@@ -221,13 +352,11 @@
   function patchGameDetailsActions() {
     const original = window.updateGameDetailsActions;
     if (typeof original !== 'function' || original.__luxGameCacheActionsPatched) return false;
-
     const patched = function (game) {
       const result = original.apply(this, arguments);
-      addClearButton(game);
+      Promise.resolve(applyGameDetailsRedesign(game)).catch(error => console.warn('[Lux Game Details] Falha no redesign:', error));
       return result;
     };
-
     patched.__luxGameCacheActionsPatched = VERSION;
     window.updateGameDetailsActions = patched;
     return true;
@@ -236,13 +365,11 @@
   function patchManualDownload() {
     const original = window.downloadCurrentGame;
     if (typeof original !== 'function' || original.__luxGameCacheDownloadPatched) return false;
-
     const patched = async function (...args) {
       const result = await original.apply(this, args);
-      await refreshClearButton(currentGame());
+      await refreshStoragePanel(currentGame());
       return result;
     };
-
     patched.__luxGameCacheDownloadPatched = VERSION;
     window.downloadCurrentGame = patched;
     return true;
