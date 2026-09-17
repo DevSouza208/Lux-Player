@@ -16,7 +16,7 @@
 
   if (window.__luxGameCatalogCacheVersion === VERSION) return;
   window.__luxGameCatalogCacheVersion = VERSION;
-  let dbPromise = null, refreshPromise = null, firstBootRunning = false;
+  let dbPromise = null, refreshPromise = null, firstBootRunning = false, splitUpgradeAttempted = false;
   const readUser = () => { try { return typeof currentUser !== 'undefined' ? currentUser : null; } catch (_) { return null; } };
   const isAdmin = () => String(readUser()?.role || '').trim().toLowerCase() === 'admin';
   const profileKey = () => { const u=readUser(); if(!u)return 'guest'; return [String(u.user||u.id||'account').toLowerCase(),String(u.profile?.data_key||u.profile?.slot||'1'),String(u.role||'user').toLowerCase()].join('|'); };
@@ -112,7 +112,19 @@
   async function loadPublicCatalog(force=false){
     if(!force){
       const cached=await readCache();
-      if(cached?.rows?.length){console.info('[Lux Games] Catálogo por console carregado do cache local.',{games:cached.rows.length});return applyRows(cached.rows,false);}
+      if(cached?.rows?.length){
+        if(cached.manifest?.legacyFallback && !splitUpgradeAttempted){
+          splitUpgradeAttempted=true;
+          try{
+            const upgraded=await downloadSplitCatalog(false);
+            return applyRows(upgraded.rows,false);
+          }catch(error){
+            console.info('[Lux Games] Catálogo legado continua ativo até o manifesto por console ser publicado.');
+          }
+        }
+        console.info('[Lux Games] Catálogo por console carregado do cache local.',{games:cached.rows.length});
+        return applyRows(cached.rows,false);
+      }
     }
     if(refreshPromise)return refreshPromise;
     refreshPromise=downloadPublicCatalog(force).then(result=>applyRows(result.rows,force)).finally(()=>{refreshPromise=null;});
