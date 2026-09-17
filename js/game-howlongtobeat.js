@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-hltb1';
+  const VERSION = '20260917-hltb2';
   const CACHE_PREFIX = 'lux-hltb-duration:';
   const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
   const CARD_ID = 'gameDetailsHltb';
@@ -83,6 +83,14 @@
     return `${wholeHours}h ${minutes}min`;
   }
 
+  function safeHltbUrl(value, game) {
+    try {
+      const url = new URL(String(value || ''), 'https://howlongtobeat.com');
+      if (url.protocol === 'https:' && /(^|\.)howlongtobeat\.com$/i.test(url.hostname)) return url.href;
+    } catch (_) {}
+    return `https://howlongtobeat.com/?q=${encodeURIComponent(gameTitle(game))}`;
+  }
+
   function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
@@ -131,7 +139,13 @@
   function oldHltbLink() {
     const card = document.getElementById(CARD_ID);
     const scope = card?.parentElement || document;
-    return scope.querySelector('a[href*="howlongtobeat.com"]');
+    return Array.from(scope.querySelectorAll('a[href*="howlongtobeat.com"]'))
+      .find(link => !card?.contains(link)) || null;
+  }
+
+  function hideLegacyLink() {
+    const legacy = oldHltbLink();
+    if (legacy) legacy.style.display = 'none';
   }
 
   function renderLoading() {
@@ -150,12 +164,12 @@
   function renderDuration(duration, game) {
     const card = ensureCard();
     if (!card) return;
-    const sourceUrl = String(duration?.url || '').trim() || `https://howlongtobeat.com/?q=${encodeURIComponent(gameTitle(game))}`;
+    const sourceUrl = safeHltbUrl(duration?.url, game);
     card.className = '';
     card.innerHTML = `
       <div class="lux-hltb-head">
         <span class="lux-hltb-title">⏱ Tempo médio para zerar</span>
-        <a class="lux-hltb-source" href="${sourceUrl.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer">HowLongToBeat ↗</a>
+        <a class="lux-hltb-source" href="${sourceUrl}" target="_blank" rel="noopener noreferrer">HowLongToBeat ↗</a>
       </div>
       <div class="lux-hltb-grid">
         <div class="lux-hltb-stat"><span class="lux-hltb-label">História principal</span><span class="lux-hltb-value">${formatHours(duration?.main)}</span></div>
@@ -163,16 +177,16 @@
         <div class="lux-hltb-stat"><span class="lux-hltb-label">Complecionista</span><span class="lux-hltb-value">${formatHours(duration?.completionist)}</span></div>
       </div>
       <div class="lux-hltb-note">Estimativas da comunidade · ${String(duration?.title || gameTitle(game)).replace(/[&<>]/g, '')}</div>`;
-    const legacy = oldHltbLink();
-    if (legacy && !card.contains(legacy)) legacy.style.display = 'none';
+    hideLegacyLink();
   }
 
   function renderFallback(game) {
     const card = ensureCard();
     if (!card) return;
-    const url = `https://howlongtobeat.com/?q=${encodeURIComponent(gameTitle(game))}`;
+    const url = safeHltbUrl('', game);
     card.className = 'lux-hltb-error';
     card.innerHTML = `<div class="lux-hltb-head"><span class="lux-hltb-title">⏱ Tempo para zerar indisponível</span><a class="lux-hltb-source" href="${url}" target="_blank" rel="noopener noreferrer">Pesquisar no HowLongToBeat ↗</a></div>`;
+    hideLegacyLink();
   }
 
   async function fetchDuration(game) {
