@@ -1,8 +1,9 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-r2-only-roms1';
+  const VERSION = '20260917-r2-only-roms2';
   const GATEWAY_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/roms';
+  const GATEWAY_SYNC = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync';
 
   if (window.__luxR2OnlyRomsVersion === VERSION) return;
   window.__luxR2OnlyRomsVersion = VERSION;
@@ -79,7 +80,76 @@
     loadGamesCatalog = patchedLoadGamesCatalog;
   }
 
-  // Nunca mais permita que o painel envie ROMs para Supabase Storage.
+  async function syncGamesCatalogOneByOne() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const confirmed = window.confirm('Ler todas as ROMs do bucket luxroms uma por vez? Cada chamada do Worker processará apenas 1 objeto para evitar excesso de subrequests.');
+    if (!confirmed) return;
+
+    const button = document.getElementById('gameR2SyncButton');
+    const status = document.getElementById('gameR2SyncStatus');
+    if (button) button.disabled = true;
+    if (status) {
+      status.className = 'mt-3 min-h-[18px] text-xs text-purple-300';
+      status.textContent = 'Iniciando varredura do R2, 1 ROM por vez...';
+    }
+
+    let cursor = null;
+    let processed = 0;
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    try {
+      while (true) {
+        const response = await fetch(GATEWAY_SYNC, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: currentUser.user, password: currentUser.pass, cursor })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Gateway HTTP ${response.status}`);
+
+        processed += Number(result.processed) || 0;
+        created += Number(result.created) || 0;
+        updated += Number(result.updated) || 0;
+        skipped += Number(result.skipped) || 0;
+
+        if (status) {
+          const currentName = result.title || result.key || 'objeto sem ROM válida';
+          status.textContent = `Varrendo R2: ${processed} objeto(s) processado(s) · ${currentName}`;
+        }
+
+        if (result.done) break;
+        const nextCursor = String(result.nextCursor || '');
+        if (!nextCursor) throw new Error('O gateway não devolveu o cursor da próxima ROM.');
+        if (nextCursor === cursor) throw new Error('A varredura não avançou para a próxima ROM.');
+        cursor = nextCursor;
+
+        await new Promise(resolve => setTimeout(resolve, 80));
+      }
+
+      await loadGamesCatalog();
+      await renderGamesCatalog();
+      if (status) {
+        status.className = 'mt-3 min-h-[18px] text-xs text-emerald-300';
+        status.textContent = `Varredura concluída: ${processed} objeto(s), ${created} novo(s), ${updated} atualizado(s) e ${skipped} ignorado(s).`;
+      }
+    } catch (error) {
+      console.error('Falha ao sincronizar jogos do R2 um por um:', error);
+      if (status) {
+        status.className = 'mt-3 min-h-[18px] text-xs text-rose-300';
+        const message = typeof gameImportErrorMessage === 'function' ? gameImportErrorMessage(error) : (error?.message || 'erro desconhecido');
+        status.textContent = `Varredura interrompida após ${processed} objeto(s): ${message}`;
+      }
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  syncGamesCatalogOneByOne.__luxR2SequentialSync = VERSION;
+  window.syncGamesCatalogFromR2 = syncGamesCatalogOneByOne;
+  try { syncGamesCatalogFromR2 = syncGamesCatalogOneByOne; } catch (_) {}
+
   if (typeof adminImportGame === 'function') {
     const blockedImport = async function () {
       const message = 'ROMs agora usam somente Cloudflare R2. Envie o arquivo ao bucket luxroms e depois clique em “Ler ROMs do R2”.';
@@ -99,8 +169,6 @@
     toggleGameUploadModal = blockedUploadModal;
   }
 
-  // Não apague mais arquivos pelo Supabase. A origem de verdade agora é o R2;
-  // remova o objeto no R2 e sincronize para o catálogo refletir a exclusão.
   if (typeof adminDeleteGame === 'function') {
     const blockedDelete = async function (id, event) {
       event?.stopPropagation?.();
@@ -113,13 +181,13 @@
     adminDeleteGame = blockedDelete;
   }
 
-  // Garante que qualquer registro que ainda vaze do legado nunca seja tratado como fonte válida.
   window.LuxR2OnlyRoms = {
     version: VERSION,
     gatewayRoot: GATEWAY_ROOT,
     canonicalR2Path,
     r2Url,
-    isSupabaseRomUrl
+    isSupabaseRomUrl,
+    syncOneByOne: syncGamesCatalogOneByOne
   };
 
   function hardenAdminUi() {
@@ -132,5 +200,5 @@
 
   hardenAdminUi();
   document.addEventListener('DOMContentLoaded', hardenAdminUi, { once: true });
-  console.info('[Lux Games] R2-only ativo: ROMs do Supabase são ignoradas e uploads legados foram bloqueados.');
+  console.info('[Lux Games] R2-only ativo: ROMs do Supabase são ignoradas e a sincronização varre o R2 uma ROM por requisição.');
 })();
