@@ -1,13 +1,10 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-profile-fastboot1';
+  const VERSION = '20260917-profile-fastboot2';
   if (window.__luxProfileEntryFastbootInstalled === VERSION) return;
   window.__luxProfileEntryFastbootInstalled = VERSION;
 
-  // These jobs enrich the dashboard, but none of them is required to decide
-  // which local/account profile is active. Keeping them in the critical path
-  // makes a slow provider or catalogue endpoint look like a broken login.
   const DEFERRED_BOOT_JOBS = [
     'loadMediaSourcesInPriority',
     'syncCurrentSubscriptionFromProvider',
@@ -16,6 +13,11 @@
     'loadGamesCatalog',
     'loadReadingCatalog'
   ];
+  const MEDIA_SECTIONS = new Set(['live', 'movies', 'series']);
+
+  let mediaBootPromise = Promise.resolve();
+  let mediaBootLoading = false;
+  let queuedMediaSection = null;
 
   const sameProfile = (left, right) => {
     if (!left || !right) return false;
@@ -23,40 +25,127 @@
     return Number(left.slot || 1) === Number(right.slot || 1);
   };
 
-  const safeRefresh = () => {
+  const activeProfileIs = profile => {
     try {
-      if (typeof window.setSection === 'function') window.setSection(typeof currentSection !== 'undefined' ? currentSection || 'home' : 'home');
-      else if (typeof window.renderHome === 'function') window.renderHome();
-    } catch (error) {
-      console.warn('[Lux Play] Atualização visual pós-perfil indisponível.', error);
+      return sameProfile(typeof currentUser !== 'undefined' ? currentUser?.profile : null, profile);
+    } catch (_) {
+      return false;
     }
   };
 
-  const runDeferredJobs = (jobs, profile) => {
-    if (!jobs.size) return;
-    setTimeout(async () => {
+  const sourceFingerprint = () => {
+    try {
+      const user = typeof currentUser !== 'undefined' ? currentUser : null;
+      if (!user) return '';
+      return JSON.stringify([
+        user.m3uUrl || '',
+        user.m3uHttpsUrl || '',
+        user.urlXc || '',
+        user.userXc || '',
+        user.senhaXc || ''
+      ]);
+    } catch (_) {
+      return '';
+    }
+  };
+
+  const refreshCurrentSection = profile => {
+    if (!activeProfileIs(profile)) return;
+    let section = 'home';
+    try { section = typeof currentSection !== 'undefined' ? (currentSection || 'home') : 'home'; } catch (_) {}
+
+    requestAnimationFrame(() => {
+      if (!activeProfileIs(profile) || mediaBootLoading) return;
       try {
-        if (!sameProfile(typeof currentUser !== 'undefined' ? currentUser?.profile : null, profile)) return;
-      } catch (_) { return; }
-
-      // Load the user's current source immediately. Provider refresh may finish
-      // later and trigger a second source refresh without blocking the dashboard.
-      const mediaJob = jobs.get('loadMediaSourcesInPriority');
-      if (mediaJob) {
-        Promise.resolve(mediaJob.fn.apply(mediaJob.thisArg, mediaJob.args))
-          .then(safeRefresh)
-          .catch(error => console.warn('[Lux Play] Fonte de mídia em segundo plano indisponível.', error));
+        if (typeof window.setSection === 'function') window.setSection(section);
+        else if (section === 'home' && typeof window.renderHome === 'function') window.renderHome();
+      } catch (error) {
+        console.warn('[Lux Play] Atualização visual pós-perfil indisponível.', error);
       }
+    });
+  };
 
+  const flushQueuedMediaSection = profile => {
+    if (!queuedMediaSection || !activeProfileIs(profile) || mediaBootLoading) return false;
+    const queued = queuedMediaSection;
+    queuedMediaSection = null;
+    try {
+      if (typeof window.setSection === 'function') {
+        window.setSection.apply(queued.thisArg || window, [queued.section, ...queued.args]);
+        return true;
+      }
+    } catch (error) {
+      console.warn('[Lux Play] Não foi possível abrir a seção solicitada.', error);
+    }
+    return false;
+  };
+
+  const queueMediaLoad = (job, profile) => {
+    if (!job) return Promise.resolve(false);
+
+    mediaBootPromise = mediaBootPromise.catch(() => false).then(async () => {
+      if (!activeProfileIs(profile)) return false;
+      mediaBootLoading = true;
+      window.__luxProfileMediaLoading = true;
+      try {
+        return await job.fn.apply(job.thisArg, job.args);
+      } catch (error) {
+        console.warn('[Lux Play] Fonte de mídia em segundo plano indisponível.', error);
+        return false;
+      } finally {
+        mediaBootLoading = false;
+        window.__luxProfileMediaLoading = false;
+        if (!flushQueuedMediaSection(profile)) refreshCurrentSection(profile);
+      }
+    });
+
+    window.__luxProfileMediaReady = mediaBootPromise;
+    return mediaBootPromise;
+  };
+
+  const installSectionGuard = () => {
+    const original = window.setSection;
+    if (typeof original !== 'function') return false;
+    if (original.__luxProfileMediaGuard) return true;
+
+    const wrapped = function(section, ...args) {
+      const key = String(section || '').toLowerCase();
+      if (mediaBootLoading && MEDIA_SECTIONS.has(key)) {
+        queuedMediaSection = { section, args, thisArg: this };
+        return;
+      }
+      return original.apply(this, [section, ...args]);
+    };
+
+    wrapped.__luxProfileMediaGuard = VERSION;
+    wrapped.__luxProfileMediaGuardOriginal = original;
+    window.setSection = wrapped;
+    return true;
+  };
+
+  const runDeferredJobs = (jobs, profile) => {
+    if (!jobs.size || !activeProfileIs(profile)) return;
+
+    setTimeout(async () => {
+      if (!activeProfileIs(profile)) return;
+
+      const mediaJob = jobs.get('loadMediaSourcesInPriority');
       const providerJob = jobs.get('syncCurrentSubscriptionFromProvider');
+
+      if (mediaJob) await queueMediaLoad(mediaJob, profile);
+      if (!activeProfileIs(profile)) return;
+
       if (providerJob) {
-        Promise.resolve(providerJob.fn.apply(providerJob.thisArg, providerJob.args))
-          .then(() => {
-            const currentMedia = window.loadMediaSourcesInPriority;
-            if (typeof currentMedia === 'function') return currentMedia();
-          })
-          .then(safeRefresh)
-          .catch(error => console.warn('[Lux Play] Atualização da assinatura em segundo plano indisponível.', error));
+        const before = sourceFingerprint();
+        try {
+          await providerJob.fn.apply(providerJob.thisArg, providerJob.args);
+        } catch (error) {
+          console.warn('[Lux Play] Atualização da assinatura em segundo plano indisponível.', error);
+        }
+        const after = sourceFingerprint();
+        if (mediaJob && before !== after && activeProfileIs(profile)) {
+          await queueMediaLoad(mediaJob, profile);
+        }
       }
 
       const secondaryNames = ['loadNotifications', 'loadLiveSchedule', 'loadGamesCatalog', 'loadReadingCatalog'];
@@ -66,12 +155,15 @@
         .map(job => Promise.resolve().then(() => job.fn.apply(job.thisArg, job.args)));
 
       if (secondary.length) {
-        Promise.allSettled(secondary).then(safeRefresh);
+        await Promise.allSettled(secondary);
+        refreshCurrentSection(profile);
       }
     }, 0);
   };
 
   const install = () => {
+    installSectionGuard();
+
     const original = window.activateAccountProfile;
     if (typeof original !== 'function') return false;
     if (original.__luxProfileEntryFastbootWrapped) return true;
@@ -97,11 +189,7 @@
         return await original.apply(this, arguments);
       } finally {
         restorers.reverse().forEach(restore => restore());
-        try {
-          if (sameProfile(typeof currentUser !== 'undefined' ? currentUser?.profile : null, profile)) {
-            runDeferredJobs(deferred, profile);
-          }
-        } catch (_) {}
+        if (activeProfileIs(profile)) runDeferredJobs(deferred, profile);
       }
     };
 
@@ -114,7 +202,9 @@
   let attempts = 0;
   const timer = setInterval(() => {
     attempts += 1;
-    if (install() || attempts >= 240) clearInterval(timer);
+    const ready = install();
+    const sectionReady = installSectionGuard();
+    if ((ready && sectionReady) || attempts >= 240) clearInterval(timer);
   }, 50);
   install();
 })();
