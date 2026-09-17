@@ -139,4 +139,97 @@
   #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-label {
     font-size: 7.5px !important;
   }
+
+  /* Fullscreen follows the same hierarchy without changing the game area:
+     Select/Start move one row up and each utility pair sits directly below it. */
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) {
+    --lux-full-action-width: 58px;
+    --lux-full-action-gap: 6px;
+    --lux-full-action-pair: calc(var(--lux-full-action-width) * 2 + var(--lux-full-action-gap));
+    --lux-full-action-left: max(6px, env(safe-area-inset-left, 0px));
+    --lux-full-action-right: max(6px, env(safe-area-inset-right, 0px));
+    --lux-full-system-width: 70px;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-system-button {
+    bottom: calc(43px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-system-buttons-2 .lux-system-button-1 {
+    left: calc(var(--lux-full-action-left) + (var(--lux-full-action-pair) - var(--lux-full-system-width)) / 2) !important;
+    right: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-system-buttons-2 .lux-system-button-2,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-system-buttons-1 .lux-system-button-1 {
+    right: calc(var(--lux-full-action-right) + (var(--lux-full-action-pair) - var(--lux-full-system-width)) / 2) !important;
+    left: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-actionbar {
+    position: fixed !important;
+    inset: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    padding: 0 !important;
+    transform: none !important;
+    display: block !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-button {
+    position: absolute !important;
+    bottom: calc(5px + env(safe-area-inset-bottom, 0px)) !important;
+    width: var(--lux-full-action-width) !important;
+    min-width: var(--lux-full-action-width) !important;
+    height: 30px !important;
+    margin: 0 !important;
+    padding: 2px 3px !important;
+    border: 1px solid rgba(216,180,254,.24) !important;
+    border-radius: 10px !important;
+    background: linear-gradient(180deg, rgba(52,20,88,.78), rgba(17,7,31,.86)) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 5px 14px rgba(0,0,0,.18) !important;
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-button:nth-child(1) {
+    left: var(--lux-full-action-left) !important;
+    right: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-button:nth-child(2) {
+    left: calc(var(--lux-full-action-left) + var(--lux-full-action-width) + var(--lux-full-action-gap)) !important;
+    right: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-button:nth-child(3) {
+    right: calc(var(--lux-full-action-right) + var(--lux-full-action-width) + var(--lux-full-action-gap)) !important;
+    left: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-button:nth-child(4) {
+    right: var(--lux-full-action-right) !important;
+    left: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-icon,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-icon svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen:not(.lux-console-view-custom) .lux-console-action-label {
+    font-size: 7.5px !important;
+  }
 }
