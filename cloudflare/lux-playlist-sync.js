@@ -248,7 +248,7 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
   };
 }
 
-async function syncUser(env, user) {
+async function syncUser(env, user, options = {}) {
   const username = String(user.usuario || "").trim();
   const sourceUrl = String(user.lista_m3u || "").trim();
 
@@ -256,10 +256,24 @@ async function syncUser(env, user) {
     return { usuario: username, status: "skipped", message: "Sem URL HTTP/HTTPS válida" };
   }
 
+  const syncStartedAt = new Date().toISOString();
+  await updateUser(env, username, {
+    lista_m3u_sync_at: syncStartedAt,
+    lista_m3u_sync_status: "syncing",
+    lista_m3u_sync_error: null
+  }).catch(() => {});
+
   try {
     const playlistResponse = await fetchWithTimeout(
       sourceUrl,
-      { headers: { "User-Agent": "Lux-Playlist-Sync/1.6" } },
+      {
+        headers: {
+          "User-Agent": "Lux-Playlist-Sync/1.6",
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache"
+        },
+        cf: options.force ? { cacheTtl: 0, cacheEverything: false } : undefined
+      },
       120000
     );
 
@@ -391,7 +405,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.4" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.5" });
     }
 
     if (
@@ -411,7 +425,7 @@ export default {
         const target = await getUserByUsername(env, targetUsername);
         if (!target) throw new Error("Usuário a sincronizar não encontrado.");
 
-        const result = await syncUser(env, target);
+        const result = await syncUser(env, target, { force: body.force !== false });
         const ok = result.status !== "error";
         return json({ ok, result }, result.status === "error" ? 502 : 200);
       } catch (error) {
@@ -441,7 +455,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.6.4"
+      version: "1.6.5"
     });
   },
 
