@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-hltb2';
+  const VERSION = '20260917-hltb3';
   const CACHE_PREFIX = 'lux-hltb-duration:';
   const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
   const CARD_ID = 'gameDetailsHltb';
@@ -74,7 +74,7 @@
 
   function formatHours(value) {
     const hours = Number(value);
-    if (!Number.isFinite(hours) || hours <= 0) return '—';
+    if (!Number.isFinite(hours) || hours <= 0) return '--';
     const totalMinutes = Math.round(hours * 60);
     const wholeHours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -107,8 +107,6 @@
       #${CARD_ID} .lux-hltb-value{display:block;margin-top:3px;color:#fff;font-size:17px;font-weight:900;letter-spacing:-.02em}
       #${CARD_ID} .lux-hltb-note{margin-top:9px;color:#78658f;font-size:9px;line-height:1.4}
       #${CARD_ID}.lux-hltb-loading .lux-hltb-stat{animation:luxHltbPulse 1.15s ease-in-out infinite alternate}
-      #${CARD_ID}.lux-hltb-error{padding:11px 13px}
-      #${CARD_ID}.lux-hltb-error .lux-hltb-head{margin:0}
       @keyframes luxHltbPulse{from{opacity:.56}to{opacity:1}}
       @media(max-width:560px){
         #${CARD_ID} .lux-hltb-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
@@ -184,8 +182,18 @@
     const card = ensureCard();
     if (!card) return;
     const url = safeHltbUrl('', game);
-    card.className = 'lux-hltb-error';
-    card.innerHTML = `<div class="lux-hltb-head"><span class="lux-hltb-title">⏱ Tempo para zerar indisponível</span><a class="lux-hltb-source" href="${url}" target="_blank" rel="noopener noreferrer">Pesquisar no HowLongToBeat ↗</a></div>`;
+    card.className = '';
+    card.innerHTML = `
+      <div class="lux-hltb-head">
+        <span class="lux-hltb-title">⏱ Tempo médio para zerar</span>
+        <a class="lux-hltb-source" href="${url}" target="_blank" rel="noopener noreferrer">Pesquisar no HowLongToBeat ↗</a>
+      </div>
+      <div class="lux-hltb-grid">
+        <div class="lux-hltb-stat"><span class="lux-hltb-label">História principal</span><span class="lux-hltb-value">--</span></div>
+        <div class="lux-hltb-stat"><span class="lux-hltb-label">Principal + extras</span><span class="lux-hltb-value">--</span></div>
+        <div class="lux-hltb-stat"><span class="lux-hltb-label">Complecionista</span><span class="lux-hltb-value">--</span></div>
+      </div>
+      <div class="lux-hltb-note">Dados de duração indisponíveis para este jogo.</div>`;
     hideLegacyLink();
   }
 
