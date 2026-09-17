@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260917-shared-iptv1';
+  const RESET_VERSION = '20260917-loader1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -29,6 +29,7 @@
     './js/auto-login-resilience.js',
     './js/section-transition-loader.js',
     './js/script.js',
+    './js/lux-loader.js',
     './js/synced-catalog.js',
     './js/admin-client-sync.js',
     './js/home-featured-banners.js',
@@ -180,7 +181,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-shared-iptv1');
+  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-loader1');
   loadSync('lux-auto-login-resilience', 'js/auto-login-resilience.js?v=20260915-auto-login-resilience1');
 })();
 
@@ -195,7 +196,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260917-xtream-sync-3-shared-source']);
+  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260917-xtream-sync-4-client-ready']);
   loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
   loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags4']);
   loadModule(['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5']);
