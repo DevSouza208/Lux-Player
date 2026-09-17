@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260915-home-content-rails-2';
+  const VERSION = '20260917-home-content-rails-loader1';
   if (window.__luxHomeContentRailsVersion === VERSION) return;
   window.__luxHomeContentRailsVersion = VERSION;
 
@@ -118,6 +118,44 @@
     catch (_) { return []; }
   }
 
+  let mediaIndexCache = { ref: null, length: -1, movies: [], series: [], movieById: new Map(), movieByUrl: new Map(), movieByName: new Map(), seriesById: new Map(), seriesByUrl: new Map(), seriesByName: new Map() };
+
+  function mediaIndex() {
+    const items = mediaItems();
+    if (mediaIndexCache.ref === items && mediaIndexCache.length === items.length) return mediaIndexCache;
+
+    const movies = [];
+    const series = [];
+    const movieById = new Map();
+    const movieByUrl = new Map();
+    const movieByName = new Map();
+    const seriesById = new Map();
+    const seriesByUrl = new Map();
+    const seriesByName = new Map();
+
+    for (const item of items) {
+      if (!item) continue;
+      const id = String(item.id || '');
+      const url = String(item.url || '');
+      const name = normalize(item.name);
+
+      if (item.type === 'movies') {
+        movies.push(item);
+        if (id && !movieById.has(id)) movieById.set(id, item);
+        if (url && !movieByUrl.has(url)) movieByUrl.set(url, item);
+        if (name && !movieByName.has(name)) movieByName.set(name, item);
+      } else if (item.type === 'series') {
+        series.push(item);
+        if (id && !seriesById.has(id)) seriesById.set(id, item);
+        if (url && !seriesByUrl.has(url)) seriesByUrl.set(url, item);
+        if (name && !seriesByName.has(name)) seriesByName.set(name, item);
+      }
+    }
+
+    mediaIndexCache = { ref: items, length: items.length, movies, series, movieById, movieByUrl, movieByName, seriesById, seriesByUrl, seriesByName };
+    return mediaIndexCache;
+  }
+
   function sectionTemplate(id, title) {
     const section = document.createElement('div');
     section.id = id + 'Section';
@@ -198,22 +236,29 @@
   }
 
   function localMovieForSelection(selection) {
-    const movies = mediaItems().filter(item => item?.type === 'movies');
+    const index = mediaIndex();
     const payload = selection?.payload || {};
     const key = String(selection?.source_key || '');
-    return movies.find(item => String(item.id || '') === key)
-      || movies.find(item => String(item.url || '') === key)
-      || movies.find(item => payload.url && String(item.url || '') === String(payload.url))
-      || movies.find(item => normalize(item.name) === normalize(selection?.title || payload.name));
+    const payloadUrl = String(payload.url || '');
+    const title = normalize(selection?.title || payload.name);
+    return index.movieById.get(key)
+      || index.movieByUrl.get(key)
+      || (payloadUrl ? index.movieByUrl.get(payloadUrl) : null)
+      || index.movieByName.get(title)
+      || null;
   }
 
   function automaticMovies() {
     const year = String(YEAR);
-    return mediaItems().filter(item => {
-      if (item?.type !== 'movies') return false;
+    const out = [];
+    for (const item of mediaIndex().movies) {
       const group = String(item.group || '').toLowerCase();
-      return group.includes(`lançamentos ${year}`) || group.includes(`lancamentos ${year}`) || group.includes(year);
-    });
+      if (group.includes(`lançamentos ${year}`) || group.includes(`lancamentos ${year}`) || group.includes(year)) {
+        out.push(item);
+        if (out.length >= MAX_ITEMS * 3) break;
+      }
+    }
+    return out;
   }
 
   function renderMovieRail(selections) {
@@ -240,25 +285,33 @@
   }
 
   function seriesItems() {
-    return mediaItems().filter(item => item?.type === 'series');
+    return mediaIndex().series;
   }
 
   function resolveLocalSeries(title) {
     const target = normalize(title);
     if (!target) return null;
-    return seriesItems().find(item => normalize(item.name) === target)
-      || seriesItems().find(item => normalize(item.name).startsWith(target + ' '))
-      || null;
+    const index = mediaIndex();
+    const exact = index.seriesByName.get(target);
+    if (exact) return exact;
+    for (const item of index.series) {
+      const name = normalize(item.name);
+      if (name.startsWith(target + ' ')) return item;
+    }
+    return null;
   }
 
   function localSeriesForSelection(selection) {
     const payload = selection?.payload || {};
     const key = String(selection?.source_key || '');
-    const all = seriesItems();
-    return all.find(item => String(item.id || '') === key)
-      || all.find(item => String(item.url || '') === key)
-      || all.find(item => payload.url && String(item.url || '') === String(payload.url))
-      || all.find(item => normalize(item.name) === normalize(selection?.title || payload.name));
+    const payloadUrl = String(payload.url || '');
+    const title = normalize(selection?.title || payload.name);
+    const index = mediaIndex();
+    return index.seriesById.get(key)
+      || index.seriesByUrl.get(key)
+      || (payloadUrl ? index.seriesByUrl.get(payloadUrl) : null)
+      || index.seriesByName.get(title)
+      || null;
   }
 
   function openSeriesItem(item) {
