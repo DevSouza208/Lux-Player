@@ -1,10 +1,11 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-r2-only-roms3';
+  const VERSION = '20260917-r2-only-roms4';
   const GATEWAY_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/roms';
   const GATEWAY_SYNC = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync';
   const SYNC_RETRY_DELAYS = [250, 700, 1500, 3000];
+  const SYNC_BATCH_SIZE = 5;
 
   if (window.__luxR2OnlyRomsVersion === VERSION) return;
   window.__luxR2OnlyRomsVersion = VERSION;
@@ -143,9 +144,24 @@
     status.insertAdjacentElement('afterend', details);
   }
 
+  function collectFailures(result, failures) {
+    const batchFailures = Array.isArray(result?.failures)
+      ? result.failures
+      : (result?.failure ? [result.failure] : []);
+
+    for (const failure of batchFailures) {
+      failures.push({
+        key: String(failure?.key || result?.key || ''),
+        title: String(failure?.title || result?.title || ''),
+        stage: String(failure?.stage || ''),
+        error: String(failure?.error || 'Erro desconhecido')
+      });
+    }
+  }
+
   async function syncGamesCatalogOneByOne() {
     if (!currentUser || currentUser.role !== 'admin') return;
-    const confirmed = window.confirm('Ler todas as ROMs do bucket luxroms uma por vez? ROMs já cadastradas serão puladas e falhas isoladas não interromperão a varredura.');
+    const confirmed = window.confirm(`Ler todas as ROMs do bucket luxroms em lotes de ${SYNC_BATCH_SIZE}? Já cadastradas serão puladas e falhas isoladas não interromperão a varredura.`);
     if (!confirmed) return;
 
     const button = document.getElementById('gameR2SyncButton');
@@ -155,7 +171,7 @@
     if (button) button.disabled = true;
     if (status) {
       status.className = 'mt-3 min-h-[18px] text-xs text-purple-300';
-      status.textContent = 'Iniciando varredura do R2, 1 ROM por vez...';
+      status.textContent = `Iniciando varredura do R2, até ${SYNC_BATCH_SIZE} ROMs por chamada...`;
     }
 
     let cursor = null;
@@ -174,7 +190,8 @@
           result = await requestSyncStep({
             username: currentUser.user,
             password: currentUser.pass,
-            cursor
+            cursor,
+            batchSize: SYNC_BATCH_SIZE
           });
         } catch (error) {
           try {
@@ -182,12 +199,13 @@
               username: currentUser.user,
               password: currentUser.pass,
               cursor,
+              batchSize: SYNC_BATCH_SIZE,
               action: 'skip',
               reason: error?.message || 'Falha de transporte após tentativas.'
             }, 3);
           } catch (skipError) {
             failures.push({
-              key: cursor ? `cursor:${cursor.slice(0, 24)}…` : 'primeiro objeto',
+              key: cursor ? `cursor:${cursor.slice(0, 24)}…` : 'primeiro lote',
               title: '',
               stage: 'advance-failed',
               error: skipError?.message || error?.message || 'Não foi possível avançar o cursor.'
@@ -203,16 +221,10 @@
         existing += Number(result.existing) || 0;
         skipped += Number(result.skipped) || 0;
         failed += Number(result.failed) || 0;
-
-        if (result.failure) failures.push({
-          key: String(result.failure.key || result.key || ''),
-          title: String(result.failure.title || result.title || ''),
-          stage: String(result.failure.stage || ''),
-          error: String(result.failure.error || 'Erro desconhecido')
-        });
+        collectFailures(result, failures);
 
         if (status) {
-          const currentName = result.title || result.key || result.failure?.title || result.failure?.key || 'objeto sem ROM válida';
+          const currentName = result.lastTitle || result.title || result.lastKey || result.key || result.failure?.title || result.failure?.key || 'lote processado';
           status.textContent = `Varrendo R2: ${processed} objeto(s) · ${created} novo(s) · ${existing} já existente(s) · ${failed} falha(s) · ${currentName}`;
         }
 
@@ -221,10 +233,10 @@
         const nextCursor = String(result.nextCursor || '');
         if (!nextCursor) {
           failures.push({
-            key: result.key || '',
-            title: result.title || '',
+            key: result.lastKey || result.key || '',
+            title: result.lastTitle || result.title || '',
             stage: 'cursor',
-            error: 'O gateway não devolveu o cursor da próxima ROM.'
+            error: 'O gateway não devolveu o cursor do próximo lote.'
           });
           failed += 1;
           stoppedEarly = true;
@@ -232,10 +244,10 @@
         }
         if (nextCursor === cursor) {
           failures.push({
-            key: result.key || '',
-            title: result.title || '',
+            key: result.lastKey || result.key || '',
+            title: result.lastTitle || result.title || '',
             stage: 'cursor',
-            error: 'A varredura não avançou para a próxima ROM.'
+            error: 'A varredura não avançou para o próximo lote.'
           });
           failed += 1;
           stoppedEarly = true;
@@ -311,7 +323,8 @@
     canonicalR2Path,
     r2Url,
     isSupabaseRomUrl,
-    syncOneByOne: syncGamesCatalogOneByOne
+    syncOneByOne: syncGamesCatalogOneByOne,
+    batchSize: SYNC_BATCH_SIZE
   };
 
   function hardenAdminUi() {
@@ -324,5 +337,5 @@
 
   hardenAdminUi();
   document.addEventListener('DOMContentLoaded', hardenAdminUi, { once: true });
-  console.info('[Lux Games] R2-only resiliente: pula ROMs existentes, tenta novamente em falhas e registra as que não sincronizaram.');
+  console.info(`[Lux Games] R2-only resiliente: sincronização em lotes de ${SYNC_BATCH_SIZE}, pula existentes e registra falhas.`);
 })();
