@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260917-stability3-https-light';
+  window.__luxRuntimeStabilityFixInstalled = '20260917-stability4-loader';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -199,69 +199,12 @@
     return true;
   };
 
-  const sameProfile = (a, b) => {
-    if (!a || !b) return false;
-    if (a.data_key && b.data_key) return String(a.data_key) === String(b.data_key);
-    return Number(a.slot || 1) === Number(b.slot || 1);
-  };
-
-  const installFastProfileEntry = () => {
-    if (window.__luxFastProfileEntryInstalled) return true;
-    if (typeof window.activateAccountProfile !== 'function' || typeof window.syncCloudProgress !== 'function') return false;
-
-    const originalActivate = window.activateAccountProfile;
-
-    window.activateAccountProfile = async function (profile) {
-      const syncFunction = window.syncCloudProgress;
-      const sharedVodFunction = typeof window.loadSharedVodCatalog === 'function' ? window.loadSharedVodCatalog : null;
-      let deferredSync = false;
-      let deferredSharedVods = false;
-      const deferSyncOnly = async () => { deferredSync = true; };
-      const deferSharedVodsOnly = async () => { deferredSharedVods = true; };
-
-      window.syncCloudProgress = deferSyncOnly;
-      if (sharedVodFunction) window.loadSharedVodCatalog = deferSharedVodsOnly;
-
-      try {
-        return await originalActivate.apply(this, arguments);
-      } finally {
-        if (window.syncCloudProgress === deferSyncOnly) window.syncCloudProgress = syncFunction;
-        if (sharedVodFunction && window.loadSharedVodCatalog === deferSharedVodsOnly) window.loadSharedVodCatalog = sharedVodFunction;
-
-        if (!sameProfile(currentUser?.profile, profile)) return;
-
-        if (deferredSync && typeof syncFunction === 'function') {
-          setTimeout(() => {
-            Promise.resolve(syncFunction()).catch(error => {
-              console.warn('[Lux Play] Sincronização em segundo plano indisponível.', error);
-            });
-          }, 0);
-        }
-
-        if (deferredSharedVods && typeof sharedVodFunction === 'function') {
-          setTimeout(() => {
-            Promise.resolve(sharedVodFunction())
-              .then(() => {
-                try { if (typeof window.setSection === 'function') window.setSection(currentSection || 'home'); } catch (_) {}
-              })
-              .catch(error => {
-                console.warn('[Lux Play] Conteúdos extras indisponíveis no momento.', error);
-              });
-          }, 0);
-        }
-      }
-    };
-
-    window.__luxFastProfileEntryInstalled = true;
-    return true;
-  };
 
   let attempts = 0;
   const install = () => {
     attempts += 1;
     const catalogReady = installCatalogRepair();
-    const profileReady = installFastProfileEntry();
-    if ((catalogReady && profileReady) || attempts >= 240) clearInterval(timer);
+    if (catalogReady || attempts >= 240) clearInterval(timer);
   };
 
   const timer = setInterval(install, 50);
