@@ -1,4 +1,4 @@
-@import url('./mobile-lux-action-docks.css?v=20260917-action-docks2');
+@import url('./mobile-lux-action-docks.css?v=20260917-action-docks3');
 
 /* Lux Console landscape finale. Portrait stays untouched. Desktop stays untouched. */
 @media (max-width: 767px) and (orientation: landscape), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
