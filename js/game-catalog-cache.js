@@ -1,28 +1,149 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-game-catalog-cache4';
+  const VERSION = '20260917-game-catalog-split2';
   const DB_NAME = 'lux-game-catalog-cache';
   const STORE = 'catalogs';
   const DB_VERSION = 1;
-  const FIRST_BOOT_KEY = 'lux-play:catalog-first-bootstrap:v2';
-  const CACHE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+  const FIRST_BOOT_KEY = 'lux-play:catalog-first-bootstrap:v3';
+  const CATALOG_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/catalog';
+  const SPLIT_ROOT = CATALOG_ROOT + '/games';
+  const MANIFEST_URL = SPLIT_ROOT + '/manifest.json';
+  const LEGACY_URL = CATALOG_ROOT + '/games-catalog.json';
+  const MANIFEST_KEY = 'split:v2:manifest';
+  const CONSOLE_KEY_PREFIX = 'split:v2:console:';
+  const FETCH_TIMEOUT_MS = 25000;
 
   if (window.__luxGameCatalogCacheVersion === VERSION) return;
   window.__luxGameCatalogCacheVersion = VERSION;
   let dbPromise = null, refreshPromise = null, firstBootRunning = false;
   const readUser = () => { try { return typeof currentUser !== 'undefined' ? currentUser : null; } catch (_) { return null; } };
-  const profileKey = () => { const u=readUser(); if(!u)return 'guest'; return `${String(u.user||u.id||'account').toLowerCase()}|${String(u.profile?.data_key||u.profile?.slot||'1')}|${String(u.role||'user').toLowerCase()}`; };
-  const firstBootKey = () => `${FIRST_BOOT_KEY}:${profileKey()}`;
+  const isAdmin = () => String(readUser()?.role || '').trim().toLowerCase() === 'admin';
+  const profileKey = () => { const u=readUser(); if(!u)return 'guest'; return [String(u.user||u.id||'account').toLowerCase(),String(u.profile?.data_key||u.profile?.slot||'1'),String(u.role||'user').toLowerCase()].join('|'); };
+  const firstBootKey = () => FIRST_BOOT_KEY + ':' + profileKey();
 
+  function normalizeConsole(value){
+    const key=String(value||'').trim().toLowerCase().replace(/\s+/g,'').replace(/[^a-z0-9_-]/g,'');
+    if(key==='md')return 'megadrive';
+    if(key==='ms')return 'mastersystem';
+    return key;
+  }
   function openDb(){if(!dbPromise)dbPromise=new Promise((resolve,reject)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE,{keyPath:'key'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>{dbPromise=null;reject(r.error);};});return dbPromise;}
   async function tx(mode,operation){const db=await openDb();return new Promise((resolve,reject)=>{const t=db.transaction(STORE,mode),r=operation(t.objectStore(STORE));t.oncomplete=()=>resolve(r?.result);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Cache interrompido.'));});}
-  async function readCache(){try{const r=await tx('readonly',s=>s.get(profileKey()));if(!r||!Array.isArray(r.rows)||!r.rows.length)return null;if(Date.now()-Number(r.updatedAt||0)>CACHE_MAX_AGE)return null;return r;}catch(_){return null;}}
-  async function writeCache(rows){if(!Array.isArray(rows)||!rows.length)return;await tx('readwrite',s=>s.put({key:profileKey(),rows,updatedAt:Date.now()}));console.info('[Lux Games] Catálogo salvo em cache local.',{games:rows.length});}
-  const applyRows=rows=>{const filtered=(Array.isArray(rows)?rows:[]).filter(game=>{try{return typeof profileAllowsMedia==='function'?profileAllowsMedia(game):true;}catch(_){return true;}});try{gamesCatalog=filtered;}catch(_){}return filtered;};
+  async function readRecord(key){try{return await tx('readonly',s=>s.get(key));}catch(_){return null;}}
+  async function writeRecord(key,value){await tx('readwrite',s=>s.put({key,...value,updatedAt:Date.now()}));}
+  function manifestEntries(manifest){return Array.isArray(manifest?.consoles)?manifest.consoles.map(item=>({id:normalizeConsole(item?.id||item?.console),count:Number(item?.count)||0,file:String(item?.file||'').trim()})).filter(item=>item.id&&item.file):[];}
 
-  async function refreshFromServer(original,thisArg,args){if(refreshPromise)return refreshPromise;refreshPromise=Promise.resolve().then(()=>original.apply(thisArg,args)).then(async rows=>{const source=Array.isArray(rows)?rows:(typeof gamesCatalog!=='undefined'&&Array.isArray(gamesCatalog)?gamesCatalog:[]);if(source.length)await writeCache(source);return source;}).finally(()=>{refreshPromise=null;});return refreshPromise;}
-  function installCatalogCache(){const original=window.loadGamesCatalog;if(typeof original!=='function')return false;if(original.__luxGameCatalogCache)return true;const wrapped=async function(...args){const force=args[0]?.force===true||window.__luxForceGameCatalogRefresh===true;if(!force){const cached=await readCache();if(cached?.rows?.length){const rows=applyRows(cached.rows);console.info('[Lux Games] Catálogo carregado do cache local.',{games:rows.length});return rows;}}try{return await refreshFromServer(original,this,args);}catch(error){const cached=await readCache();if(cached?.rows?.length)return applyRows(cached.rows);throw error;}};wrapped.__luxGameCatalogCache=VERSION;wrapped.__luxGameCatalogCacheOriginal=original;try{window.loadGamesCatalog=wrapped;loadGamesCatalog=wrapped;}catch(_){}return true;}
+  async function readCache(){
+    const manifest=(await readRecord(MANIFEST_KEY))?.manifest;
+    const entries=manifestEntries(manifest);
+    if(!entries.length)return null;
+    const records=await Promise.all(entries.map(entry=>readRecord(CONSOLE_KEY_PREFIX+entry.id)));
+    if(records.some(record=>!record||!Array.isArray(record.rows)))return null;
+    return {key:'split',manifest,rows:records.flatMap(record=>record.rows),updatedAt:Math.max(...records.map(record=>Number(record.updatedAt)||0),0)};
+  }
+
+  function profileFilter(rows){return (Array.isArray(rows)?rows:[]).filter(game=>{try{return typeof profileAllowsMedia==='function'?profileAllowsMedia(game):true;}catch(_){return true;}});}
+  async function applyRows(rows,forceVisibility=false){
+    let filtered=profileFilter(rows);
+    if(!isAdmin()){
+      filtered=filtered.filter(game=>String(game?.status||'approved').toLowerCase()==='approved');
+      const visibility=window.LuxGameConsoleVisibility;
+      try{if(visibility?.refresh)await visibility.refresh(Boolean(forceVisibility));}catch(_){}
+      if(visibility?.isEnabled)filtered=filtered.filter(game=>visibility.isEnabled(normalizeConsole(game?.console)));
+    }
+    try{gamesCatalog=filtered;}catch(_){}
+    return filtered;
+  }
+
+  async function fetchJson(url,force=false){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),FETCH_TIMEOUT_MS);
+    try{
+      const finalUrl=force?url+(url.includes('?')?'&':'?')+'v='+Date.now():url;
+      const response=await fetch(finalUrl,{method:'GET',credentials:'omit',cache:force?'no-store':'default',signal:controller.signal});
+      if(!response.ok)throw new Error('Catálogo HTTP '+response.status);
+      return await response.json();
+    }finally{clearTimeout(timer);}
+  }
+
+  async function storeSplit(manifest,payloads){
+    const entries=manifestEntries(manifest);
+    for(let i=0;i<entries.length;i+=1){
+      const payload=payloads[i],rows=Array.isArray(payload?.games)?payload.games:[];
+      await writeRecord(CONSOLE_KEY_PREFIX+entries[i].id,{console:entries[i].id,generatedAt:payload?.generatedAt||manifest.generatedAt||'',rows});
+    }
+    await writeRecord(MANIFEST_KEY,{manifest});
+  }
+
+  async function downloadSplitCatalog(force=false){
+    const manifest=await fetchJson(MANIFEST_URL,force),entries=manifestEntries(manifest);
+    if(!entries.length)throw new Error('Manifesto de jogos vazio ou inválido.');
+    const payloads=await Promise.all(entries.map(async entry=>{
+      const url=entry.file.startsWith('http')?entry.file:SPLIT_ROOT+'/'+entry.file.replace(/^\/+/, '');
+      const payload=await fetchJson(url,force);
+      if(!Array.isArray(payload?.games))throw new Error('Catálogo de '+entry.id+' inválido.');
+      return payload;
+    }));
+    await storeSplit(manifest,payloads);
+    const rows=payloads.flatMap(payload=>payload.games||[]);
+    console.info('[Lux Games] Catálogos por console baixados.',{consoles:entries.length,games:rows.length});
+    return {manifest,rows};
+  }
+
+  async function downloadLegacyCatalog(force=false){
+    const payload=await fetchJson(LEGACY_URL,force),rows=Array.isArray(payload?.games)?payload.games:[];
+    if(!rows.length)throw new Error('Catálogo legado de jogos vazio.');
+    const groups=new Map();
+    for(const game of rows){const id=normalizeConsole(game?.console)||'outros';if(!groups.has(id))groups.set(id,[]);groups.get(id).push(game);}
+    const generatedAt=payload.generatedAt||new Date().toISOString();
+    const entries=[...groups.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([id,games])=>({id,count:games.length,file:id+'.json'}));
+    const manifest={schemaVersion:2,generatedAt,totalCount:rows.length,consoles:entries,legacyFallback:true};
+    const payloads=entries.map(entry=>({schemaVersion:2,generatedAt,console:entry.id,count:groups.get(entry.id).length,games:groups.get(entry.id)}));
+    await storeSplit(manifest,payloads);
+    console.warn('[Lux Games] Catálogo dividido indisponível; arquivo legado dividido localmente.');
+    return {manifest,rows};
+  }
+
+  async function downloadPublicCatalog(force=false){
+    try{return await downloadSplitCatalog(force);}
+    catch(error){console.warn('[Lux Games] Falha no catálogo por console; tentando arquivo legado.',error);return downloadLegacyCatalog(force);}
+  }
+
+  async function loadPublicCatalog(force=false){
+    if(!force){
+      const cached=await readCache();
+      if(cached?.rows?.length){console.info('[Lux Games] Catálogo por console carregado do cache local.',{games:cached.rows.length});return applyRows(cached.rows,false);}
+    }
+    if(refreshPromise)return refreshPromise;
+    refreshPromise=downloadPublicCatalog(force).then(result=>applyRows(result.rows,force)).finally(()=>{refreshPromise=null;});
+    return refreshPromise;
+  }
+
+  function installCatalogCache(){
+    const original=window.loadGamesCatalog;
+    if(typeof original!=='function')return false;
+    if(original.__luxGameCatalogSplit)return true;
+    const wrapped=async function(...args){
+      const force=args[0]?.force===true||window.__luxForceGameCatalogRefresh===true;
+      if(isAdmin()){
+        if(force){try{await downloadPublicCatalog(true);}catch(error){console.warn('[Lux Games] Pré-cache público indisponível no Admin.',error);}}
+        try{return await original.apply(this,args);}
+        catch(error){console.warn('[Lux Games] Fonte administrativa falhou; usando catálogo público.',error);return loadPublicCatalog(force);}
+      }
+      try{return await loadPublicCatalog(force);}
+      catch(error){
+        const cached=await readCache();
+        if(cached?.rows?.length)return applyRows(cached.rows,false);
+        console.warn('[Lux Games] Cloudflare indisponível; tentando fonte original.',error);
+        return original.apply(this,args);
+      }
+    };
+    wrapped.__luxGameCatalogSplit=VERSION;
+    wrapped.__luxGameCatalogCache=VERSION;
+    wrapped.__luxGameCatalogCacheOriginal=original;
+    try{window.loadGamesCatalog=wrapped;loadGamesCatalog=wrapped;}catch(_){}
+    return true;
+  }
 
   async function refreshAllCatalogs(options={}){
     window.__luxForceGameCatalogRefresh=true;
@@ -83,7 +204,7 @@
       try{
         await refreshAllCatalogs({silent:true});
         const cache=await readCache();
-        if(!cache?.rows?.length)throw new Error('Catálogo de jogos não foi salvo no cache local.');
+        if(!cache?.rows?.length)throw new Error('Catálogos de jogos não foram salvos no cache local.');
         localStorage.setItem(firstBootKey(),'done');
         overlay.remove();
         return true;
@@ -102,6 +223,6 @@
   function scheduleFirstLoginBootstrap(){const wait=()=>{const user=readUser();const dashboard=document.getElementById('dashboardScreen');const visible=dashboard&&!dashboard.classList.contains('hidden')&&!dashboard.classList.contains('screen-hidden-down');if(user?.profile&&visible)return setTimeout(bootstrapFirstLogin,100);setTimeout(wait,300);};wait();}
 
   let attempts=0;const timer=setInterval(()=>{attempts+=1;const a=installCatalogCache(),b=installHeaderRefresh();if((a&&b)||attempts>=240)clearInterval(timer);},50);installCatalogCache();installHeaderRefresh();scheduleFirstLoginBootstrap();
-  window.LuxCatalogCache={version:VERSION,refresh:refreshAllCatalogs,read:readCache};
-  console.info('[Lux Games] Cache de catálogo v4 ativo; download obrigatório no primeiro login.');
+  window.LuxCatalogCache={version:VERSION,refresh:refreshAllCatalogs,refreshGames:()=>loadPublicCatalog(true),prefetchGames:()=>downloadPublicCatalog(true),read:readCache};
+  console.info('[Lux Games] Catálogo dividido por console ativo; visibilidade não apaga o cache local.');
 })();
