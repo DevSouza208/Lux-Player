@@ -160,7 +160,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-console-visibility]')) {
   const gameConsoleVisibilityScript = document.createElement('script');
-  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility1';
+  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility2';
   gameConsoleVisibilityScript.async = false;
   gameConsoleVisibilityScript.dataset.luxGameConsoleVisibility = '1';
   document.head.appendChild(gameConsoleVisibilityScript);
