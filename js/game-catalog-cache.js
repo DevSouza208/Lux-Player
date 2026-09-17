@@ -1,17 +1,17 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-game-catalog-split2';
+  const VERSION = '20260917-game-catalog-split3-restore';
   const DB_NAME = 'lux-game-catalog-cache';
   const STORE = 'catalogs';
   const DB_VERSION = 1;
-  const FIRST_BOOT_KEY = 'lux-play:catalog-first-bootstrap:v3';
+  const FIRST_BOOT_KEY = 'lux-play:catalog-first-bootstrap:v4';
   const CATALOG_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/catalog';
   const SPLIT_ROOT = CATALOG_ROOT + '/games';
   const MANIFEST_URL = SPLIT_ROOT + '/manifest.json';
   const LEGACY_URL = CATALOG_ROOT + '/games-catalog.json';
-  const MANIFEST_KEY = 'split:v2:manifest';
-  const CONSOLE_KEY_PREFIX = 'split:v2:console:';
+  const MANIFEST_KEY = 'split:v3:manifest';
+  const CONSOLE_KEY_PREFIX = 'split:v3:console:';
   const FETCH_TIMEOUT_MS = 25000;
 
   if (window.__luxGameCatalogCacheVersion === VERSION) return;
@@ -84,8 +84,11 @@
       if(!Array.isArray(payload?.games))throw new Error('Catálogo de '+entry.id+' inválido.');
       return payload;
     }));
-    await storeSplit(manifest,payloads);
     const rows=payloads.flatMap(payload=>payload.games||[]);
+    const expected=Number(manifest?.totalCount)||entries.reduce((sum,item)=>sum+(Number(item.count)||0),0);
+    if(!rows.length) throw new Error('Os catálogos por console vieram vazios.');
+    if(expected>0 && rows.length<expected) throw new Error('Catálogo por console incompleto: '+rows.length+'/'+expected+'.');
+    await storeSplit(manifest,payloads);
     console.info('[Lux Games] Catálogos por console baixados.',{consoles:entries.length,games:rows.length});
     return {manifest,rows};
   }
@@ -139,8 +142,15 @@
       const force=args[0]?.force===true||window.__luxForceGameCatalogRefresh===true;
       if(isAdmin()){
         if(force){try{await downloadPublicCatalog(true);}catch(error){console.warn('[Lux Games] Pré-cache público indisponível no Admin.',error);}}
-        try{return await original.apply(this,args);}
-        catch(error){console.warn('[Lux Games] Fonte administrativa falhou; usando catálogo público.',error);return loadPublicCatalog(force);}
+        try{
+          const adminRows=await original.apply(this,args);
+          if(Array.isArray(adminRows) && adminRows.length) return adminRows;
+          console.warn('[Lux Games] Fonte administrativa retornou vazia; restaurando catálogo público.');
+          return loadPublicCatalog(force);
+        }catch(error){
+          console.warn('[Lux Games] Fonte administrativa falhou; usando catálogo público.',error);
+          return loadPublicCatalog(force);
+        }
       }
       try{return await loadPublicCatalog(force);}
       catch(error){
@@ -236,5 +246,5 @@
 
   let attempts=0;const timer=setInterval(()=>{attempts+=1;const a=installCatalogCache(),b=installHeaderRefresh();if((a&&b)||attempts>=240)clearInterval(timer);},50);installCatalogCache();installHeaderRefresh();scheduleFirstLoginBootstrap();
   window.LuxCatalogCache={version:VERSION,refresh:refreshAllCatalogs,refreshGames:()=>loadPublicCatalog(true),prefetchGames:()=>downloadPublicCatalog(true),read:readCache};
-  console.info('[Lux Games] Catálogo dividido por console ativo; visibilidade não apaga o cache local.');
+  console.info('[Lux Games] Catálogo dividido restaurado; cache antigo ignorado e fallback legado ativo.');
 })();
