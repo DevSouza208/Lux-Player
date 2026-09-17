@@ -112,7 +112,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-storage-mode]')) {
   const romStorageModeScript = document.createElement('script');
-  romStorageModeScript.src = 'js/game-rom-storage-mode.js?v=20260917-rom-storage-mode2';
+  romStorageModeScript.src = 'js/game-rom-storage-mode.js?v=20260917-rom-storage-mode3-local-first';
   romStorageModeScript.async = true;
   romStorageModeScript.dataset.luxRomStorageMode = '1';
   document.head.appendChild(romStorageModeScript);
