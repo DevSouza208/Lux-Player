@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260917-xtream-sync-5-compact-client';
+  const BRIDGE_VERSION = '20260917-xtream-sync-6-streamed-client';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -294,33 +294,82 @@
     if (!manifest?.files || !manifest?.playlist) throw new Error('Manifesto do catálogo está incompleto.');
 
     const clientReady = manifest.clientReady === true || Number(manifest.schemaVersion) >= 4;
-    const [
-      liveCategories,
-      movieCategories,
-      seriesCategories,
-      live,
-      movies,
-      series,
-      playlistText
-    ] = await Promise.all([
-      fetchJson(manifest.files.liveCategories),
-      fetchJson(manifest.files.movieCategories),
-      fetchJson(manifest.files.seriesCategories),
-      fetchJson(manifest.files.live),
-      fetchJson(manifest.files.movies),
-      fetchJson(manifest.files.series),
-      clientReady ? Promise.resolve('') : fetchText(manifest.playlist)
-    ]);
+    let built;
 
-    const built = buildCatalogItems({
-      playlistText,
-      liveCategories,
-      movieCategories,
-      seriesCategories,
-      live,
-      movies,
-      series
-    });
+    if (clientReady) {
+      // Categorias são pequenas. Os três catálogos grandes entram um por vez
+      // para não manter live + filmes + séries brutos simultaneamente na memória.
+      const [liveCategories, movieCategories, seriesCategories] = await Promise.all([
+        fetchJson(manifest.files.liveCategories),
+        fetchJson(manifest.files.movieCategories),
+        fetchJson(manifest.files.seriesCategories)
+      ]);
+
+      const items = [];
+      const stats = {
+        rawM3u: 0,
+        groupedM3u: 0,
+        official: 0,
+        matchedLive: 0,
+        matchedMovies: 0,
+        matchedSeries: 0,
+        officialSeries: 0
+      };
+
+      const consume = async (kind, url) => {
+        const rows = await fetchJson(url);
+        const partial = buildCatalogItems({
+          playlistText: '',
+          liveCategories,
+          movieCategories,
+          seriesCategories,
+          live: kind === 'live' ? rows : [],
+          movies: kind === 'movies' ? rows : [],
+          series: kind === 'series' ? rows : []
+        });
+        items.push(...partial.items);
+        stats.official += partial.stats.official;
+        stats.matchedLive += partial.stats.matchedLive;
+        stats.matchedMovies += partial.stats.matchedMovies;
+        stats.matchedSeries += partial.stats.matchedSeries;
+        stats.officialSeries += partial.stats.officialSeries;
+        await new Promise(resolve => setTimeout(resolve, 0));
+      };
+
+      await consume('live', manifest.files.live);
+      await consume('movies', manifest.files.movies);
+      await consume('series', manifest.files.series);
+      built = { items, stats };
+    } else {
+      // Compatibilidade temporária com manifestos antigos.
+      const [
+        playlistText,
+        liveCategories,
+        movieCategories,
+        seriesCategories,
+        live,
+        movies,
+        series
+      ] = await Promise.all([
+        fetchText(manifest.playlist),
+        fetchJson(manifest.files.liveCategories),
+        fetchJson(manifest.files.movieCategories),
+        fetchJson(manifest.files.seriesCategories),
+        fetchJson(manifest.files.live),
+        fetchJson(manifest.files.movies),
+        fetchJson(manifest.files.series)
+      ]);
+
+      built = buildCatalogItems({
+        playlistText,
+        liveCategories,
+        movieCategories,
+        seriesCategories,
+        live,
+        movies,
+        series
+      });
+    }
 
     if (!built.items.length) throw new Error('Catálogo HTTPS não retornou itens utilizáveis.');
 
