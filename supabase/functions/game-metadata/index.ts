@@ -8,6 +8,7 @@ const corsHeaders = {
 
 function consoleFromPlatforms(platforms: Array<{ name?: string }> = []) {
   const names = platforms.map(platform => (platform.name || '').toLowerCase());
+  if (names.some(name => name.includes('arcade'))) return 'arcade';
   if (names.some(name => name.includes('game boy advance'))) return 'gba';
   if (names.some(name => name.includes('super nintendo') || name.includes('snes'))) return 'snes';
   if (names.some(name => name.includes('master system') || name.includes('sega master'))) return 'mastersystem';
@@ -20,42 +21,42 @@ function consoleFromPlatforms(platforms: Array<{ name?: string }> = []) {
   return '';
 }
 
-
 async function igdbGames(query:string) {
-    const clientId = Deno.env.get('IGDB_CLIENT_ID');
-    const clientSecret = Deno.env.get('IGDB_CLIENT_SECRET');
-    if (!clientId || !clientSecret) throw new Error('IGDB_CLIENT_ID e IGDB_CLIENT_SECRET não foram configurados');
+  const clientId = Deno.env.get('IGDB_CLIENT_ID');
+  const clientSecret = Deno.env.get('IGDB_CLIENT_SECRET');
+  if (!clientId || !clientSecret) throw new Error('IGDB_CLIENT_ID e IGDB_CLIENT_SECRET não foram configurados');
 
-    const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: 'client_credentials' }), signal: AbortSignal.timeout(6000)
-    });
-    if (!tokenResponse.ok) throw new Error('Não foi possível autenticar no IGDB');
-    const { access_token } = await tokenResponse.json();
+  const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: 'client_credentials' }),
+    signal: AbortSignal.timeout(6000)
+  });
+  if (!tokenResponse.ok) throw new Error('Não foi possível autenticar no IGDB');
+  const { access_token } = await tokenResponse.json();
 
-    const escapedQuery = query.trim().replace(/["\\\u0000-\u001f]/g, ' ');
-    const igdbResponse = await fetch('https://api.igdb.com/v4/games', {
-      method: 'POST',
-      headers: { 'Client-ID': clientId, Authorization: `Bearer ${access_token}` },
-      body: `search "${escapedQuery}"; fields name,url,summary,first_release_date,genres.name,cover.image_id,platforms.name; limit 8;`, signal: AbortSignal.timeout(6000)
-    });
-    if (!igdbResponse.ok) throw new Error('A busca no IGDB falhou');
-    const games = await igdbResponse.json();
+  const escapedQuery = query.trim().replace(/["\\\u0000-\u001f]/g, ' ');
+  const igdbResponse = await fetch('https://api.igdb.com/v4/games', {
+    method: 'POST',
+    headers: { 'Client-ID': clientId, Authorization: `Bearer ${access_token}` },
+    body: `search "${escapedQuery}"; fields name,url,summary,first_release_date,genres.name,cover.image_id,platforms.name; limit 12;`,
+    signal: AbortSignal.timeout(6000)
+  });
+  if (!igdbResponse.ok) throw new Error('A busca no IGDB falhou');
+  const games = await igdbResponse.json();
 
-    const results = games.map((game: any) => ({
-      external_id: String(game.id),
-      source_url: game.url || 'https://www.igdb.com',
-      title: game.name || '',
-      synopsis: game.summary || '',
-      release_year: game.first_release_date ? new Date(game.first_release_date * 1000).getUTCFullYear() : null,
-      genres: (game.genres || []).map((genre: { name?: string }) => genre.name).filter(Boolean),
-      console: consoleFromPlatforms(game.platforms),
-      cover_url: game.cover?.image_id ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${game.cover.image_id}.jpg` : ''
-    }));
+  const results = games.map((game: any) => ({
+    external_id: String(game.id),
+    source_url: game.url || 'https://www.igdb.com',
+    title: game.name || '',
+    synopsis: game.summary || '',
+    release_year: game.first_release_date ? new Date(game.first_release_date * 1000).getUTCFullYear() : null,
+    genres: (game.genres || []).map((genre: { name?: string }) => genre.name).filter(Boolean),
+    console: consoleFromPlatforms(game.platforms),
+    cover_url: game.cover?.image_id ? `https://images.igdb.com/igdb/image/upload/t_cover_big/${game.cover.image_id}.jpg` : ''
+  }));
 
-
- return results.map(game=>({...game,metadata_source:'igdb',attribution:'IGDB'}));
+  return results.map(game => ({ ...game, metadata_source: 'igdb', attribution: 'IGDB' }));
 }
 
 Deno.serve(async (request) => {
@@ -80,12 +81,14 @@ Deno.serve(async (request) => {
 
     const cleanQuery=query.replace(/\([^)]*\)|\[[^\]]*\]/g,' ').replace(/\.[a-z0-9]{2,4}$/i,'').replace(/\s+/g,' ').trim();
     if(cleanQuery.length<2)return Response.json({error:'Informe o nome do jogo.'},{status:400,headers:corsHeaders});
+
     const sources=await Promise.allSettled([igdbGames(cleanQuery),wikiGames(cleanQuery,'pt'),wikiGames(cleanQuery,'en'),pokemonHacks(cleanQuery)]);
-    const results=sources.flatMap(result=>result.status==='fulfilled'?result.value:[]);
+    const results=sources
+      .flatMap(result=>result.status==='fulfilled'?result.value:[])
+      .sort((a:any,b:any)=>Number(Boolean(b.console))-Number(Boolean(a.console)));
     const warnings=sources.map((result,index)=>result.status==='rejected'?['IGDB','Wikipédia PT','Wikipedia EN','PokéAggregator'][index]:null).filter(Boolean);
     return Response.json({results,warnings}, {headers:corsHeaders});
   } catch (error) {
     return Response.json({ error: error.message || 'Erro ao buscar metadados' }, { status: 500, headers: corsHeaders });
   }
 });
-
