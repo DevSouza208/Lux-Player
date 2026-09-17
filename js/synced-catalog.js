@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260917-xtream-sync-4-client-ready';
+  const BRIDGE_VERSION = '20260917-xtream-sync-5-compact-client';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -168,13 +168,14 @@
       if (m3u) matchedLive += 1;
       const groupName = liveCatMap[String(item.category_id)] || 'Canais';
       parsedItems.push({
-        ...item,
         id: parsedItems.length,
         stream_id: item.stream_id,
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
         logo: item.stream_icon || m3u?.logo || '',
         url: item.playback_url || item.url || item.direct_source || m3u?.url || '',
+        direct_source: item.direct_source || '',
+        added: item.added || '',
         type: 'live',
         source: 'synced-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
@@ -187,13 +188,19 @@
       if (m3u) matchedMovies += 1;
       const groupName = movieCatMap[String(item.category_id)] || 'Filmes';
       parsedItems.push({
-        ...item,
         id: parsedItems.length,
         stream_id: item.stream_id,
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
         logo: item.stream_icon || m3u?.logo || '',
         url: item.playback_url || item.url || item.direct_source || m3u?.url || '',
+        direct_source: item.direct_source || '',
+        container_extension: item.container_extension || 'mp4',
+        rating: item.rating || '',
+        plot: item.plot || '',
+        genre: item.genre || '',
+        releaseDate: item.releaseDate || '',
+        added: item.added || '',
         type: 'movies',
         source: 'synced-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
@@ -205,12 +212,16 @@
       if (m3uSeries) matchedSeries += 1;
       const groupName = seriesCatMap[String(item.category_id)] || 'Séries';
       parsedItems.push({
-        ...item,
         id: parsedItems.length,
         series_id: item.series_id,
         name: item.name || m3uSeries?.name || 'Sem título',
         group: groupName,
         logo: item.cover || m3uSeries?.logo || '',
+        backdrop_path: Array.isArray(item.backdrop_path) ? item.backdrop_path : [],
+        rating: item.rating || '',
+        plot: item.plot || '',
+        genre: item.genre || '',
+        releaseDate: item.releaseDate || '',
         type: 'series',
         source: 'synced-xtream',
         m3uEpisodes: m3uSeries?.m3uEpisodes || null,
