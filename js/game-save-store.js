@@ -160,7 +160,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-console-visibility]')) {
   const gameConsoleVisibilityScript = document.createElement('script');
-  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility5-nondestructive';
+  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility6-render-only';
   gameConsoleVisibilityScript.async = false;
   gameConsoleVisibilityScript.dataset.luxGameConsoleVisibility = '1';
   document.head.appendChild(gameConsoleVisibilityScript);
@@ -168,7 +168,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-catalog-cache]')) {
   const gameCatalogCacheScript = document.createElement('script');
-  gameCatalogCacheScript.src = 'js/game-catalog-cache.js?v=20260917-game-catalog-split3-restore';
+  gameCatalogCacheScript.src = 'js/game-catalog-cache.js?v=20260917-game-catalog-split4-loader';
   gameCatalogCacheScript.async = false;
   gameCatalogCacheScript.dataset.luxGameCatalogCache = '1';
   document.head.appendChild(gameCatalogCacheScript);
@@ -206,10 +206,4 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   document.head.appendChild(customControlsScript);
 }
 
-if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-profile-entry-fastboot]')) {
-  const profileEntryFastbootScript = document.createElement('script');
-  profileEntryFastbootScript.src = 'js/profile-entry-fastboot.js?v=20260917-profile-fastboot3';
-  profileEntryFastbootScript.async = false;
-  profileEntryFastbootScript.dataset.luxProfileEntryFastboot = '1';
-  document.head.appendChild(profileEntryFastbootScript);
-}
+// Profile entry is coordinated by LuxLoader; legacy fastboot wrapper removed.
