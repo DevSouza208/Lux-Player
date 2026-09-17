@@ -184,8 +184,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           }
         } catch (_) {}
       }
-      if (xtreamSource) {
-        candidates.push({ kind: 'xtream', label: 'Xtream Codes detectado na M3U', ...xtreamSource });
+      if (xtreamSource && isElectron) {
+        candidates.push({ kind: 'xtream', label: 'Xtream Codes direto (Electron)', ...xtreamSource });
       }
 
       const addM3uCandidate = (value, label) => {
@@ -194,13 +194,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         candidates.push({ kind: 'm3u-url', label, value });
       };
 
-      // Sem Xtream funcional: Electron tenta HTTP original; navegador/PWA tenta HTTPS sincronizado.
+      // Navegador/PWA consome somente a cópia HTTPS preparada pelo Worker.
+      // A URL original do fornecedor fica restrita ao Electron como fallback técnico.
       if (isElectron) {
         addM3uCandidate(m3uOriginal, 'Lista M3U original (Electron)');
         addM3uCandidate(m3uHttps, 'Lista M3U HTTPS sincronizada');
       } else {
         addM3uCandidate(m3uHttps, 'Lista M3U HTTPS sincronizada');
-        addM3uCandidate(m3uOriginal, 'Lista M3U original (fallback HTTP)');
       }
       if (/^m3u-storage:[a-f0-9-]{36}$/i.test(m3uOriginal)) {
         candidates.push({ kind: 'm3u-storage', label: 'Arquivo M3U no Supabase', value: m3uOriginal });
@@ -1874,6 +1874,33 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
+    const PLAYLIST_SYNC_WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
+
+    async function prepareAdminUserHttpsCatalog(targetUsername, force = false) {
+      const admin = currentUser;
+      if (!admin || String(admin.role || '').toLowerCase() !== 'admin') {
+        throw new Error('A sessão de administrador não está disponível para preparar o HTTPS.');
+      }
+      const response = await fetch(PLAYLIST_SYNC_WORKER_BASE + '/sync-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: admin.user,
+          password: admin.pass,
+          targetUsername,
+          force: Boolean(force)
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.ok || payload?.result?.status === 'error') {
+        throw new Error(payload?.error || payload?.result?.message || ('Worker respondeu HTTP ' + response.status));
+      }
+      if (!/^https:\/\//i.test(String(payload?.result?.url || ''))) {
+        throw new Error('A fonte foi salva, mas o Worker não devolveu uma URL HTTPS pronta.');
+      }
+      return payload.result;
+    }
+
     async function adminCreateUser() {
       if (currentUser?.role !== 'admin' || adminUserSaving) return;
       const editing = editingAdminUsername;
@@ -1928,7 +1955,29 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           if (localStorage.getItem('lux_auth_user')) localStorage.setItem('lux_auth_pass', currentUser.pass);
           document.getElementById('userExpiryBadge').textContent = currentUser.dueDate ? `Val: ${currentUser.dueDate}` : 'Val: Ilimitada';
         }
-        alert(editing ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!');
+        let playlistSyncError = null;
+        let playlistSyncResult = null;
+        if (/^https?:\/\//i.test(String(record.lista_m3u || '').trim())) {
+          submit.textContent = 'Preparando HTTPS...';
+          try {
+            // Novo usuário reaproveita uma fonte idêntica já pronta. Se a fonte
+            // ainda não existir, o Worker a cria antes de liberarmos a conta.
+            playlistSyncResult = await prepareAdminUserHttpsCatalog(usuario, false);
+          } catch (error) {
+            playlistSyncError = error;
+            console.warn('[Lux Play] Cliente salvo, mas a fonte HTTPS ainda não ficou pronta.', error);
+          }
+        }
+
+        if (playlistSyncError) {
+          alert((editing ? 'Cliente atualizado.' : 'Cliente cadastrado.') + '\n\nA fonte HTTPS ainda não ficou pronta: ' + playlistSyncError.message);
+        } else if (playlistSyncResult?.reused) {
+          alert((editing ? 'Cliente atualizado' : 'Cliente cadastrado') + ' e conectado à fonte HTTPS compartilhada!');
+        } else if (playlistSyncResult) {
+          alert((editing ? 'Cliente atualizado' : 'Cliente cadastrado') + ' e fonte HTTPS preparada!');
+        } else {
+          alert(editing ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!');
+        }
         document.getElementById('adminNewName').value = '';
         document.getElementById('adminNewUser').value = '';
         document.getElementById('adminNewPass').value = '';
