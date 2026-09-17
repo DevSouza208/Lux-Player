@@ -103,7 +103,7 @@ function removeLocalProfileSaves(user) {
   });
 }
 
-// Game services bootstrap: hybrid ROM storage, storage mode, local-file playback and emulator performance stay outside index.html.
+// Game services bootstrap: hybrid ROM storage, storage mode, local-file playback, cleanup and emulator performance stay outside index.html.
 if (!document.querySelector('script[data-lux-rom-hybrid-storage]')) {
   const romStorageScript = document.createElement('script');
   romStorageScript.src = 'js/game-rom-hybrid-storage.js?v=20260916-hybrid-rom-storage1';
@@ -126,6 +126,14 @@ if (!document.querySelector('script[data-lux-rom-playback-file]')) {
   romPlaybackFileScript.async = true;
   romPlaybackFileScript.dataset.luxRomPlaybackFile = '1';
   document.head.appendChild(romPlaybackFileScript);
+}
+
+if (!document.querySelector('script[data-lux-rom-cleanup]')) {
+  const romCleanupScript = document.createElement('script');
+  romCleanupScript.src = 'js/game-rom-cleanup.js?v=20260917-rom-cleanup1';
+  romCleanupScript.async = true;
+  romCleanupScript.dataset.luxRomCleanup = '1';
+  document.head.appendChild(romCleanupScript);
 }
 
 if (!document.querySelector('script[data-lux-emulator-performance]')) {
