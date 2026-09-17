@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-game-console-visibility5-nondestructive';
+  const VERSION = '20260917-game-console-visibility6-render-only';
   const CACHE_KEY = 'lux-play:game-console-visibility:v2';
   const FUNCTION_NAME = 'game-console-visibility';
 
@@ -125,23 +125,8 @@
   }
 
   function patchCatalogLoader() {
-    if (typeof loadGamesCatalog !== 'function' || loadGamesCatalog.__luxConsoleVisibilityPatched) return false;
-    const originalLoadGamesCatalog = loadGamesCatalog;
-
-    const patchedLoadGamesCatalog = async function (...args) {
-      const rows = await originalLoadGamesCatalog.apply(this, args);
-      const source = Array.isArray(rows) ? rows : (Array.isArray(gamesCatalog) ? gamesCatalog : []);
-      if (isAdmin()) return source;
-
-      await refreshVisibility(false);
-      const visible = filterPublicCatalog(source);
-      return visible;
-    };
-
-    patchedLoadGamesCatalog.__luxConsoleVisibilityPatched = VERSION;
-    patchedLoadGamesCatalog.__luxConsoleVisibilityOriginal = originalLoadGamesCatalog;
-    loadGamesCatalog = patchedLoadGamesCatalog;
-    try { window.loadGamesCatalog = patchedLoadGamesCatalog; } catch (_) {}
+    // O catálogo canônico agora pertence ao LuxCatalogCache.
+    // Este módulo controla somente visibilidade na renderização.
     return true;
   }
 
@@ -346,8 +331,11 @@
     if (!isAdmin()) return;
 
     try {
-      await loadGamesCatalog();
-      const pending = (Array.isArray(gamesCatalog) ? gamesCatalog : []).filter(game => game.status !== 'approved');
+      const adminRows = window.LuxCatalogCache?.loadAdmin
+        ? await window.LuxCatalogCache.loadAdmin()
+        : await loadGamesCatalog({ adminSource: true });
+      gamesCatalog = Array.isArray(adminRows) ? adminRows : (Array.isArray(gamesCatalog) ? gamesCatalog : []);
+      const pending = gamesCatalog.filter(game => game.status !== 'approved');
       if (!pending.length) {
         window.alert?.('Não há jogos não aprovados para revisar.');
         return;
@@ -422,5 +410,5 @@
     reviewPendingByConsole: reviewUnapprovedGamesByConsole,
   };
 
-  console.info('[Lux Games] Controle global de visibilidade e revisão por console ativos.');
+  console.info('[Lux Games] Visibilidade de consoles desacoplada do catálogo; ocultar não altera os dados salvos.');
 })();
