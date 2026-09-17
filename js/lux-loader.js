@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-loader1';
+  const VERSION = '20260917-loader2';
   if (window.LuxLoader?.version === VERSION) return;
 
   const taskNames = ['media', 'games', 'progress', 'vod', 'reading', 'notifications', 'saves'];
@@ -162,6 +162,7 @@
     const task = states[name];
     const runner = runners[name];
     if (!task || !runner) return null;
+    if (task.state === 'ready' && !options.force) return task.result;
     if (task.promise && !options.force) return task.promise;
 
     const userKey = currentAccountKey();
