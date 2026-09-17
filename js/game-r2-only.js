@@ -1,9 +1,10 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-r2-only-roms2';
+  const VERSION = '20260917-r2-only-roms3';
   const GATEWAY_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/roms';
   const GATEWAY_SYNC = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync';
+  const SYNC_RETRY_DELAYS = [250, 700, 1500, 3000];
 
   if (window.__luxR2OnlyRomsVersion === VERSION) return;
   window.__luxR2OnlyRomsVersion = VERSION;
@@ -80,13 +81,77 @@
     loadGamesCatalog = patchedLoadGamesCatalog;
   }
 
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function requestSyncStep(payload, maxAttempts = SYNC_RETRY_DELAYS.length + 1) {
+    let lastError = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        let response;
+        try {
+          response = await fetch(GATEWAY_SYNC, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Gateway HTTP ${response.status}`);
+        return result;
+      } catch (error) {
+        lastError = error;
+        if (attempt >= maxAttempts - 1) break;
+        await sleep(SYNC_RETRY_DELAYS[Math.min(attempt, SYNC_RETRY_DELAYS.length - 1)]);
+      }
+    }
+    throw lastError || new Error('Falha desconhecida ao sincronizar.');
+  }
+
+  function renderFailureReport(status, failures) {
+    const previous = document.getElementById('gameR2SyncFailures');
+    previous?.remove();
+    if (!status || !failures.length) return;
+
+    const details = document.createElement('details');
+    details.id = 'gameR2SyncFailures';
+    details.className = 'mt-3 rounded-xl border border-rose-800/50 bg-rose-950/20 px-3 py-2 text-[11px] text-rose-200';
+
+    const summary = document.createElement('summary');
+    summary.className = 'cursor-pointer font-bold';
+    summary.textContent = `${failures.length} ROM(s) não sincronizada(s) — clique para ver`;
+    details.appendChild(summary);
+
+    const list = document.createElement('div');
+    list.className = 'mt-2 max-h-56 space-y-2 overflow-y-auto';
+    failures.forEach((failure, index) => {
+      const row = document.createElement('div');
+      row.className = 'rounded-lg border border-rose-900/40 bg-black/20 px-2 py-1.5';
+      const name = failure.title || failure.key || `Objeto ${index + 1}`;
+      const stage = failure.stage ? ` · ${failure.stage}` : '';
+      row.textContent = `${name}${stage}: ${failure.error || 'Erro desconhecido'}`;
+      list.appendChild(row);
+    });
+    details.appendChild(list);
+
+    status.insertAdjacentElement('afterend', details);
+  }
+
   async function syncGamesCatalogOneByOne() {
     if (!currentUser || currentUser.role !== 'admin') return;
-    const confirmed = window.confirm('Ler todas as ROMs do bucket luxroms uma por vez? Cada chamada do Worker processará apenas 1 objeto para evitar excesso de subrequests.');
+    const confirmed = window.confirm('Ler todas as ROMs do bucket luxroms uma por vez? ROMs já cadastradas serão puladas e falhas isoladas não interromperão a varredura.');
     if (!confirmed) return;
 
     const button = document.getElementById('gameR2SyncButton');
     const status = document.getElementById('gameR2SyncStatus');
+    document.getElementById('gameR2SyncFailures')?.remove();
+
     if (button) button.disabled = true;
     if (status) {
       status.className = 'mt-3 min-h-[18px] text-xs text-purple-300';
@@ -96,50 +161,109 @@
     let cursor = null;
     let processed = 0;
     let created = 0;
-    let updated = 0;
+    let existing = 0;
     let skipped = 0;
+    let failed = 0;
+    let stoppedEarly = false;
+    const failures = [];
 
     try {
       while (true) {
-        const response = await fetch(GATEWAY_SYNC, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: currentUser.user, password: currentUser.pass, cursor })
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || `Gateway HTTP ${response.status}`);
+        let result;
+        try {
+          result = await requestSyncStep({
+            username: currentUser.user,
+            password: currentUser.pass,
+            cursor
+          });
+        } catch (error) {
+          try {
+            result = await requestSyncStep({
+              username: currentUser.user,
+              password: currentUser.pass,
+              cursor,
+              action: 'skip',
+              reason: error?.message || 'Falha de transporte após tentativas.'
+            }, 3);
+          } catch (skipError) {
+            failures.push({
+              key: cursor ? `cursor:${cursor.slice(0, 24)}…` : 'primeiro objeto',
+              title: '',
+              stage: 'advance-failed',
+              error: skipError?.message || error?.message || 'Não foi possível avançar o cursor.'
+            });
+            failed += 1;
+            stoppedEarly = true;
+            break;
+          }
+        }
 
         processed += Number(result.processed) || 0;
         created += Number(result.created) || 0;
-        updated += Number(result.updated) || 0;
+        existing += Number(result.existing) || 0;
         skipped += Number(result.skipped) || 0;
+        failed += Number(result.failed) || 0;
+
+        if (result.failure) failures.push({
+          key: String(result.failure.key || result.key || ''),
+          title: String(result.failure.title || result.title || ''),
+          stage: String(result.failure.stage || ''),
+          error: String(result.failure.error || 'Erro desconhecido')
+        });
 
         if (status) {
-          const currentName = result.title || result.key || 'objeto sem ROM válida';
-          status.textContent = `Varrendo R2: ${processed} objeto(s) processado(s) · ${currentName}`;
+          const currentName = result.title || result.key || result.failure?.title || result.failure?.key || 'objeto sem ROM válida';
+          status.textContent = `Varrendo R2: ${processed} objeto(s) · ${created} novo(s) · ${existing} já existente(s) · ${failed} falha(s) · ${currentName}`;
         }
 
         if (result.done) break;
-        const nextCursor = String(result.nextCursor || '');
-        if (!nextCursor) throw new Error('O gateway não devolveu o cursor da próxima ROM.');
-        if (nextCursor === cursor) throw new Error('A varredura não avançou para a próxima ROM.');
-        cursor = nextCursor;
 
-        await new Promise(resolve => setTimeout(resolve, 80));
+        const nextCursor = String(result.nextCursor || '');
+        if (!nextCursor) {
+          failures.push({
+            key: result.key || '',
+            title: result.title || '',
+            stage: 'cursor',
+            error: 'O gateway não devolveu o cursor da próxima ROM.'
+          });
+          failed += 1;
+          stoppedEarly = true;
+          break;
+        }
+        if (nextCursor === cursor) {
+          failures.push({
+            key: result.key || '',
+            title: result.title || '',
+            stage: 'cursor',
+            error: 'A varredura não avançou para a próxima ROM.'
+          });
+          failed += 1;
+          stoppedEarly = true;
+          break;
+        }
+
+        cursor = nextCursor;
+        await sleep(120);
       }
 
       await loadGamesCatalog();
       await renderGamesCatalog();
+
       if (status) {
-        status.className = 'mt-3 min-h-[18px] text-xs text-emerald-300';
-        status.textContent = `Varredura concluída: ${processed} objeto(s), ${created} novo(s), ${updated} atualizado(s) e ${skipped} ignorado(s).`;
+        status.className = `mt-3 min-h-[18px] text-xs ${failed ? 'text-amber-300' : 'text-emerald-300'}`;
+        const ending = stoppedEarly ? ' Varredura encerrada antes do fim.' : '';
+        status.textContent = `Varredura ${stoppedEarly ? 'parcial' : 'concluída'}: ${processed} objeto(s), ${created} novo(s), ${existing} já existente(s), ${skipped} ignorado(s) e ${failed} falha(s).${ending}`;
       }
+
+      renderFailureReport(status, failures);
+      if (failures.length) console.warn('[Lux Games] ROMs não sincronizadas:', failures);
     } catch (error) {
-      console.error('Falha ao sincronizar jogos do R2 um por um:', error);
+      console.error('Falha inesperada na varredura do R2:', error);
+      failures.push({ key: '', title: '', stage: 'unexpected', error: error?.message || 'erro desconhecido' });
+      renderFailureReport(status, failures);
       if (status) {
         status.className = 'mt-3 min-h-[18px] text-xs text-rose-300';
-        const message = typeof gameImportErrorMessage === 'function' ? gameImportErrorMessage(error) : (error?.message || 'erro desconhecido');
-        status.textContent = `Varredura interrompida após ${processed} objeto(s): ${message}`;
+        status.textContent = `Varredura interrompida após ${processed} objeto(s): ${error?.message || 'erro desconhecido'}`;
       }
     } finally {
       if (button) button.disabled = false;
@@ -200,5 +324,5 @@
 
   hardenAdminUi();
   document.addEventListener('DOMContentLoaded', hardenAdminUi, { once: true });
-  console.info('[Lux Games] R2-only ativo: ROMs do Supabase são ignoradas e a sincronização varre o R2 uma ROM por requisição.');
+  console.info('[Lux Games] R2-only resiliente: pula ROMs existentes, tenta novamente em falhas e registra as que não sincronizaram.');
 })();
