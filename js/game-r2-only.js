@@ -1,9 +1,10 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-r2-only-roms5';
+  const VERSION = '20260917-r2-only-roms6';
   const GATEWAY_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/roms';
   const GATEWAY_SYNC = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync';
+  const GATEWAY_PUBLISH = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/catalog/publish';
   const SYNC_RETRY_DELAYS = [250, 700, 1500, 3000];
   const SYNC_BATCH_SIZE = 5;
 
@@ -113,6 +114,64 @@
       }
     }
     throw lastError || new Error('Falha desconhecida ao sincronizar.');
+  }
+
+  async function publishGamesCatalogToR2() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+
+    const button = document.getElementById('gameCatalogPublishButton');
+    const status = document.getElementById('gameR2SyncStatus');
+    const previousText = button?.textContent || 'Atualizar catálogo';
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Atualizando catálogo...';
+    }
+    if (status) {
+      status.className = 'mt-3 min-h-[18px] text-xs text-purple-300';
+      status.textContent = 'Gerando o catálogo público de jogos no Cloudflare...';
+    }
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+      let response;
+      try {
+        response = await fetch(GATEWAY_PUBLISH, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: currentUser.user,
+            password: currentUser.pass
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Gateway HTTP ${response.status}`);
+
+      if (status) {
+        status.className = 'mt-3 min-h-[18px] text-xs text-emerald-300';
+        status.textContent = `Catálogo público atualizado: ${Number(result.count) || 0} jogo(s) · ${result.generatedAt ? new Date(result.generatedAt).toLocaleString('pt-BR') : 'agora'}.`;
+      }
+      console.info('[Lux Games] Catálogo público publicado no R2.', result);
+      return result;
+    } catch (error) {
+      console.error('[Lux Games] Falha ao publicar catálogo público:', error);
+      if (status) {
+        status.className = 'mt-3 min-h-[18px] text-xs text-rose-300';
+        status.textContent = `Falha ao atualizar catálogo: ${error?.message || 'erro desconhecido'}`;
+      }
+      return null;
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = previousText;
+      }
+    }
   }
 
   function renderFailureReport(status, failures) {
@@ -284,7 +343,9 @@
 
   syncGamesCatalogOneByOne.__luxR2SequentialSync = VERSION;
   window.syncGamesCatalogFromR2 = syncGamesCatalogOneByOne;
+  window.publishGamesCatalogToR2 = publishGamesCatalogToR2;
   try { syncGamesCatalogFromR2 = syncGamesCatalogOneByOne; } catch (_) {}
+  try { publishGamesCatalogToR2 = publishGamesCatalogToR2; } catch (_) {}
 
   if (typeof adminImportGame === 'function' && !adminImportGame.__luxR2OnlyMetadataGuard) {
     const originalAdminImportGame = adminImportGame;
@@ -338,6 +399,7 @@
     r2Url,
     isSupabaseRomUrl,
     syncOneByOne: syncGamesCatalogOneByOne,
+    publishCatalog: publishGamesCatalogToR2,
     batchSize: SYNC_BATCH_SIZE
   };
 
@@ -350,8 +412,26 @@
     select.insertBefore(option, select.firstChild);
   }
 
+  function ensureCatalogPublishButton() {
+    if (document.getElementById('gameCatalogPublishButton')) return true;
+    const syncButton = document.getElementById('gameR2SyncButton');
+    const actions = syncButton?.parentElement;
+    if (!actions) return false;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'gameCatalogPublishButton';
+    button.className = 'bg-emerald-700 hover:bg-emerald-600 text-white font-bold px-4 py-2.5 rounded-xl text-xs disabled:opacity-60 disabled:cursor-wait';
+    button.textContent = 'Atualizar catálogo';
+    button.title = 'Gerar o catálogo público de jogos e publicar o JSON no Cloudflare R2';
+    button.addEventListener('click', publishGamesCatalogToR2);
+    syncButton.insertAdjacentElement('afterend', button);
+    return true;
+  }
+
   function hardenAdminUi() {
     ensureArcadeOption();
+    ensureCatalogPublishButton();
     const uploadButton = document.querySelector('#adminTabGames button[onclick*="toggleGameUploadModal"]');
     if (uploadButton) {
       uploadButton.textContent = 'ROMs no R2';
@@ -363,5 +443,5 @@
   const uiTimer = setInterval(hardenAdminUi, 500);
   setTimeout(() => clearInterval(uiTimer), 15000);
   document.addEventListener('DOMContentLoaded', hardenAdminUi, { once: true });
-  console.info(`[Lux Games] R2-only resiliente: sincronização em lotes de ${SYNC_BATCH_SIZE}, edição salva só metadados e ROMs permanecem no R2.`);
+  console.info(`[Lux Games] R2-only resiliente: sincronização em lotes de ${SYNC_BATCH_SIZE}, publicação do catálogo JSON e ROMs permanecem no R2.`);
 })();
