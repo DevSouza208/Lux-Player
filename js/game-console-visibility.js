@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-game-console-visibility4-reset';
+  const VERSION = '20260917-game-console-visibility5-nondestructive';
   const CACHE_KEY = 'lux-play:game-console-visibility:v2';
   const FUNCTION_NAME = 'game-console-visibility';
 
@@ -135,7 +135,6 @@
 
       await refreshVisibility(false);
       const visible = filterPublicCatalog(source);
-      try { gamesCatalog = visible; } catch (_) {}
       return visible;
     };
 
