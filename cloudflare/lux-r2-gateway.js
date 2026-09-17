@@ -15,6 +15,8 @@ const PUBLIC_BUCKETS = {
 
 const MAX_SAVE_BYTES = 6 * 1024 * 1024;
 const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
+const GAME_CATALOG_KEY = 'games-catalog.json';
+const GAME_CATALOG_PAGE_SIZE = 1000;
 
 function response(body, init = {}) {
   return new Response(body, {
@@ -371,6 +373,90 @@ async function listR2Games(bucket, origin) {
   return games;
 }
 
+async function loadApprovedGamesForPublishedCatalog(env) {
+  const games = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await supabaseRequest(
+      env,
+      '/rest/v1/games?select=*'
+        + '&status=eq.approved'
+        + '&order=id.asc'
+        + `&limit=${GAME_CATALOG_PAGE_SIZE}`
+        + `&offset=${offset}`,
+      { method: 'GET' },
+    );
+
+    if (!Array.isArray(page)) {
+      throw new Error('O Supabase retornou um catálogo de jogos inválido.');
+    }
+
+    games.push(...page);
+    if (page.length < GAME_CATALOG_PAGE_SIZE) break;
+    offset += GAME_CATALOG_PAGE_SIZE;
+  }
+
+  return games;
+}
+
+async function handleGameCatalogPublish(request, env, url) {
+  if (request.method !== 'POST') return json({ error: 'Método não permitido.' }, 405);
+  if (!env.CATALOG) return json({ error: 'Binding CATALOG indisponível.' }, 500);
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Catálogo ainda não configurado.' }, 503);
+
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ error: 'JSON inválido.' }, 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json({ error: 'Dados inválidos.' }, 400);
+  }
+
+  const auth = await requireGameCatalogAdmin(env, body);
+  if (auth.error) return auth.error;
+
+  const games = await loadApprovedGamesForPublishedCatalog(env);
+
+  // Evita substituir um catálogo válido por um arquivo vazio caso haja
+  // problema de status, schema ou leitura no Supabase.
+  if (!games.length) {
+    return json({
+      error: 'Nenhum jogo aprovado foi encontrado. O catálogo publicado anteriormente foi preservado.',
+    }, 409);
+  }
+
+  const generatedAt = new Date().toISOString();
+  const payload = {
+    schemaVersion: 1,
+    generatedAt,
+    count: games.length,
+    games,
+  };
+  const serialized = JSON.stringify(payload);
+
+  await env.CATALOG.put(GAME_CATALOG_KEY, serialized, {
+    httpMetadata: {
+      contentType: 'application/json; charset=utf-8',
+      cacheControl: 'public, max-age=300',
+    },
+    customMetadata: {
+      generatedAt,
+      count: String(games.length),
+      source: 'supabase-approved-games',
+    },
+  });
+
+  return json({
+    ok: true,
+    published: true,
+    count: games.length,
+    generatedAt,
+    key: GAME_CATALOG_KEY,
+    url: `${url.origin}/r2/catalog/${GAME_CATALOG_KEY}`,
+    bytes: new TextEncoder().encode(serialized).byteLength,
+  });
+}
+
 async function processGameCatalogObject(object, env, url, skipReason = '') {
   const key = String(object?.key || '');
   const game = gameFromR2Object(object, url.origin);
@@ -617,7 +703,7 @@ export default {
       return json({
         ok: true,
         service: 'Lux R2 Gateway',
-        version: 2,
+        version: 3,
         buckets: {
           roms: true,
           playlists: true,
@@ -640,6 +726,8 @@ export default {
           roms: '/r2/roms/{console}/{arquivo}',
           saves: '/api/saves',
           gameCatalogSync: '/api/games/sync (POST, administrador)',
+          gameCatalogPublish: '/api/games/catalog/publish (POST, administrador)',
+          gameCatalog: '/r2/catalog/games-catalog.json',
         },
       });
     }
@@ -647,6 +735,7 @@ export default {
     try {
       if (url.pathname === '/api/saves') return await handleSaves(request, env);
       if (url.pathname === '/api/games/sync') return await handleGameCatalogSync(request, env, url);
+      if (url.pathname === '/api/games/catalog/publish') return await handleGameCatalogPublish(request, env, url);
       const publicResult = await handlePublicR2(request, env, url);
       if (publicResult) return publicResult;
       return response('Not found', { status: 404 });
