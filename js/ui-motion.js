@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260915-n64-performance2';
+  const RESET_VERSION = '20260917-shared-iptv1';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -180,7 +180,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260915-v163-friendly-ui-25');
+  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-shared-iptv1');
   loadSync('lux-auto-login-resilience', 'js/auto-login-resilience.js?v=20260915-auto-login-resilience1');
 })();
 
@@ -195,7 +195,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260912-xtream-sync-1']);
+  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260917-xtream-sync-3-shared-source']);
   loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
   loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags4']);
   loadModule(['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5']);
@@ -205,7 +205,7 @@ function animateDashboardEntry() {
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260915-n64-performance2'],
     ['lux-secondary-background-loader', 'js/secondary-background-loader.js?v=20260914-secondary-background-2'],
-    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260914-admin-client-sync-2'],
+    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260917-admin-client-sync-2-force-https'],
     ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260914-home-featured-1'],
     ['lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2']
   ];
