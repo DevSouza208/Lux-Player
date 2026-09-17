@@ -104,7 +104,7 @@ function removeLocalProfileSaves(user) {
 }
 
 // Game services bootstrap: hybrid ROM storage, storage mode, local-file playback, cleanup, manual clearing and emulator performance stay outside index.html.
-if (!document.querySelector('script[data-lux-rom-hybrid-storage]')) {
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-hybrid-storage]')) {
   const romStorageScript = document.createElement('script');
   romStorageScript.src = 'js/game-rom-hybrid-storage.js?v=20260916-hybrid-rom-storage1';
   romStorageScript.async = true;
@@ -112,7 +112,7 @@ if (!document.querySelector('script[data-lux-rom-hybrid-storage]')) {
   document.head.appendChild(romStorageScript);
 }
 
-if (!document.querySelector('script[data-lux-rom-storage-mode]')) {
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-storage-mode]')) {
   const romStorageModeScript = document.createElement('script');
   romStorageModeScript.src = 'js/game-rom-storage-mode.js?v=20260917-rom-storage-mode2';
   romStorageModeScript.async = true;
@@ -120,7 +120,7 @@ if (!document.querySelector('script[data-lux-rom-storage-mode]')) {
   document.head.appendChild(romStorageModeScript);
 }
 
-if (!document.querySelector('script[data-lux-rom-playback-file]')) {
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-playback-file]')) {
   const romPlaybackFileScript = document.createElement('script');
   romPlaybackFileScript.src = 'js/game-rom-playback-file.js?v=20260917-rom-playback-file2';
   romPlaybackFileScript.async = true;
@@ -128,7 +128,7 @@ if (!document.querySelector('script[data-lux-rom-playback-file]')) {
   document.head.appendChild(romPlaybackFileScript);
 }
 
-if (!document.querySelector('script[data-lux-rom-cleanup]')) {
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-cleanup]')) {
   const romCleanupScript = document.createElement('script');
   romCleanupScript.src = 'js/game-rom-cleanup.js?v=20260917-rom-cleanup1';
   romCleanupScript.async = true;
@@ -136,7 +136,7 @@ if (!document.querySelector('script[data-lux-rom-cleanup]')) {
   document.head.appendChild(romCleanupScript);
 }
 
-if (!document.querySelector('script[data-lux-rom-manual-clear]')) {
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-manual-clear]')) {
   const romManualClearScript = document.createElement('script');
   romManualClearScript.src = 'js/game-rom-manual-clear.js?v=20260917-rom-manual-clear1';
   romManualClearScript.async = true;
@@ -144,7 +144,7 @@ if (!document.querySelector('script[data-lux-rom-manual-clear]')) {
   document.head.appendChild(romManualClearScript);
 }
 
-if (!document.querySelector('script[data-lux-emulator-performance]')) {
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-emulator-performance]')) {
   const emulatorPerformanceScript = document.createElement('script');
   emulatorPerformanceScript.src = 'js/emulator-speed-fix.js?v=20260916-emulator-performance5';
   emulatorPerformanceScript.async = true;

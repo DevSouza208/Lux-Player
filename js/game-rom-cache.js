@@ -42,6 +42,20 @@
       .join('/');
   }
 
+  function migratedRomFileName(legacyName = '', game = null) {
+    // The R2 migration stores files as `<console>/<game title>.<extension>`,
+    // while older catalog records still contain the Supabase upload prefix
+    // (`<timestamp>-<index>-<file name>`).
+    if (!/^\d{10,}-\d+-/.test(String(legacyName))) return legacyName;
+    const extension = String(legacyName).match(/(\.[a-z0-9]{1,8})$/i)?.[1] || '';
+    const title = String(game?.name || game?.title || '')
+      .replace(/\s*:\s*/g, ' - ')
+      .replace(/[\\/:*?"<>|]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return title ? `${title}${extension}` : legacyName;
+  }
+
   function normalizeR2Path(path = '', game = null) {
     let value = String(path || '').trim().replace(/^\/+/, '');
     if (!value) return '';
@@ -51,6 +65,10 @@
 
     const parts = value.split('/').filter(Boolean);
     if (!parts.length) return '';
+
+    if (parts.length >= 2) {
+      parts[parts.length - 1] = migratedRomFileName(parts[parts.length - 1], game);
+    }
 
     const mappedFirst = normalizeSystem(parts[0]);
     const gameSystem = normalizeSystem(game?.console || game?.consoleLabel || '');

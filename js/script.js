@@ -2098,6 +2098,39 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     let pendingReviewQueue = [];
 
+    async function syncGamesCatalogFromR2() {
+      if (!currentUser || currentUser.role !== 'admin') return;
+      const confirmed = window.confirm('Ler todas as ROMs do bucket luxroms? O catálogo será reconstruído: jogos que não estiverem no R2 serão removidos e todos os encontrados voltarão para aprovação.');
+      if (!confirmed) return;
+      const button = document.getElementById('gameR2SyncButton');
+      const status = document.getElementById('gameR2SyncStatus');
+      if (button) button.disabled = true;
+      if (status) status.textContent = 'Lendo ROMs do R2 e reconstruindo o catálogo...';
+      try {
+        const response = await fetch('https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: currentUser.user, password: currentUser.pass })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Gateway HTTP ${response.status}`);
+        await loadGamesCatalog();
+        await renderGamesCatalog();
+        if (status) {
+          status.className = 'mt-3 min-h-[18px] text-xs text-emerald-300';
+          status.textContent = `Catálogo sincronizado: ${result.found} ROM(s), ${result.created} nova(s), ${result.updated} atualizada(s) e ${result.removed} removida(s). Todas aguardam aprovação.`;
+        }
+      } catch (error) {
+        console.error('Falha ao sincronizar jogos do R2:', error);
+        if (status) {
+          status.className = 'mt-3 min-h-[18px] text-xs text-rose-300';
+          status.textContent = `Não foi possível sincronizar: ${gameImportErrorMessage(error)}`;
+        }
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+
     async function reviewUnapprovedGames() {
       if (!currentUser || currentUser.role !== 'admin') return;
       try {
@@ -2420,6 +2453,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         players: game.players,
         coop: game.coop,
         console: game.console,
+        r2Path: game.r2_path || game.r2Path || '',
+        r2Url: game.r2_url || game.r2Url || '',
         consoleLabel: String(game.console || 'Console').replace('mastersystem', 'Master System').replace('megadrive', 'Mega Drive').replace('psp', 'PSP').toUpperCase(),
         url,
         logo: game.cover_url || gameStorageUrl(game.cover_path),
@@ -5322,7 +5357,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         const luxGames = records.map(game => ({
           id: game.id, name: game.title || 'Sem título', console: game.console || 'snes',
           players: Math.max(1, Number(game.players) || 1), coop: game.coop,
-          url: game.rom_url || gameStorageUrl(game.rom_path), logo: game.cover_url || gameStorageUrl(game.cover_path),
+          url: game.rom_url || gameStorageUrl(game.rom_path), r2Path: game.r2_path || game.r2Path || '', r2Url: game.r2_url || game.r2Url || '', logo: game.cover_url || gameStorageUrl(game.cover_path),
           status: game.status || 'pending', sourceFileName: game.source_file_name || '', source: 'lux'
         }));
         const externalGames = (await window.LuxExternalRoms?.list?.() || []).map(game => ({ ...game, source: 'external', status: 'external', players: Math.max(1, Number(game.players) || 1) }));

@@ -490,8 +490,10 @@
           <p class="mt-2 text-xs text-purple-300">Envie ROMs ou revise os jogos pendentes antes de publicá-los.</p>
           <div class="mt-4 flex flex-wrap gap-3">
             <button type="button" onclick="toggleGameUploadModal()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs">Enviar jogos</button>
+            <button type="button" id="gameR2SyncButton" onclick="syncGamesCatalogFromR2()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs">Ler ROMs do R2</button>
             <button type="button" onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 text-rose-200 font-bold px-4 py-2.5 rounded-xl text-xs">Revisar não aprovados</button>
           </div>
+          <p id="gameR2SyncStatus" role="status" class="mt-3 min-h-[18px] text-xs text-purple-300"></p>
         </div>
         <div class="mt-4 bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6">
           <div class="flex flex-wrap items-center justify-between gap-3">
@@ -998,7 +1000,7 @@
   <script src="js/profiles.js"></script>
   <script src="js/avatar-gallery.js"></script>
   <script src="js/game-save-store.js"></script>
-  <script src="js/game-rom-cache.js"></script>
+  <script src="js/game-rom-cache.js?v=20260917-r2-title-path1"></script>
   <script src="js/external-roms.js"></script>
   <script src="js/emulator.js"></script>
   <script src="js/reader-store.js"></script>

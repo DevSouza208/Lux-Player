@@ -310,6 +310,117 @@ async function handleSaves(request, env) {
   return json({ saved: true, newerCloud: false, conflict: false, backend: 'r2' });
 }
 
+const GAME_CONSOLES = new Set(['arcade', 'dos', 'gba', 'gb', 'gbc', 'md', 'megadrive', 'ms', 'mastersystem', 'n64', 'nds', 'nes', 'psp', 'snes']);
+const GAME_EXTENSIONS = new Set(['gba', 'gb', 'gbc', 'sfc', 'smc', 'zip', 'md', 'gen', 'bin', 'nes', 'sms', 'n64', 'z64', 'v64', 'iso', 'cso', 'pbp', 'nds']);
+const GAME_CONSOLE_ALIASES = { md: 'megadrive', ms: 'mastersystem' };
+
+function gameTitleFromKey(key) {
+  const fileName = String(key).split('/').pop() || '';
+  return fileName.replace(/\.[^.]+$/, '').replace(/[_.]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function gameIdentity(title, consoleName) {
+  return `${consoleName}:${String(title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()}`;
+}
+
+function gameFromR2Object(object, origin) {
+  const key = String(object?.key || '').replace(/^\/+/, '');
+  const parts = key.split('/').filter(Boolean);
+  if (parts.length < 2) return null;
+  const folder = String(parts[0]).toLowerCase();
+  const extension = (parts.at(-1).split('.').pop() || '').toLowerCase();
+  if (!GAME_CONSOLES.has(folder) || !GAME_EXTENSIONS.has(extension)) return null;
+  const consoleName = GAME_CONSOLE_ALIASES[folder] || folder;
+  const title = gameTitleFromKey(key);
+  if (!title) return null;
+  return {
+    key,
+    title,
+    console: consoleName,
+    sourceFileName: parts.at(-1),
+    romUrl: `${origin}/r2/roms/${key.split('/').map(encodeURIComponent).join('/')}`,
+  };
+}
+
+async function requireGameCatalogAdmin(env, body) {
+  const username = body?.username;
+  const credential = body?.password;
+  if (typeof username !== 'string' || !username || typeof credential !== 'string' || !credential) {
+    return { error: json({ error: 'Login necessÃ¡rio.' }, 401) };
+  }
+  const account = await resolveLuxAccount(env, username, credential);
+  if (!account) return { error: json({ error: 'Credencial invÃ¡lida ou sessÃ£o expirada.' }, 401) };
+  if (isExpired(account)) return { error: json({ error: 'Acesso vencido.' }, 403) };
+  if (String(account.cargo || '').trim().toLowerCase() !== 'admin') {
+    return { error: json({ error: 'Apenas administradores podem sincronizar ROMs.' }, 403) };
+  }
+  return { account };
+}
+
+async function listR2Games(bucket, origin) {
+  const games = [];
+  let cursor;
+  do {
+    const page = await bucket.list({ cursor, limit: 1000 });
+    for (const object of page.objects || []) {
+      const game = gameFromR2Object(object, origin);
+      if (game) games.push(game);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return games;
+}
+
+async function handleGameCatalogSync(request, env, url) {
+  if (request.method !== 'POST') return json({ error: 'MÃ©todo nÃ£o permitido.' }, 405);
+  if (!env.ROMS) return json({ error: 'Binding ROMS indisponÃ­vel.' }, 500);
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'CatÃ¡logo ainda nÃ£o configurado.' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'JSON invÃ¡lido.' }, 400); }
+  const auth = await requireGameCatalogAdmin(env, body);
+  if (auth.error) return auth.error;
+
+  const found = await listR2Games(env.ROMS, url.origin);
+  const unique = [...new Map(found.map(game => [`${game.console}:${game.key}`, game])).values()];
+  const existing = await supabaseRequest(env, '/rest/v1/games?select=id,title,console,rom_path');
+  const byPath = new Map((Array.isArray(existing) ? existing : []).map(game => [String(game.rom_path || ''), game]));
+  const byIdentity = new Map((Array.isArray(existing) ? existing : []).map(game => [gameIdentity(game.title, game.console), game]));
+  const retainedIds = new Set();
+  let created = 0, updated = 0;
+
+  for (const game of unique) {
+    const matched = byPath.get(game.key) || byIdentity.get(gameIdentity(game.title, game.console));
+    const values = {
+      title: game.title,
+      console: game.console,
+      rom_path: game.key,
+      rom_url: game.romUrl,
+      source_file_name: game.sourceFileName,
+      status: 'pending',
+    };
+    if (matched?.id) {
+      await supabaseRequest(env, `/rest/v1/games?id=eq.${encodeURIComponent(matched.id)}`, {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(values),
+      });
+      retainedIds.add(String(matched.id));
+      updated += 1;
+    } else {
+      await supabaseRequest(env, '/rest/v1/games', {
+        method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ...values, players: 1, genres: [] }),
+      });
+      created += 1;
+    }
+  }
+
+  let removed = 0;
+  for (const game of Array.isArray(existing) ? existing : []) {
+    if (retainedIds.has(String(game.id))) continue;
+    await supabaseRequest(env, `/rest/v1/games?id=eq.${encodeURIComponent(game.id)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    removed += 1;
+  }
+  return json({ found: unique.length, created, updated, removed, pending: unique.length });
+}
+
 async function handlePublicR2(request, env, url) {
   const parts = url.pathname.split('/').filter(Boolean);
   if (parts.length < 3 || parts[0] !== 'r2') return null;
@@ -366,8 +477,22 @@ export default {
       });
     }
 
+    if (url.pathname === '/') {
+      return json({
+        ok: true,
+        service: 'Lux R2 Gateway',
+        message: 'Gateway ativo. Use /health para diagnÃ³stico ou os endpoints da aplicaÃ§Ã£o.',
+        endpoints: {
+          roms: '/r2/roms/{console}/{arquivo}',
+          saves: '/api/saves',
+          gameCatalogSync: '/api/games/sync (POST, administrador)',
+        },
+      });
+    }
+
     try {
       if (url.pathname === '/api/saves') return await handleSaves(request, env);
+      if (url.pathname === '/api/games/sync') return await handleGameCatalogSync(request, env, url);
       const publicResult = await handlePublicR2(request, env, url);
       if (publicResult) return publicResult;
       return response('Not found', { status: 404 });
