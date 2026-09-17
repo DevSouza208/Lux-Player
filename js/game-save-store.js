@@ -114,7 +114,7 @@ if (!document.querySelector('script[data-lux-rom-hybrid-storage]')) {
 
 if (!document.querySelector('script[data-lux-rom-storage-mode]')) {
   const romStorageModeScript = document.createElement('script');
-  romStorageModeScript.src = 'js/game-rom-storage-mode.js?v=20260916-rom-storage-mode1';
+  romStorageModeScript.src = 'js/game-rom-storage-mode.js?v=20260917-rom-storage-mode2';
   romStorageModeScript.async = true;
   romStorageModeScript.dataset.luxRomStorageMode = '1';
   document.head.appendChild(romStorageModeScript);
