@@ -208,7 +208,7 @@ function animateDashboardEntry() {
     ['lux-secondary-background-loader', 'js/secondary-background-loader.js?v=20260914-secondary-background-2'],
     ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260917-admin-client-sync-2-force-https'],
     ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260917-home-featured-loader1'],
-    ['lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2']
+    ['lux-home-content-rails', 'js/home-content-rails.js?v=20260917-home-content-rails-loader1']
   ];
 
   const loadNonCritical = () => nonCritical.forEach(loadModule);
