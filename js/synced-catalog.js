@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260912-xtream-sync-2';
+  const BRIDGE_VERSION = '20260917-xtream-sync-3-shared-source';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -34,9 +34,23 @@
   };
 
   const extractXtreamStreamId = value => {
-    const raw = String(value || '');
-    const match = raw.match(/\/(?:live|movie|series)\/[^/]+\/[^/]+\/(\d+)(?:\.[^/?#]+)?(?:[?#]|$)/i);
-    return match ? String(match[1]) : '';
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const parsed = new URL(raw);
+      for (const key of ['stream_id', 'stream', 'id']) {
+        const candidate = parsed.searchParams.get(key);
+        if (/^\d+$/.test(String(candidate || ''))) return String(candidate);
+      }
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      const last = decodeURIComponent(parts.at(-1) || '');
+      const match = last.match(/^(\d+)(?:\.[a-z0-9]{1,10})?$/i);
+      if (match) return match[1];
+    } catch (_) {}
+    const clean = raw.split(/[?#]/)[0].replace(/\/+$/, '');
+    const last = clean.split('/').filter(Boolean).at(-1) || '';
+    const match = last.match(/^(\d+)(?:\.[a-z0-9]{1,10})?$/i);
+    return match ? match[1] : '';
   };
 
   const deriveManifestUrl = () => {
@@ -44,9 +58,11 @@
     if (!/^https:\/\//i.test(httpsUrl)) return '';
     try {
       const url = new URL(httpsUrl);
-      const match = url.pathname.match(/^\/listas\/(.+)\.m3u$/i);
-      if (!match) return '';
-      return `${url.origin}/catalogos/${match[1]}/manifest.json`;
+      const shared = url.pathname.match(/^\/fontes\/([^/]+)\/playlist\.m3u$/i);
+      if (shared) return `${url.origin}/fontes/${shared[1]}/manifest.json`;
+      const legacy = url.pathname.match(/^\/listas\/(.+)\.m3u$/i);
+      if (legacy) return `${url.origin}/catalogos/${legacy[1]}/manifest.json`;
+      return '';
     } catch (_) {
       return '';
     }

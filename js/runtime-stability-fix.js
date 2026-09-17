@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260912-stability2';
+  window.__luxRuntimeStabilityFixInstalled = '20260917-stability3-https-light';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -78,6 +78,22 @@
   const repairSyncedPlaybackUrls = async () => {
     if (!window.__luxSyncedXtreamActive || typeof allMediaItems === 'undefined' || !Array.isArray(allMediaItems)) return;
 
+    const pendingItems = allMediaItems.filter(item => {
+      if (item?.source !== 'synced-xtream') return false;
+      const type = normalizeType(item.type);
+      return (type === 'live' || type === 'movies') && !String(item.url || '').trim();
+    });
+
+    if (!pendingItems.length) {
+      if (window.__luxSyncedXtreamStats) {
+        window.__luxSyncedXtreamStats.playbackRepaired = 0;
+        window.__luxSyncedXtreamStats.playbackDirectFallbacks = 0;
+        window.__luxSyncedXtreamStats.playbackMissing = 0;
+      }
+      console.info('[Lux Play] URLs de reprodução já vieram prontas do catálogo HTTPS.');
+      return;
+    }
+
     let rawItems;
     try {
       rawItems = await loadRawPlaylistItems();
@@ -106,7 +122,7 @@
     let directFallbacks = 0;
     let stillMissing = 0;
 
-    for (const item of allMediaItems) {
+    for (const item of pendingItems) {
       if (item?.source !== 'synced-xtream') continue;
       const type = normalizeType(item.type);
       if (type !== 'live' && type !== 'movies') continue;
@@ -166,7 +182,15 @@
     const originalLoad = window.loadMediaSourcesInPriority;
     window.loadMediaSourcesInPriority = async function () {
       const result = await originalLoad.apply(this, arguments);
-      if (result && window.__luxSyncedXtreamActive) await repairSyncedPlaybackUrls();
+      if (result && window.__luxSyncedXtreamActive) {
+        // Reparos antigos não podem segurar o splash/login. O catálogo HTTPS
+        // deve chegar pronto; qualquer exceção residual roda depois.
+        setTimeout(() => {
+          repairSyncedPlaybackUrls().catch(error => {
+            console.warn('[Lux Play] Reparo residual de reprodução indisponível.', error);
+          });
+        }, 0);
+      }
       return result;
     };
 
