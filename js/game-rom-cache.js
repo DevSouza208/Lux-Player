@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-r2-rom-cache3-opfs';
+  const VERSION = '20260916-r2-rom-cache4-opfs';
   const DB_NAME = 'lux-game-rom-cache';
   const DB_VERSION = 3;
   const STORE_NAME = 'roms';
@@ -197,6 +197,17 @@
     if (!supportsOpfs()) return null;
     const root = await navigator.storage.getDirectory();
     return root.getDirectoryHandle(OPFS_DIRECTORY, { create });
+  }
+
+  async function chooseStorageEngine() {
+    if (!supportsOpfs()) return 'indexeddb';
+    try {
+      const directory = await opfsDirectory(true);
+      return directory ? 'opfs' : 'indexeddb';
+    } catch (error) {
+      console.warn('[Lux ROM Cache] OPFS indisponível; usando IndexedDB:', error);
+      return 'indexeddb';
+    }
   }
 
   async function stableHash(value) {
@@ -447,6 +458,16 @@
     return { blob, size: received || blob.size };
   }
 
+  async function fetchRom(source) {
+    const response = await fetch(source.url, {
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error(`Não foi possível baixar a ROM (HTTP ${response.status}).`);
+    return response;
+  }
+
   async function download(game, onProgress = () => {}) {
     const source = resolveSource(game);
     if (!source.url) throw new Error('Este jogo não possui uma ROM disponível.');
@@ -467,50 +488,49 @@
 
     await requestPersistentStorage();
 
-    const useOpfs = supportsOpfs();
-    if (useOpfs) {
-      try { await opfsDirectory(true); }
-      catch (error) { console.warn('[Lux ROM Cache] OPFS indisponível; usando IndexedDB:', error); }
-    }
-    const engine = useOpfs ? 'opfs' : 'indexeddb';
-
-    const response = await fetch(source.url, {
-      method: 'GET',
-      credentials: 'omit',
-      cache: 'no-store'
-    });
-    if (!response.ok) throw new Error(`Não foi possível baixar a ROM (HTTP ${response.status}).`);
-
-    const total = Number(response.headers.get('content-length')) || 0;
-    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    let engine = await chooseStorageEngine();
+    let response = await fetchRom(source);
+    let total = Number(response.headers.get('content-length')) || 0;
+    let contentType = response.headers.get('content-type') || 'application/octet-stream';
     await assertStorageCapacity(total);
 
     const now = Date.now();
     let record;
 
     if (engine === 'opfs') {
-      const saved = await downloadToOpfs(response, game, total, onProgress);
-      record = {
-        key: gameKey(game),
-        sourceUrl: source.url,
-        url: source.url,
-        source: source.source,
-        r2Path: source.path,
-        storage: 'opfs',
-        fileName: saved.fileName,
-        size: saved.size,
-        savedAt: now,
-        lastUsedAt: now,
-        name: game.name || game.title || 'Lux Play ROM',
-        console: game.console || ''
-      };
       try {
-        await putRecord(record);
+        const saved = await downloadToOpfs(response, game, total, onProgress);
+        record = {
+          key: gameKey(game),
+          sourceUrl: source.url,
+          url: source.url,
+          source: source.source,
+          r2Path: source.path,
+          storage: 'opfs',
+          fileName: saved.fileName,
+          size: saved.size,
+          savedAt: now,
+          lastUsedAt: now,
+          name: game.name || game.title || 'Lux Play ROM',
+          console: game.console || ''
+        };
+        try {
+          await putRecord(record);
+        } catch (error) {
+          await removeOpfsFile(record);
+          throw error;
+        }
       } catch (error) {
-        await removeOpfsFile(record);
-        throw error;
+        console.warn('[Lux ROM Cache] Falha ao gravar em OPFS; tentando IndexedDB:', error);
+        engine = 'indexeddb';
+        response = await fetchRom(source);
+        total = Number(response.headers.get('content-length')) || 0;
+        contentType = response.headers.get('content-type') || 'application/octet-stream';
+        await assertStorageCapacity(total);
       }
-    } else {
+    }
+
+    if (engine === 'indexeddb' && !record) {
       const saved = await downloadToIndexedDb(response, contentType, total, onProgress);
       record = {
         key: gameKey(game),
@@ -531,13 +551,13 @@
 
     const verified = await validRecord(game, false);
     if (!verified) {
-      await removeRecord(record);
+      if (record) await removeRecord(record);
       throw new Error('A ROM terminou de baixar, mas o navegador não confirmou o armazenamento local.');
     }
 
     onProgress(1);
     return {
-      size: Number(verified.size) || record.size,
+      size: Number(verified.size) || record?.size || 0,
       savedAt: verified.savedAt,
       lastUsedAt: verified.lastUsedAt,
       source: verified.source,
@@ -576,7 +596,7 @@
     try { persisted = Boolean(await navigator.storage?.persisted?.()); } catch (_) {}
     return {
       version: VERSION,
-      preferredStorage: supportsOpfs() ? 'opfs' : 'indexeddb',
+      preferredStorage: await chooseStorageEngine(),
       persisted,
       quota: estimate.quota,
       usage: estimate.usage,
