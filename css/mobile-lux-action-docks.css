@@ -72,16 +72,107 @@
   }
 }
 
-/* Landscape gets the old console-like composition: actions at both lower corners,
-   free center lane for the Lux logo in Moldura. */
+/* Landscape: Select/Start get their own utility docks.
+   Save + Load stay directly below Select; Settings + Exit stay below Start. */
 @media (max-width: 767px) and (orientation: landscape), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-actionbar {
-    bottom: calc(7px + env(safe-area-inset-bottom, 0px)) !important;
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) {
+    --lux-landscape-action-width: 58px;
+    --lux-landscape-action-gap: 6px;
+    --lux-landscape-action-pair-width: calc(var(--lux-landscape-action-width) * 2 + var(--lux-landscape-action-gap));
+    --lux-landscape-system-width: 72px;
   }
 
-  #emulatorModal.lux-console-mobile-stage1 .lux-console-action-button {
-    width: clamp(76px, 9.2vw, 112px) !important;
-    height: 42px !important;
+  /* Raise Select / Start so the two utility buttons can sit below each one. */
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-system-button {
+    bottom: calc(43px + env(safe-area-inset-bottom, 0px)) !important;
+    min-width: var(--lux-landscape-system-width) !important;
+    width: var(--lux-landscape-system-width) !important;
+    height: 34px !important;
+    padding: 0 8px !important;
+    border-radius: 12px !important;
+    font-size: 8px !important;
+    letter-spacing: .08em !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-system-buttons-2 .lux-system-button-1 {
+    left: max(6px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-system-width)) / 2)) !important;
+    right: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-system-buttons-2 .lux-system-button-2,
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-system-buttons-1 .lux-system-button-1 {
+    right: max(6px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-system-width)) / 2)) !important;
+    left: auto !important;
+  }
+
+  /* The actionbar becomes only an invisible positioning layer. */
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-actionbar {
+    position: fixed !important;
+    inset: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    padding: 0 !important;
+    transform: none !important;
+    display: block !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button {
+    position: absolute !important;
+    bottom: calc(5px + env(safe-area-inset-bottom, 0px)) !important;
+    width: var(--lux-landscape-action-width) !important;
+    min-width: var(--lux-landscape-action-width) !important;
+    height: 30px !important;
+    margin: 0 !important;
+    padding: 2px 3px !important;
+    border: 1px solid rgba(216,180,254,.24) !important;
+    border-radius: 10px !important;
+    background: linear-gradient(180deg, rgba(52,20,88,.84), rgba(17,7,31,.90)) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 5px 14px rgba(0,0,0,.18) !important;
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
+  }
+
+  /* Salvar + Carregar: pair centered under Select, in the left gutter. */
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(1) {
+    left: max(4px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2)) !important;
+    right: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(2) {
+    left: max(calc(4px + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap)), calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2 + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap))) !important;
+    right: auto !important;
+  }
+
+  /* Configuração + Sair: pair centered under Start, in the right gutter. */
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(3) {
+    right: max(calc(4px + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap)), calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2 + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap))) !important;
+    left: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(4) {
+    right: max(4px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2)) !important;
+    left: auto !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-icon,
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-icon svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-label {
+    font-size: 7.5px !important;
   }
 
   #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand {
