@@ -158,6 +158,14 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   document.head.appendChild(r2OnlyScript);
 }
 
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-console-visibility]')) {
+  const gameConsoleVisibilityScript = document.createElement('script');
+  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility1';
+  gameConsoleVisibilityScript.async = false;
+  gameConsoleVisibilityScript.dataset.luxGameConsoleVisibility = '1';
+  document.head.appendChild(gameConsoleVisibilityScript);
+}
+
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-arcade-core-autodetect]')) {
   const arcadeCoreScript = document.createElement('script');
   arcadeCoreScript.src = 'js/arcade-core-autodetect.js?v=20260917-arcade-core-auto5';
