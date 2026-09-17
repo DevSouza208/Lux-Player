@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260917-xtream-sync-6-streamed-client';
+  const BRIDGE_VERSION = '20260917-xtream-sync-7-series-worker';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -244,42 +244,41 @@
     };
   };
 
-  let seriesM3uIndexPromise = null;
+  const SERIES_INFO_WORKER = 'https://lux-playlist-sync.professorsouza-tech.workers.dev/series-info';
+  const seriesInfoCache = new Map();
 
   const ensureSeriesEpisodes = async series => {
-    if (!series || series.m3uEpisodes) return series;
-    const manifest = window.__luxSyncedXtreamManifest;
-    const playlistUrl = String(manifest?.playlist || '').trim();
-    if (!playlistUrl) return series;
+    if (!series || series.m3uEpisodes || !series.series_id) return series;
+    const cacheKey = String(series.series_id);
+    let task = seriesInfoCache.get(cacheKey);
 
-    if (!seriesM3uIndexPromise) {
-      seriesM3uIndexPromise = (async () => {
-        const text = await fetchText(playlistUrl);
-        const grouped = groupM3uSeriesEpisodes(parseM3U(text))
-          .filter(item => item?.type === 'series' && item?.m3uEpisodes);
-        const byName = new Map();
-        const byLogo = new Map();
-        grouped.forEach(item => {
-          const name = normalizeText(item.name);
-          const logo = normalizeAssetUrl(item.logo);
-          if (name && !byName.has(name)) byName.set(name, item);
-          if (logo && !byLogo.has(logo)) byLogo.set(logo, item);
+    if (!task) {
+      task = (async () => {
+        const response = await fetch(SERIES_INFO_WORKER, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: currentUser?.user || '',
+            password: currentUser?.pass || '',
+            seriesId: series.series_id
+          })
         });
-        return { grouped, byName, byLogo };
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || ('Worker respondeu HTTP ' + response.status));
+        }
+        return payload.data || {};
       })().catch(error => {
-        seriesM3uIndexPromise = null;
+        seriesInfoCache.delete(cacheKey);
         throw error;
       });
+      seriesInfoCache.set(cacheKey, task);
     }
 
-    const index = await seriesM3uIndexPromise;
-    const byName = index.byName.get(normalizeText(series.name));
-    const byLogo = index.byLogo.get(normalizeAssetUrl(series.logo || series.cover));
-    const match = byName || byLogo || null;
-    if (match) {
-      series.m3uEpisodes = match.m3uEpisodes || null;
-      series.m3uSeriesName = match.name || series.name || '';
-    }
+    const data = await task;
+    series.m3uEpisodes = data.episodes || null;
+    series.m3uSeriesName = data?.info?.name || series.name || '';
+    if (data?.info?.plot && !series.plot) series.plot = data.info.plot;
     return series;
   };
 
