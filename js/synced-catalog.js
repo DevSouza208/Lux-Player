@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260917-xtream-sync-3-shared-source';
+  const BRIDGE_VERSION = '20260917-xtream-sync-4-client-ready';
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -137,9 +137,9 @@
     };
   };
 
-  const buildCatalogItems = ({ playlistText, liveCategories, movieCategories, seriesCategories, live, movies, series }) => {
-    const rawM3uItems = parseM3U(playlistText);
-    const groupedM3u = groupM3uSeriesEpisodes(rawM3uItems);
+  const buildCatalogItems = ({ playlistText = '', liveCategories, movieCategories, seriesCategories, live, movies, series }) => {
+    const rawM3uItems = playlistText ? parseM3U(playlistText) : [];
+    const groupedM3u = rawM3uItems.length ? groupM3uSeriesEpisodes(rawM3uItems) : [];
 
     const rawLiveById = new Map();
     const rawMoviesById = new Map();
@@ -174,7 +174,7 @@
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
         logo: item.stream_icon || m3u?.logo || '',
-        url: m3u?.url || '',
+        url: item.playback_url || item.url || item.direct_source || m3u?.url || '',
         type: 'live',
         source: 'synced-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
@@ -193,7 +193,7 @@
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
         logo: item.stream_icon || m3u?.logo || '',
-        url: m3u?.url || '',
+        url: item.playback_url || item.url || item.direct_source || m3u?.url || '',
         type: 'movies',
         source: 'synced-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
@@ -233,6 +233,45 @@
     };
   };
 
+  let seriesM3uIndexPromise = null;
+
+  const ensureSeriesEpisodes = async series => {
+    if (!series || series.m3uEpisodes) return series;
+    const manifest = window.__luxSyncedXtreamManifest;
+    const playlistUrl = String(manifest?.playlist || '').trim();
+    if (!playlistUrl) return series;
+
+    if (!seriesM3uIndexPromise) {
+      seriesM3uIndexPromise = (async () => {
+        const text = await fetchText(playlistUrl);
+        const grouped = groupM3uSeriesEpisodes(parseM3U(text))
+          .filter(item => item?.type === 'series' && item?.m3uEpisodes);
+        const byName = new Map();
+        const byLogo = new Map();
+        grouped.forEach(item => {
+          const name = normalizeText(item.name);
+          const logo = normalizeAssetUrl(item.logo);
+          if (name && !byName.has(name)) byName.set(name, item);
+          if (logo && !byLogo.has(logo)) byLogo.set(logo, item);
+        });
+        return { grouped, byName, byLogo };
+      })().catch(error => {
+        seriesM3uIndexPromise = null;
+        throw error;
+      });
+    }
+
+    const index = await seriesM3uIndexPromise;
+    const byName = index.byName.get(normalizeText(series.name));
+    const byLogo = index.byLogo.get(normalizeAssetUrl(series.logo || series.cover));
+    const match = byName || byLogo || null;
+    if (match) {
+      series.m3uEpisodes = match.m3uEpisodes || null;
+      series.m3uSeriesName = match.name || series.name || '';
+    }
+    return series;
+  };
+
   const loadSyncedCatalog = async () => {
     const manifestUrl = deriveManifestUrl();
     if (!manifestUrl) throw new Error('Manifesto HTTPS não disponível para esta conta.');
@@ -243,22 +282,23 @@
     const manifest = await fetchJson(manifestUrl);
     if (!manifest?.files || !manifest?.playlist) throw new Error('Manifesto do catálogo está incompleto.');
 
+    const clientReady = manifest.clientReady === true || Number(manifest.schemaVersion) >= 4;
     const [
-      playlistText,
       liveCategories,
       movieCategories,
       seriesCategories,
       live,
       movies,
-      series
+      series,
+      playlistText
     ] = await Promise.all([
-      fetchText(manifest.playlist),
       fetchJson(manifest.files.liveCategories),
       fetchJson(manifest.files.movieCategories),
       fetchJson(manifest.files.seriesCategories),
       fetchJson(manifest.files.live),
       fetchJson(manifest.files.movies),
-      fetchJson(manifest.files.series)
+      fetchJson(manifest.files.series),
+      clientReady ? Promise.resolve('') : fetchText(manifest.playlist)
     ]);
 
     const built = buildCatalogItems({
@@ -280,7 +320,7 @@
     window.__luxSyncedXtreamManifest = manifest;
     window.__luxSyncedXtreamStats = built.stats;
 
-    console.info('[Lux Play] Catálogo Xtream HTTPS carregado.', built.stats);
+    console.info('[Lux Play] Catálogo Xtream HTTPS carregado.', { ...built.stats, clientReady: manifest.clientReady === true || Number(manifest.schemaVersion) >= 4 });
     return { count: built.items.length, stats: built.stats };
   };
 
@@ -330,6 +370,9 @@
 
         window.__luxPreferSyncedSeriesEpisodes = true;
         try {
+          await ensureSeriesEpisodes(series).catch(error => {
+            console.warn('[Lux Play] Episódios da série serão resolvidos pelo fallback.', error);
+          });
           return await originalOpenSeriesModal.apply(this, arguments);
         } finally {
           window.__luxPreferSyncedSeriesEpisodes = false;
