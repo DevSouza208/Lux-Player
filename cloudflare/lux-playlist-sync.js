@@ -196,6 +196,7 @@ async function sharedSourceReady(env, sourceKey, needsCatalog) {
   }
   const manifest = await readPreviousCatalogManifest(env, sourceKey);
   if (!manifest?.files || !manifest?.playlist) return null;
+  if (Number(manifest.schemaVersion || 0) < 4 || manifest.clientReady !== true) return null;
   return {
     playlistUrl: `${baseUrl(env)}/${root}/playlist.m3u`,
     manifest
