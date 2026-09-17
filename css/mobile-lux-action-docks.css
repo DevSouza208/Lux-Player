@@ -55,7 +55,6 @@
     filter: brightness(1.18);
   }
 
-  /* The frame owns the Lux branding. Fullscreen deliberately leaves only the game. */
   #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen .lux-console-header-brand,
   #emulatorModal.lux-console-mobile-stage1.lux-console-view-fullscreen .lux-console-brand-button {
     display: none !important;
@@ -65,48 +64,16 @@
     display: flex !important;
   }
 
-  /* Existing opacity control writes opacity on the controls layer. Inherit it here too. */
   #emulatorModal.lux-console-mobile-stage1 .lux-console-controls-layer[style*="opacity"] ~ .lux-console-actionbar,
   #emulatorModal.lux-console-mobile-stage1 .lux-console-controls-layer[style*="opacity"] .lux-console-actionbar {
     opacity: inherit !important;
   }
 }
 
-/* Landscape: Select/Start get their own utility docks.
-   Save + Load stay directly below Select; Settings + Exit stay below Start. */
+/* Landscape Moldura: the four utility actions become two independent docks.
+   Save + Load sit below Select; Settings + Exit sit below Start. */
 @media (max-width: 767px) and (orientation: landscape), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) {
-    --lux-landscape-action-width: 58px;
-    --lux-landscape-action-gap: 6px;
-    --lux-landscape-action-pair-width: calc(var(--lux-landscape-action-width) * 2 + var(--lux-landscape-action-gap));
-    --lux-landscape-system-width: 72px;
-  }
-
-  /* Raise Select / Start so the two utility buttons can sit below each one. */
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-system-button {
-    bottom: calc(43px + env(safe-area-inset-bottom, 0px)) !important;
-    min-width: var(--lux-landscape-system-width) !important;
-    width: var(--lux-landscape-system-width) !important;
-    height: 34px !important;
-    padding: 0 8px !important;
-    border-radius: 12px !important;
-    font-size: 8px !important;
-    letter-spacing: .08em !important;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-system-buttons-2 .lux-system-button-1 {
-    left: max(6px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-system-width)) / 2)) !important;
-    right: auto !important;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-system-buttons-2 .lux-system-button-2,
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-system-buttons-1 .lux-system-button-1 {
-    right: max(6px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-system-width)) / 2)) !important;
-    left: auto !important;
-  }
-
-  /* The actionbar becomes only an invisible positioning layer. */
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-actionbar {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-actionbar {
     position: fixed !important;
     inset: 0 !important;
     left: 0 !important;
@@ -127,11 +94,11 @@
     pointer-events: none !important;
   }
 
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-button {
     position: absolute !important;
     bottom: calc(5px + env(safe-area-inset-bottom, 0px)) !important;
-    width: var(--lux-landscape-action-width) !important;
-    min-width: var(--lux-landscape-action-width) !important;
+    width: var(--lux-module-half, 58px) !important;
+    min-width: var(--lux-module-half, 58px) !important;
     height: 30px !important;
     margin: 0 !important;
     padding: 2px 3px !important;
@@ -143,43 +110,33 @@
     -webkit-backdrop-filter: blur(6px) !important;
   }
 
-  /* Salvar + Carregar: pair centered under Select, in the left gutter. */
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(1) {
-    left: max(4px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2)) !important;
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-button:nth-child(1) {
+    left: var(--lux-module-left) !important;
     right: auto !important;
   }
 
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(2) {
-    left: max(calc(4px + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap)), calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2 + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap))) !important;
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-button:nth-child(2) {
+    left: calc(var(--lux-module-left) + var(--lux-module-half, 58px) + var(--lux-module-gap, 6px)) !important;
     right: auto !important;
   }
 
-  /* Configuração + Sair: pair centered under Start, in the right gutter. */
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(3) {
-    right: max(calc(4px + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap)), calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2 + var(--lux-landscape-action-width) + var(--lux-landscape-action-gap))) !important;
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-button:nth-child(3) {
+    right: calc(var(--lux-module-right) + var(--lux-module-half, 58px) + var(--lux-module-gap, 6px)) !important;
     left: auto !important;
   }
 
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-button:nth-child(4) {
-    right: max(4px, calc((var(--lux-landscape-gutter) - var(--lux-landscape-action-pair-width)) / 2)) !important;
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-button:nth-child(4) {
+    right: var(--lux-module-right) !important;
     left: auto !important;
   }
 
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-icon,
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-icon svg {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-icon,
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-icon svg {
     width: 12px !important;
     height: 12px !important;
   }
 
-  #emulatorModal.lux-console-mobile-stage1:not(.lux-console-view-custom) .lux-console-action-label {
+  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame:not(.lux-console-view-custom) .lux-console-action-label {
     font-size: 7.5px !important;
-  }
-
-  #emulatorModal.lux-console-mobile-stage1.lux-console-view-frame .lux-console-header-brand {
-    top: auto !important;
-    bottom: calc(11px + env(safe-area-inset-bottom, 0px)) !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    z-index: 4;
   }
 }
