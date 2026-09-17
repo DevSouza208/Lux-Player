@@ -168,6 +168,14 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   document.head.appendChild(arcadeCoreScript);
 }
 
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-arcade-rom-blob]')) {
+  const arcadeRomBlobScript = document.createElement('script');
+  arcadeRomBlobScript.src = 'js/arcade-rom-blob-bridge.js?v=20260917-arcade-rom-blob1';
+  arcadeRomBlobScript.async = true;
+  arcadeRomBlobScript.dataset.luxArcadeRomBlob = '1';
+  document.head.appendChild(arcadeRomBlobScript);
+}
+
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-hltb]')) {
   const hltbScript = document.createElement('script');
   hltbScript.src = 'js/game-howlongtobeat.js?v=20260917-hltb1';
