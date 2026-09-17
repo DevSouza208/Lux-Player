@@ -159,3 +159,11 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   r2OnlyScript.dataset.luxR2OnlyRoms = '1';
   document.head.appendChild(r2OnlyScript);
 }
+
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-arcade-core-autodetect]')) {
+  const arcadeCoreScript = document.createElement('script');
+  arcadeCoreScript.src = 'js/arcade-core-autodetect.js?v=20260917-arcade-core-auto1';
+  arcadeCoreScript.async = true;
+  arcadeCoreScript.dataset.luxArcadeCoreAutodetect = '1';
+  document.head.appendChild(arcadeCoreScript);
+}
