@@ -1,6 +1,6 @@
 (() => {
   const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
-  const BUTTON_VERSION = '20260912-admin-client-sync-1';
+  const BUTTON_VERSION = '20260917-admin-client-sync-2-force-https';
 
   const formatSyncTime = value => {
     if (!value) return '';
@@ -42,7 +42,8 @@
         body: JSON.stringify({
           username: currentUser.user,
           password: currentUser.pass,
-          targetUsername
+          targetUsername,
+          force: true
         })
       });
 
@@ -53,13 +54,17 @@
       }
 
       const status = payload?.result?.status || 'success';
+      const publishedHttps = String(payload?.result?.url || '').startsWith('https://');
+      if ((status === 'success' || status === 'partial') && !publishedHttps) {
+        throw new Error('O Worker concluiu, mas não devolveu uma URL HTTPS publicada.');
+      }
       button.className = buttonClassesForStatus(status);
       button.innerHTML = status === 'partial'
         ? '<i data-lucide="triangle-alert" class="w-4 h-4"></i>'
         : '<i data-lucide="check" class="w-4 h-4"></i>';
       button.title = status === 'partial'
-        ? `Sincronização parcial de ${targetUsername}`
-        : `${targetUsername} sincronizado com sucesso`;
+        ? `Playlist HTTPS de ${targetUsername} atualizada; catálogo complementar ficou parcial`
+        : `HTTP de ${targetUsername} baixado e republicado em HTTPS`;
       lucide.createIcons();
 
       setTimeout(() => {
@@ -115,9 +120,9 @@
       const timeText = lastSync ? ` • Última: ${lastSync}` : '';
       const errorText = user.lista_m3u_sync_error ? ` • ${user.lista_m3u_sync_error}` : '';
       button.title = hasRemoteUrl
-        ? `Sincronizar catálogo IPTV de ${username}${statusText}${timeText}${errorText}`
+        ? `Forçar HTTP → HTTPS de ${username}${statusText}${timeText}${errorText}`
         : 'Este cliente não possui URL M3U HTTP/HTTPS para sincronizar';
-      button.setAttribute('aria-label', `Sincronizar catálogo IPTV de ${username}`);
+      button.setAttribute('aria-label', `Baixar lista HTTP e publicar HTTPS para ${username}`);
       button.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4"></i>';
       button.onclick = event => {
         event.preventDefault();
