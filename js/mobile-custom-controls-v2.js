@@ -17,6 +17,7 @@
   };
 
   let editing = false, selected = 'screen', draft = null, original = null, drag = null, lastOrientation = '';
+  const baseCache = new Map();
   const root = () => document.getElementById('emulatorModal');
   const context = () => document.getElementById('luxConsoleContextLayer');
   const orient = () => innerWidth > innerHeight ? 'landscape' : 'portrait';
@@ -77,9 +78,11 @@
     };
   }
 
-  function captureFrameLayout() {
+  function captureFrameLayout(force = false) {
     const modal = root();
     if (!modal) return fallback();
+    const cacheKey = storageKey();
+    if (!force && baseCache.has(cacheKey)) return clone(baseCache.get(cacheKey));
     const state = {
       frame: modal.classList.contains('lux-console-view-frame'), full: modal.classList.contains('lux-console-view-fullscreen'),
       custom: modal.classList.contains('lux-console-view-custom'), edit: modal.classList.contains('lux-controls-editing')
@@ -99,6 +102,7 @@
     if (state.edit) modal.classList.add('lux-controls-editing');
     const fb = fallback();
     available().forEach(key => { if (!out[key]) out[key] = fb[key]; });
+    if (Object.keys(out).length >= 4) baseCache.set(cacheKey, clone(out));
     return out;
   }
 
@@ -121,7 +125,7 @@
 
   function applyLayout(value) {
     const modal = root(); if (!modal) return;
-    markTargets(); const layout = normalize(value || readLayout());
+    markTargets(); const layout = value ? value : readLayout();
     Object.entries(layout).forEach(([key, v]) => {
       modal.style.setProperty(`--lux-cv2-${key}-x`, `${v.x}vw`);
       modal.style.setProperty(`--lux-cv2-${key}-y`, `${v.y}dvh`);
@@ -212,7 +216,7 @@
     ctx.appendChild(bar);
     bar.querySelectorAll('[data-cv2-group]').forEach(b => b.onclick = () => { selected = b.dataset.cv2Group; toolbarRefresh(); });
     bar.querySelector('.lux-cv2-size').oninput = e => { const cfg = draft?.[selected], def = groups[selected]; if (!cfg || !def) return; cfg.scale = clamp(+e.target.value/100, def[1], def[2]); applyLayout(draft); toolbarRefresh(); };
-    bar.querySelector('[data-cv2-action="reset"]').onclick = () => { draft = normalize(captureFrameLayout()); applyLayout(draft); toolbarRefresh(); };
+    bar.querySelector('[data-cv2-action="reset"]').onclick = () => { baseCache.delete(storageKey()); draft = normalize(captureFrameLayout(true)); applyLayout(draft); toolbarRefresh(); };
     bar.querySelector('[data-cv2-action="cancel"]').onclick = () => closeEditor(false);
     bar.querySelector('[data-cv2-action="save"]').onclick = () => closeEditor(true);
     toolbarRefresh();
@@ -261,7 +265,7 @@
     mutations.forEach(m => m.addedNodes.forEach(node => { if (!(node instanceof Element)) return; if (node.matches('.lux-console-settings-sheet')) injectSettings(node); node.querySelectorAll?.('.lux-console-settings-sheet').forEach(injectSettings); }));
   });
   observer.observe(document.body,{childList:true,subtree:true}); document.querySelectorAll('.lux-console-settings-sheet').forEach(injectSettings);
-  lastOrientation = orient(); window.addEventListener('resize', () => { const now=orient(); if(now===lastOrientation)return; lastOrientation=now; if(storedMode()==='custom'&&root()){ draft=editing?readLayout():null; setCustom(false); if(editing){original=clone(readLayout());draft=clone(original);toolbarRefresh();}} }, {passive:true});
-  window.LuxMobileCustomControls = { version:VERSION, open:()=>openEditor(document.querySelector('.lux-console-settings-sheet')), get:readLayout, reset:()=>{const v=saveLayout(captureFrameLayout());applyLayout(v);return v;}, groups:available };
+  lastOrientation = orient(); window.addEventListener('resize', () => { const now=orient(); if(now===lastOrientation)return; lastOrientation=now; baseCache.clear(); if(storedMode()==='custom'&&root()){ draft=editing?readLayout():null; setCustom(false); if(editing){original=clone(readLayout());draft=clone(original);toolbarRefresh();}} }, {passive:true});
+  window.LuxMobileCustomControls = { version:VERSION, open:()=>openEditor(document.querySelector('.lux-console-settings-sheet')), get:readLayout, reset:()=>{baseCache.delete(storageKey());const v=saveLayout(captureFrameLayout(true));applyLayout(v);return v;}, groups:available };
   console.info('[Lux Console] Personalizado v2: tela, L/R e Select/Start independentes.');
 })();
