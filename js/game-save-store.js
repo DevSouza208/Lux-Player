@@ -166,6 +166,14 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   document.head.appendChild(gameConsoleVisibilityScript);
 }
 
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-catalog-cache]')) {
+  const gameCatalogCacheScript = document.createElement('script');
+  gameCatalogCacheScript.src = 'js/game-catalog-cache.js?v=20260917-game-catalog-cache1';
+  gameCatalogCacheScript.async = false;
+  gameCatalogCacheScript.dataset.luxGameCatalogCache = '1';
+  document.head.appendChild(gameCatalogCacheScript);
+}
+
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-arcade-core-autodetect]')) {
   const arcadeCoreScript = document.createElement('script');
   arcadeCoreScript.src = 'js/arcade-core-autodetect.js?v=20260917-arcade-core-auto5';
