@@ -181,7 +181,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-loader3');
+  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-loader4');
   loadSync('lux-auto-login-resilience', 'js/auto-login-resilience.js?v=20260915-auto-login-resilience1');
 })();
 
