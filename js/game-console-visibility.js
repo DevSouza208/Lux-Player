@@ -1,8 +1,8 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-game-console-visibility3-split';
-  const CACHE_KEY = 'lux-play:game-console-visibility:v1';
+  const VERSION = '20260917-game-console-visibility4-reset';
+  const CACHE_KEY = 'lux-play:game-console-visibility:v2';
   const FUNCTION_NAME = 'game-console-visibility';
 
   if (window.__luxGameConsoleVisibilityVersion === VERSION) return;
