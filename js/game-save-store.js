@@ -189,3 +189,11 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   hltbScript.dataset.luxGameHltb = '1';
   document.head.appendChild(hltbScript);
 }
+
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-mobile-custom-controls-v2]')) {
+  const customControlsScript = document.createElement('script');
+  customControlsScript.src = 'js/mobile-custom-controls-v2.js?v=20260917-custom-layout-v2';
+  customControlsScript.async = true;
+  customControlsScript.dataset.luxMobileCustomControlsV2 = '1';
+  document.head.appendChild(customControlsScript);
+}
