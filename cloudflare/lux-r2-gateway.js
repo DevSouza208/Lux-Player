@@ -187,6 +187,8 @@ async function loadSaveBytes(env, storagePath) {
     return new Uint8Array(buffer);
   }
 
+  // Compatibilidade: se um save antigo ainda não estiver no R2, lê uma vez do
+  // Storage legado e o migra silenciosamente para a mesma chave em luxsaves.
   const legacy = await loadLegacySupabaseSave(env, storagePath);
   if (!legacy) return null;
   await env.SAVES.put(storagePath, legacy, {
@@ -355,18 +357,55 @@ async function requireGameCatalogAdmin(env, body) {
   return { account };
 }
 
+async function listR2Games(bucket, origin) {
+  const games = [];
+  let cursor;
+  do {
+    const page = await bucket.list({ cursor, limit: 1000 });
+    for (const object of page.objects || []) {
+      const game = gameFromR2Object(object, origin);
+      if (game) games.push(game);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return games;
+}
+
 async function handleGameCatalogSync(request, env, url) {
-  if (request.method !== 'POST') return json({ error: 'MÃ©todo nÃ£o permitido.' }, 405);
-  if (!env.ROMS) return json({ error: 'Binding ROMS indisponÃ­vel.' }, 500);
-  if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'CatÃ¡logo ainda nÃ£o configurado.' }, 503);
+  if (request.method !== 'POST') return json({ error: 'Método não permitido.' }, 405);
+  if (!env.ROMS) return json({ error: 'Binding ROMS indisponível.' }, 500);
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Catálogo ainda não configurado.' }, 503);
 
   let body;
-  try { body = await request.json(); } catch { return json({ error: 'JSON invÃ¡lido.' }, 400); }
+  try { body = await request.json(); }
+  catch { return json({ error: 'JSON inválido.' }, 400); }
+
   const auth = await requireGameCatalogAdmin(env, body);
   if (auth.error) return auth.error;
 
   const cursor = typeof body?.cursor === 'string' && body.cursor ? body.cursor : undefined;
-  const page = await env.ROMS.list({ cursor, limit: 1 });
+  let page;
+  try {
+    page = await env.ROMS.list({ cursor, limit: 1 });
+  } catch (error) {
+    return json({
+      mode: 'one-by-one',
+      processed: 0,
+      created: 0,
+      existing: 0,
+      skipped: 0,
+      failed: 1,
+      failure: {
+        key: '',
+        title: '',
+        stage: 'r2-list',
+        error: error?.message || 'Falha ao listar o R2.',
+      },
+      nextCursor: null,
+      done: false,
+    });
+  }
+
   const object = page.objects?.[0] || null;
   const nextCursor = page.truncated ? page.cursor : null;
   const done = !page.truncated;
@@ -376,32 +415,94 @@ async function handleGameCatalogSync(request, env, url) {
       mode: 'one-by-one',
       processed: 0,
       created: 0,
-      updated: 0,
+      existing: 0,
       skipped: 0,
+      failed: 0,
       nextCursor,
       done: true,
     });
   }
 
+  const key = String(object.key || '');
   const game = gameFromR2Object(object, url.origin);
-  if (!game) {
+
+  // Modo usado pelo frontend quando uma chamada falha repetidamente:
+  // apenas avança o cursor, registra a ROM problemática e não toca no catálogo.
+  if (body?.action === 'skip') {
     return json({
       mode: 'one-by-one',
       processed: 1,
       created: 0,
-      updated: 0,
-      skipped: 1,
-      key: String(object.key || ''),
+      existing: 0,
+      skipped: 0,
+      failed: 1,
+      failure: {
+        key,
+        title: game?.title || '',
+        stage: 'client-skip',
+        error: String(body?.reason || 'Ignorada após falhas repetidas.').slice(0, 500),
+      },
       nextCursor,
       done,
     });
   }
 
-  const existing = firstRow(await supabaseRequest(
-    env,
-    `/rest/v1/games?select=id,status&rom_path=eq.${encodeURIComponent(game.key)}&limit=1`,
-    { method: 'GET' },
-  ));
+  if (!game) {
+    return json({
+      mode: 'one-by-one',
+      processed: 1,
+      created: 0,
+      existing: 0,
+      skipped: 1,
+      failed: 0,
+      key,
+      nextCursor,
+      done,
+    });
+  }
+
+  let existing;
+  try {
+    existing = firstRow(await supabaseRequest(
+      env,
+      `/rest/v1/games?select=id,status&rom_path=eq.${encodeURIComponent(game.key)}&limit=1`,
+      { method: 'GET' },
+    ));
+  } catch (error) {
+    return json({
+      mode: 'one-by-one',
+      processed: 1,
+      created: 0,
+      existing: 0,
+      skipped: 0,
+      failed: 1,
+      failure: {
+        key: game.key,
+        title: game.title,
+        stage: 'catalog-lookup',
+        error: error?.message || 'Falha ao consultar o catálogo.',
+      },
+      nextCursor,
+      done,
+    });
+  }
+
+  // Se a ROM já existe no catálogo, não faz PATCH nem reseta status:
+  // apenas informa ao frontend e segue para o próximo objeto.
+  if (existing?.id) {
+    return json({
+      mode: 'one-by-one',
+      processed: 1,
+      created: 0,
+      existing: 1,
+      skipped: 0,
+      failed: 0,
+      key: game.key,
+      title: game.title,
+      nextCursor,
+      done,
+    });
+  }
 
   const values = {
     title: game.title,
@@ -409,32 +510,43 @@ async function handleGameCatalogSync(request, env, url) {
     rom_path: game.key,
     rom_url: game.romUrl,
     source_file_name: game.sourceFileName,
+    players: 1,
+    genres: [],
+    status: 'pending',
   };
 
-  let created = 0;
-  let updated = 0;
-  if (existing?.id) {
-    await supabaseRequest(env, `/rest/v1/games?id=eq.${encodeURIComponent(existing.id)}`, {
-      method: 'PATCH',
-      headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify(values),
-    });
-    updated = 1;
-  } else {
+  try {
     await supabaseRequest(env, '/rest/v1/games', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ ...values, players: 1, genres: [], status: 'pending' }),
+      body: JSON.stringify(values),
     });
-    created = 1;
+  } catch (error) {
+    return json({
+      mode: 'one-by-one',
+      processed: 1,
+      created: 0,
+      existing: 0,
+      skipped: 0,
+      failed: 1,
+      failure: {
+        key: game.key,
+        title: game.title,
+        stage: 'catalog-insert',
+        error: error?.message || 'Falha ao inserir no catálogo.',
+      },
+      nextCursor,
+      done,
+    });
   }
 
   return json({
     mode: 'one-by-one',
     processed: 1,
-    created,
-    updated,
+    created: 1,
+    existing: 0,
     skipped: 0,
+    failed: 0,
     key: game.key,
     title: game.title,
     nextCursor,
@@ -519,7 +631,10 @@ export default {
       return response('Not found', { status: 404 });
     } catch (error) {
       console.error('[Lux R2 Gateway]', error);
-      return json({ error: 'Não foi possível processar a solicitação.' }, Number(error?.status) >= 400 ? Number(error.status) : 500);
+      return json({
+        error: error?.message || 'Erro desconhecido',
+        stack: error?.stack || null
+      }, 500);
     }
   },
 };
