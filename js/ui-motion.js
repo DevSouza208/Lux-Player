@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260917-loader2';
+  const RESET_VERSION = '20260917-loader3';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -181,7 +181,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-loader2');
+  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-loader3');
   loadSync('lux-auto-login-resilience', 'js/auto-login-resilience.js?v=20260915-auto-login-resilience1');
 })();
 
