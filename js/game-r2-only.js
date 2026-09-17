@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-r2-only-roms4';
+  const VERSION = '20260917-r2-only-roms5';
   const GATEWAY_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/roms';
   const GATEWAY_SYNC = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync';
   const SYNC_RETRY_DELAYS = [250, 700, 1500, 3000];
@@ -286,15 +286,29 @@
   window.syncGamesCatalogFromR2 = syncGamesCatalogOneByOne;
   try { syncGamesCatalogFromR2 = syncGamesCatalogOneByOne; } catch (_) {}
 
-  if (typeof adminImportGame === 'function') {
-    const blockedImport = async function () {
-      const message = 'ROMs agora usam somente Cloudflare R2. Envie o arquivo ao bucket luxroms e depois clique em “Ler ROMs do R2”.';
-      try { if (typeof setGameAdminStatus === 'function') setGameAdminStatus(message); } catch (_) {}
+  if (typeof adminImportGame === 'function' && !adminImportGame.__luxR2OnlyMetadataGuard) {
+    const originalAdminImportGame = adminImportGame;
+    const guardedImport = async function (...args) {
+      const files = Array.from(document.getElementById('gameAdminRom')?.files || []);
+
+      // Edição de jogo já existente: permite salvar SOMENTE metadados.
+      // O fluxo original já atualiza a linha de `games` sem tocar na ROM.
+      if (editingGameId && files.length === 0) {
+        return originalAdminImportGame.apply(this, args);
+      }
+
+      const message = editingGameId
+        ? 'A ROM deste jogo já está no R2. Remova o arquivo selecionado para salvar apenas capa, título, sinopse e demais dados.'
+        : 'ROMs agora usam somente Cloudflare R2. Envie o arquivo ao bucket luxroms e depois clique em “Ler ROMs do R2”.';
+      try { if (typeof setGameAdminStatus === 'function') setGameAdminStatus(message, true); } catch (_) {}
       window.alert?.(message);
       return undefined;
     };
-    blockedImport.__luxR2OnlyPatched = VERSION;
-    adminImportGame = blockedImport;
+    guardedImport.__luxR2OnlyPatched = VERSION;
+    guardedImport.__luxR2OnlyMetadataGuard = VERSION;
+    guardedImport.__luxR2OnlyOriginal = originalAdminImportGame;
+    adminImportGame = guardedImport;
+    try { window.adminImportGame = guardedImport; } catch (_) {}
   }
 
   if (typeof toggleGameUploadModal === 'function') {
@@ -327,7 +341,17 @@
     batchSize: SYNC_BATCH_SIZE
   };
 
+  function ensureArcadeOption() {
+    const select = document.getElementById('gameAdminConsole');
+    if (!select || select.querySelector('option[value="arcade"]')) return;
+    const option = document.createElement('option');
+    option.value = 'arcade';
+    option.textContent = 'Arcade';
+    select.insertBefore(option, select.firstChild);
+  }
+
   function hardenAdminUi() {
+    ensureArcadeOption();
     const uploadButton = document.querySelector('#adminTabGames button[onclick*="toggleGameUploadModal"]');
     if (uploadButton) {
       uploadButton.textContent = 'ROMs no R2';
@@ -336,6 +360,8 @@
   }
 
   hardenAdminUi();
+  const uiTimer = setInterval(hardenAdminUi, 500);
+  setTimeout(() => clearInterval(uiTimer), 15000);
   document.addEventListener('DOMContentLoaded', hardenAdminUi, { once: true });
-  console.info(`[Lux Games] R2-only resiliente: sincronização em lotes de ${SYNC_BATCH_SIZE}, pula existentes e registra falhas.`);
+  console.info(`[Lux Games] R2-only resiliente: sincronização em lotes de ${SYNC_BATCH_SIZE}, edição salva só metadados e ROMs permanecem no R2.`);
 })();
