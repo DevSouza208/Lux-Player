@@ -160,7 +160,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-console-visibility]')) {
   const gameConsoleVisibilityScript = document.createElement('script');
-  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility2';
+  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility3-split';
   gameConsoleVisibilityScript.async = false;
   gameConsoleVisibilityScript.dataset.luxGameConsoleVisibility = '1';
   document.head.appendChild(gameConsoleVisibilityScript);
@@ -168,7 +168,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-catalog-cache]')) {
   const gameCatalogCacheScript = document.createElement('script');
-  gameCatalogCacheScript.src = 'js/game-catalog-cache.js?v=20260917-game-catalog-cache1';
+  gameCatalogCacheScript.src = 'js/game-catalog-cache.js?v=20260917-game-catalog-split2';
   gameCatalogCacheScript.async = false;
   gameCatalogCacheScript.dataset.luxGameCatalogCache = '1';
   document.head.appendChild(gameCatalogCacheScript);
