@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-game-console-visibility2';
+  const VERSION = '20260917-game-console-visibility3-split';
   const CACHE_KEY = 'lux-play:game-console-visibility:v1';
   const FUNCTION_NAME = 'game-console-visibility';
 
@@ -269,6 +269,7 @@
       applyConsoles(data.consoles, true);
       renderAdminMessage(`${consoleLabel(id)} agora está ${enabled ? 'visível' : 'oculto'} para usuários. A aprovação individual dos jogos foi preservada.`);
       console.info(`[Lux Games] ${consoleLabel(id)} ${enabled ? 'ativado' : 'desativado'} no catálogo público.`);
+      try { if (typeof window.renderGamesCatalog === 'function') await window.renderGamesCatalog(); } catch (_) {}
     } catch (error) {
       console.error('[Lux Games] Falha ao salvar visibilidade do console:', error);
       renderAdminMessage(`Não foi possível salvar ${consoleLabel(id)}: ${error?.message || 'erro desconhecido'}`, true);
