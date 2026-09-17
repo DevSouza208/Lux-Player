@@ -192,7 +192,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-hltb]')) {
   const hltbScript = document.createElement('script');
-  hltbScript.src = 'js/game-howlongtobeat.js?v=20260917-hltb1';
+  hltbScript.src = 'js/game-howlongtobeat.js?v=20260917-hltb3';
   hltbScript.async = true;
   hltbScript.dataset.luxGameHltb = '1';
   document.head.appendChild(hltbScript);
