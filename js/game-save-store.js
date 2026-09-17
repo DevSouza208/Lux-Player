@@ -154,7 +154,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-r2-only-roms]')) {
   const r2OnlyScript = document.createElement('script');
-  r2OnlyScript.src = 'js/game-r2-only.js?v=20260917-r2-only-roms1';
+  r2OnlyScript.src = 'js/game-r2-only.js?v=20260917-r2-only-roms2';
   r2OnlyScript.async = false;
   r2OnlyScript.dataset.luxR2OnlyRoms = '1';
   document.head.appendChild(r2OnlyScript);
