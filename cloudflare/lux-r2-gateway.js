@@ -187,8 +187,6 @@ async function loadSaveBytes(env, storagePath) {
     return new Uint8Array(buffer);
   }
 
-  // Compatibilidade: se um save antigo ainda não estiver no R2, lê uma vez do
-  // Storage legado e o migra silenciosamente para a mesma chave em luxsaves.
   const legacy = await loadLegacySupabaseSave(env, storagePath);
   if (!legacy) return null;
   await env.SAVES.put(storagePath, legacy, {
@@ -357,68 +355,91 @@ async function requireGameCatalogAdmin(env, body) {
   return { account };
 }
 
-async function listR2Games(bucket, origin) {
-  const games = [];
-  let cursor;
-  do {
-    const page = await bucket.list({ cursor, limit: 1000 });
-    for (const object of page.objects || []) {
-      const game = gameFromR2Object(object, origin);
-      if (game) games.push(game);
-    }
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-  return games;
-}
-
 async function handleGameCatalogSync(request, env, url) {
   if (request.method !== 'POST') return json({ error: 'MÃ©todo nÃ£o permitido.' }, 405);
   if (!env.ROMS) return json({ error: 'Binding ROMS indisponÃ­vel.' }, 500);
   if (!env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'CatÃ¡logo ainda nÃ£o configurado.' }, 503);
+
   let body;
   try { body = await request.json(); } catch { return json({ error: 'JSON invÃ¡lido.' }, 400); }
   const auth = await requireGameCatalogAdmin(env, body);
   if (auth.error) return auth.error;
 
-  const found = await listR2Games(env.ROMS, url.origin);
-  const unique = [...new Map(found.map(game => [`${game.console}:${game.key}`, game])).values()];
-  const existing = await supabaseRequest(env, '/rest/v1/games?select=id,title,console,rom_path');
-  const byPath = new Map((Array.isArray(existing) ? existing : []).map(game => [String(game.rom_path || ''), game]));
-  const byIdentity = new Map((Array.isArray(existing) ? existing : []).map(game => [gameIdentity(game.title, game.console), game]));
-  const retainedIds = new Set();
-  let created = 0, updated = 0;
+  const cursor = typeof body?.cursor === 'string' && body.cursor ? body.cursor : undefined;
+  const page = await env.ROMS.list({ cursor, limit: 1 });
+  const object = page.objects?.[0] || null;
+  const nextCursor = page.truncated ? page.cursor : null;
+  const done = !page.truncated;
 
-  for (const game of unique) {
-    const matched = byPath.get(game.key) || byIdentity.get(gameIdentity(game.title, game.console));
-    const values = {
-      title: game.title,
-      console: game.console,
-      rom_path: game.key,
-      rom_url: game.romUrl,
-      source_file_name: game.sourceFileName,
-      status: 'pending',
-    };
-    if (matched?.id) {
-      await supabaseRequest(env, `/rest/v1/games?id=eq.${encodeURIComponent(matched.id)}`, {
-        method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(values),
-      });
-      retainedIds.add(String(matched.id));
-      updated += 1;
-    } else {
-      await supabaseRequest(env, '/rest/v1/games', {
-        method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ ...values, players: 1, genres: [] }),
-      });
-      created += 1;
-    }
+  if (!object) {
+    return json({
+      mode: 'one-by-one',
+      processed: 0,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      nextCursor,
+      done: true,
+    });
   }
 
-  let removed = 0;
-  for (const game of Array.isArray(existing) ? existing : []) {
-    if (retainedIds.has(String(game.id))) continue;
-    await supabaseRequest(env, `/rest/v1/games?id=eq.${encodeURIComponent(game.id)}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
-    removed += 1;
+  const game = gameFromR2Object(object, url.origin);
+  if (!game) {
+    return json({
+      mode: 'one-by-one',
+      processed: 1,
+      created: 0,
+      updated: 0,
+      skipped: 1,
+      key: String(object.key || ''),
+      nextCursor,
+      done,
+    });
   }
-  return json({ found: unique.length, created, updated, removed, pending: unique.length });
+
+  const existing = firstRow(await supabaseRequest(
+    env,
+    `/rest/v1/games?select=id,status&rom_path=eq.${encodeURIComponent(game.key)}&limit=1`,
+    { method: 'GET' },
+  ));
+
+  const values = {
+    title: game.title,
+    console: game.console,
+    rom_path: game.key,
+    rom_url: game.romUrl,
+    source_file_name: game.sourceFileName,
+  };
+
+  let created = 0;
+  let updated = 0;
+  if (existing?.id) {
+    await supabaseRequest(env, `/rest/v1/games?id=eq.${encodeURIComponent(existing.id)}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify(values),
+    });
+    updated = 1;
+  } else {
+    await supabaseRequest(env, '/rest/v1/games', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ ...values, players: 1, genres: [], status: 'pending' }),
+    });
+    created = 1;
+  }
+
+  return json({
+    mode: 'one-by-one',
+    processed: 1,
+    created,
+    updated,
+    skipped: 0,
+    key: game.key,
+    title: game.title,
+    nextCursor,
+    done,
+  });
 }
 
 async function handlePublicR2(request, env, url) {
