@@ -154,7 +154,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-r2-only-roms]')) {
   const r2OnlyScript = document.createElement('script');
-  r2OnlyScript.src = 'js/game-r2-only.js?v=20260917-r2-only-roms4';
+  r2OnlyScript.src = 'js/game-r2-only.js?v=20260917-r2-only-roms5';
   r2OnlyScript.async = false;
   r2OnlyScript.dataset.luxR2OnlyRoms = '1';
   document.head.appendChild(r2OnlyScript);
@@ -166,4 +166,12 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   arcadeCoreScript.async = true;
   arcadeCoreScript.dataset.luxArcadeCoreAutodetect = '1';
   document.head.appendChild(arcadeCoreScript);
+}
+
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-hltb]')) {
+  const hltbScript = document.createElement('script');
+  hltbScript.src = 'js/game-howlongtobeat.js?v=20260917-hltb1';
+  hltbScript.async = true;
+  hltbScript.dataset.luxGameHltb = '1';
+  document.head.appendChild(hltbScript);
 }
