@@ -122,7 +122,7 @@ if (!document.querySelector('script[data-lux-rom-storage-mode]')) {
 
 if (!document.querySelector('script[data-lux-rom-playback-file]')) {
   const romPlaybackFileScript = document.createElement('script');
-  romPlaybackFileScript.src = 'js/game-rom-playback-file.js?v=20260917-rom-playback-file1';
+  romPlaybackFileScript.src = 'js/game-rom-playback-file.js?v=20260917-rom-playback-file2';
   romPlaybackFileScript.async = true;
   romPlaybackFileScript.dataset.luxRomPlaybackFile = '1';
   document.head.appendChild(romPlaybackFileScript);
