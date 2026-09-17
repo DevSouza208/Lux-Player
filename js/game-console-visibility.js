@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-game-console-visibility1';
+  const VERSION = '20260917-game-console-visibility2';
   const CACHE_KEY = 'lux-play:game-console-visibility:v1';
   const FUNCTION_NAME = 'game-console-visibility';
 
@@ -279,17 +279,137 @@
     }
   }
 
+  function chooseReviewConsole(groups) {
+    return new Promise(resolve => {
+      document.getElementById('gameReviewConsoleDialog')?.remove();
+
+      const overlay = createElement('div', 'fixed inset-0 z-[1200] flex items-center justify-center bg-black/75 p-4');
+      overlay.id = 'gameReviewConsoleDialog';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', 'gameReviewConsoleTitle');
+
+      const card = createElement('div', 'w-full max-w-lg rounded-3xl border border-purple-800/60 bg-[#120c1f] p-5 shadow-2xl');
+      const title = createElement('h3', 'text-lg font-black text-white', 'Qual console você quer revisar?');
+      title.id = 'gameReviewConsoleTitle';
+      card.appendChild(title);
+      card.appendChild(createElement('p', 'mt-1 text-xs text-purple-300', 'A fila mostrará somente os jogos ainda não aprovados do console escolhido.'));
+
+      const list = createElement('div', 'mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2');
+      let firstButton = null;
+
+      const close = value => {
+        document.removeEventListener('keydown', onKeyDown);
+        overlay.remove();
+        resolve(value);
+      };
+
+      const onKeyDown = event => {
+        if (event.key === 'Escape') close(null);
+      };
+
+      for (const group of groups) {
+        const button = createElement('button', 'flex min-h-[64px] items-center justify-between gap-3 rounded-2xl border border-purple-800/50 bg-[#180f29] px-4 py-3 text-left hover:border-purple-500 hover:bg-[#211437] focus:outline-none focus:ring-2 focus:ring-purple-500');
+        button.type = 'button';
+        button.dataset.reviewConsole = group.id;
+
+        const info = createElement('span', 'min-w-0');
+        info.appendChild(createElement('span', 'block text-sm font-bold text-white', consoleLabel(group.id)));
+        info.appendChild(createElement('span', 'mt-0.5 block text-[10px] text-purple-300/70', `${group.count} jogo(s) aguardando revisão`));
+        button.appendChild(info);
+        button.appendChild(createElement('span', 'shrink-0 rounded-full bg-purple-600/20 px-2.5 py-1 text-xs font-black text-purple-200', String(group.count)));
+        button.addEventListener('click', () => close(group.id));
+        list.appendChild(button);
+        if (!firstButton) firstButton = button;
+      }
+
+      card.appendChild(list);
+
+      const actions = createElement('div', 'mt-5 flex justify-end');
+      const cancel = createElement('button', 'rounded-xl border border-purple-900/60 bg-[#180f29] px-4 py-2.5 text-xs font-bold text-purple-200 hover:bg-[#23153b]', 'Cancelar');
+      cancel.type = 'button';
+      cancel.addEventListener('click', () => close(null));
+      actions.appendChild(cancel);
+      card.appendChild(actions);
+      overlay.appendChild(card);
+
+      overlay.addEventListener('click', event => {
+        if (event.target === overlay) close(null);
+      });
+      document.addEventListener('keydown', onKeyDown);
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => firstButton?.focus());
+    });
+  }
+
+  async function reviewUnapprovedGamesByConsole() {
+    if (!isAdmin()) return;
+
+    try {
+      await loadGamesCatalog();
+      const pending = (Array.isArray(gamesCatalog) ? gamesCatalog : []).filter(game => game.status !== 'approved');
+      if (!pending.length) {
+        window.alert?.('Não há jogos não aprovados para revisar.');
+        return;
+      }
+
+      const grouped = new Map();
+      for (const game of pending) {
+        const id = normalizeConsole(game?.console) || 'desconhecido';
+        grouped.set(id, (grouped.get(id) || 0) + 1);
+      }
+
+      const groups = [...grouped.entries()]
+        .map(([id, count]) => ({ id, count }))
+        .sort((a, b) => consoleLabel(a.id).localeCompare(consoleLabel(b.id), 'pt-BR'));
+
+      const selectedConsole = await chooseReviewConsole(groups);
+      if (!selectedConsole) return;
+
+      pendingReviewQueue = pending
+        .filter(game => (normalizeConsole(game?.console) || 'desconhecido') === selectedConsole)
+        .map(game => game.id);
+
+      if (!pendingReviewQueue.length) {
+        window.alert?.(`Não há jogos de ${consoleLabel(selectedConsole)} aguardando revisão.`);
+        return;
+      }
+
+      openNextPendingReview();
+      try {
+        setGameAdminStatus(`Revisando ${pendingReviewQueue.length} jogo(s) de ${consoleLabel(selectedConsole)}.`);
+      } catch (_) {}
+    } catch (error) {
+      console.error('[Lux Games] Falha ao iniciar revisão por console:', error);
+      window.alert?.(`Não foi possível carregar os jogos para revisão: ${error?.message || 'erro desconhecido'}`);
+    }
+  }
+
+  function patchReviewFlow() {
+    if (typeof reviewUnapprovedGames !== 'function') return false;
+    if (reviewUnapprovedGames.__luxReviewByConsolePatched) return true;
+
+    const patchedReview = reviewUnapprovedGamesByConsole;
+    patchedReview.__luxReviewByConsolePatched = VERSION;
+    reviewUnapprovedGames = patchedReview;
+    try { window.reviewUnapprovedGames = patchedReview; } catch (_) {}
+    return true;
+  }
+
   restoreCache();
   patchCatalogLoader();
+  patchReviewFlow();
   ensureAdminPanel();
 
   const installer = setInterval(() => {
     patchCatalogLoader();
+    patchReviewFlow();
     ensureAdminPanel();
   }, 250);
   setTimeout(() => clearInterval(installer), 15000);
   document.addEventListener('DOMContentLoaded', () => {
     patchCatalogLoader();
+    patchReviewFlow();
     ensureAdminPanel();
   }, { once: true });
 
@@ -299,7 +419,8 @@
     isEnabled: isConsoleEnabled,
     setEnabled: setConsoleEnabled,
     list: () => state.consoles.map(item => ({ ...item })),
+    reviewPendingByConsole: reviewUnapprovedGamesByConsole,
   };
 
-  console.info('[Lux Games] Controle global de visibilidade por console ativo.');
+  console.info('[Lux Games] Controle global de visibilidade e revisão por console ativos.');
 })();
