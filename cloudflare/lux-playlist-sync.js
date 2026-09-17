@@ -19,6 +19,33 @@ function baseUrl(env) {
   return String(env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
 }
 
+function normalizeSourceUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    const entries = [...url.searchParams.entries()].sort(([ak, av], [bk, bv]) =>
+      ak.localeCompare(bk) || av.localeCompare(bv)
+    );
+    url.search = "";
+    entries.forEach(([key, val]) => url.searchParams.append(key, val));
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
+async function sourceKeyForUrl(value) {
+  const normalized = normalizeSourceUrl(value);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function sharedSourceRoot(sourceKey) {
+  return `fontes/${sourceKey}`;
+}
+
 async function supabaseFetch(env, path, options = {}) {
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   return fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
@@ -40,10 +67,27 @@ async function updateUser(env, username, data) {
   });
 }
 
+async function updateUsersSharingSource(env, sourceUrl, data) {
+  const response = await supabaseFetch(
+    env,
+    `usuarios?lista_m3u=eq.${encodeURIComponent(sourceUrl)}`,
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(data)
+    }
+  );
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    console.warn("[Lux Playlist Sync] Não foi possível propagar a fonte compartilhada:", response.status, details);
+  }
+  return response;
+}
+
 async function getUserByUsername(env, username) {
   const response = await supabaseFetch(
     env,
-    `usuarios?select=usuario,cargo,lista_m3u&usuario=eq.${encodeURIComponent(username)}&limit=1`
+    `usuarios?select=usuario,cargo,lista_m3u,lista_m3u_https,lista_m3u_sync_status&usuario=eq.${encodeURIComponent(username)}&limit=1`
   );
   if (!response.ok) throw new Error(`Erro ao consultar usuário: HTTP ${response.status}`);
   const rows = await response.json();
@@ -129,15 +173,33 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
   }
 }
 
-async function readPreviousCatalogManifest(env, username) {
+async function readPreviousCatalogManifest(env, sourceKey) {
   try {
-    const key = `catalogos/${encodeURIComponent(username)}/manifest.json`;
+    const key = `${sharedSourceRoot(sourceKey)}/manifest.json`;
     const object = await env.LISTS_BUCKET.get(key);
     if (!object) return null;
     return JSON.parse(await object.text());
   } catch {
     return null;
   }
+}
+
+async function sharedSourceReady(env, sourceKey, needsCatalog) {
+  const root = sharedSourceRoot(sourceKey);
+  const playlist = await env.LISTS_BUCKET.head(`${root}/playlist.m3u`);
+  if (!playlist) return null;
+  if (!needsCatalog) {
+    return {
+      playlistUrl: `${baseUrl(env)}/${root}/playlist.m3u`,
+      manifest: null
+    };
+  }
+  const manifest = await readPreviousCatalogManifest(env, sourceKey);
+  if (!manifest?.files || !manifest?.playlist) return null;
+  return {
+    playlistUrl: `${baseUrl(env)}/${root}/playlist.m3u`,
+    manifest
+  };
 }
 
 function r2HttpMetadata(contentType) {
@@ -194,25 +256,23 @@ async function syncCatalogPart(env, source, versionPrefix, part) {
   return { name, filename, bytes };
 }
 
-async function cleanupOldCatalog(env, username, previousManifest, currentVersion) {
+async function cleanupOldCatalog(env, sourceKey, previousManifest, currentVersion) {
   const oldVersion = String(previousManifest?.version || "");
   if (!oldVersion || oldVersion === currentVersion) return;
 
-  const prefix = `catalogos/${encodeURIComponent(username)}/${oldVersion}`;
+  const prefix = `${sharedSourceRoot(sourceKey)}/${oldVersion}`;
   await Promise.allSettled(
     catalogParts.map(([, , filename]) => env.LISTS_BUCKET.delete(`${prefix}/${filename}`))
   );
 }
 
-async function syncXtreamCatalog(env, username, source, playlistUrl) {
+async function syncXtreamCatalog(env, sourceKey, source, playlistUrl) {
   const version = String(Date.now());
-  const encodedUser = encodeURIComponent(username);
-  const versionPrefix = `catalogos/${encodedUser}/${version}`;
-  const previousManifest = await readPreviousCatalogManifest(env, username);
+  const root = sharedSourceRoot(sourceKey);
+  const versionPrefix = `${root}/${version}`;
+  const previousManifest = await readPreviousCatalogManifest(env, sourceKey);
   const saved = [];
 
-  // Um endpoint grande por vez. Se o fornecedor vier sem Content-Length,
-  // o fallback precisa bufferizar somente aquele arquivo, nunca vários juntos.
   for (const part of catalogParts) {
     saved.push(await syncCatalogPart(env, source, versionPrefix, part));
   }
@@ -225,7 +285,8 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
   });
 
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    sourceKey,
     version,
     syncedAt: new Date().toISOString(),
     playlist: playlistUrl,
@@ -233,12 +294,12 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
     bytes
   };
 
-  const manifestKey = `catalogos/${encodedUser}/manifest.json`;
+  const manifestKey = `${root}/manifest.json`;
   await env.LISTS_BUCKET.put(manifestKey, JSON.stringify(manifest), {
     httpMetadata: r2HttpMetadata("application/json; charset=utf-8")
   });
 
-  await cleanupOldCatalog(env, username, previousManifest, version);
+  await cleanupOldCatalog(env, sourceKey, previousManifest, version);
 
   return {
     url: `${baseUrl(env)}/${manifestKey}`,
@@ -256,6 +317,13 @@ async function syncUser(env, user, options = {}) {
     return { usuario: username, status: "skipped", message: "Sem URL HTTP/HTTPS válida" };
   }
 
+  const normalizedSourceUrl = normalizeSourceUrl(sourceUrl);
+  const sourceKey = await sourceKeyForUrl(normalizedSourceUrl);
+  const root = sharedSourceRoot(sourceKey);
+  const objectKey = `${root}/playlist.m3u`;
+  const httpsUrl = `${baseUrl(env)}/${objectKey}`;
+  const xtreamSource = getXtreamSource(sourceUrl);
+
   const syncStartedAt = new Date().toISOString();
   await updateUser(env, username, {
     lista_m3u_sync_at: syncStartedAt,
@@ -264,11 +332,34 @@ async function syncUser(env, user, options = {}) {
   }).catch(() => {});
 
   try {
+    if (!options.force) {
+      const existing = await sharedSourceReady(env, sourceKey, Boolean(xtreamSource));
+      if (existing) {
+        const reusedState = {
+          lista_m3u_https: existing.playlistUrl,
+          lista_m3u_sync_at: new Date().toISOString(),
+          lista_m3u_sync_status: "success",
+          lista_m3u_sync_error: null
+        };
+        await updateUsersSharingSource(env, sourceUrl, reusedState);
+        return {
+          usuario: username,
+          status: "success",
+          url: existing.playlistUrl,
+          sourceKey,
+          reused: true,
+          catalog: existing.manifest
+            ? { status: "success", url: `${baseUrl(env)}/${root}/manifest.json`, reused: true }
+            : { status: "skipped", message: "Fonte sem catálogo Xtream" }
+        };
+      }
+    }
+
     const playlistResponse = await fetchWithTimeout(
       sourceUrl,
       {
         headers: {
-          "User-Agent": "Lux-Playlist-Sync/1.6",
+          "User-Agent": "Lux-Playlist-Sync/1.7",
           "Cache-Control": "no-cache",
           "Pragma": "no-cache"
         },
@@ -281,8 +372,6 @@ async function syncUser(env, user, options = {}) {
       throw new Error(`Fornecedor respondeu HTTP ${playlistResponse.status}`);
     }
 
-    const encodedUser = encodeURIComponent(username);
-    const objectKey = `listas/${encodedUser}.m3u`;
     const playlistBytes = await saveRemoteResponseToR2(
       env,
       objectKey,
@@ -290,32 +379,32 @@ async function syncUser(env, user, options = {}) {
       "audio/x-mpegurl; charset=utf-8"
     );
 
-    const httpsUrl = `${baseUrl(env)}/${objectKey}`;
-    const xtreamSource = getXtreamSource(sourceUrl);
-
     let catalog = null;
     let catalogError = null;
 
     if (xtreamSource) {
       try {
-        catalog = await syncXtreamCatalog(env, username, xtreamSource, httpsUrl);
+        catalog = await syncXtreamCatalog(env, sourceKey, xtreamSource, httpsUrl);
       } catch (error) {
         catalogError = error?.message || "Falha ao sincronizar catálogo Xtream";
-        console.warn(`[Lux Playlist Sync] Catálogo de ${username}:`, error);
+        console.warn(`[Lux Playlist Sync] Catálogo da fonte ${sourceKey.slice(0, 12)}:`, error);
       }
     }
 
-    await updateUser(env, username, {
+    const sharedState = {
       lista_m3u_https: httpsUrl,
       lista_m3u_sync_at: new Date().toISOString(),
       lista_m3u_sync_status: catalogError ? "partial" : "success",
       lista_m3u_sync_error: catalogError
-    });
+    };
+    await updateUsersSharingSource(env, sourceUrl, sharedState);
 
     return {
       usuario: username,
       status: catalogError ? "partial" : "success",
       url: httpsUrl,
+      sourceKey,
+      reused: false,
       playlistBytes,
       catalog: catalog
         ? { status: "success", ...catalog }
@@ -333,6 +422,7 @@ async function syncUser(env, user, options = {}) {
     return {
       usuario: username,
       status: "error",
+      sourceKey,
       message: error?.message || "Erro desconhecido"
     };
   }
@@ -405,12 +495,12 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.5" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.7.0" });
     }
 
     if (
       request.method === "GET" &&
-      (url.pathname.startsWith("/listas/") || url.pathname.startsWith("/catalogos/"))
+      (url.pathname.startsWith("/listas/") || url.pathname.startsWith("/catalogos/") || url.pathname.startsWith("/fontes/"))
     ) {
       return serveR2Object(request, env);
     }
@@ -455,7 +545,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.6.5"
+      version: "1.7.0"
     });
   },
 
