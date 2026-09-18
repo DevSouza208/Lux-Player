@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-hltb7';
+  const VERSION = '20260918-hltb8-cover-card';
   const CACHE_PREFIX = 'lux-hltb-duration:';
   const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
   const CARD_ID = 'gameDetailsHltb';
@@ -15,19 +15,13 @@
   let scheduled = false;
 
   function currentGame() {
-    try {
-      return typeof currentGameDetails !== 'undefined' ? currentGameDetails : null;
-    } catch (_) {
-      return null;
-    }
+    try { return typeof currentGameDetails !== 'undefined' ? currentGameDetails : null; }
+    catch (_) { return null; }
   }
 
   function client() {
-    try {
-      return typeof supabaseClient !== 'undefined' ? supabaseClient : null;
-    } catch (_) {
-      return null;
-    }
+    try { return typeof supabaseClient !== 'undefined' ? supabaseClient : null; }
+    catch (_) { return null; }
   }
 
   function normalize(value = '') {
@@ -61,15 +55,12 @@
         return null;
       }
       return parsed.duration || null;
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   }
 
   function writeCache(game, duration) {
-    try {
-      localStorage.setItem(cacheKey(game), JSON.stringify({ savedAt: Date.now(), duration }));
-    } catch (_) {}
+    try { localStorage.setItem(cacheKey(game), JSON.stringify({ savedAt: Date.now(), duration })); }
+    catch (_) {}
   }
 
   function formatHours(value) {
@@ -119,28 +110,67 @@
       .lux-review-form-rating>div:first-child{margin-bottom:0!important}
       .lux-review-form-rating .lux-review-stars{flex:0 0 auto}
       @keyframes luxHltbPulse{from{opacity:.56}to{opacity:1}}
+
       @media(max-width:1023px){
-        #gameDetailsModal .lux-game-details-grid #gameDetailsCover{border-bottom-left-radius:0!important;border-bottom-right-radius:0!important}
-        #gameDetailsModal .lux-game-details-grid .lux-game-details-main{grid-column:2!important;grid-row:1 / span 2!important;min-width:0}
-        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill{grid-column:1!important;grid-row:2!important;width:100%;box-sizing:border-box;margin:-16px 0 0!important;align-self:start;justify-content:flex-start;text-align:left;padding:10px 11px;border-radius:0 0 16px 16px!important;border-top:1px solid rgba(168,85,247,.24);background:linear-gradient(180deg,rgba(46,16,101,.46),rgba(24,15,41,.95));color:#eadcff;font-size:10px;font-weight:900;line-height:1.25;box-shadow:0 10px 22px rgba(0,0,0,.18)}
-        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill::before{flex:0 0 auto;font-size:13px}
-        #gameDetailsModal .lux-game-details-grid #gameDetailsStoragePanel{grid-column:1/-1!important;grid-row:3!important}
-        #gameDetailsModal .lux-game-details-grid #${CARD_ID}{grid-column:1/-1!important;grid-row:4!important;width:100%!important;margin-top:0!important}
-        #gameDetailsModal .lux-game-details-grid #gameDetailsAboutSection{grid-column:1/-1!important;grid-row:5!important}
-        #gameDetailsModal .lux-game-details-grid #gameDetailsReviewsSection{grid-column:1/-1!important;grid-row:6!important}
-        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsSaveStatus.lux-game-save-status{grid-column:1/-1!important;grid-row:3!important;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:0!important;padding:10px 12px;border:1px solid rgba(88,28,135,.55);border-radius:13px;background:rgba(46,16,101,.22);color:#c4b5fd;font-size:10px;font-weight:800;text-align:center}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsCover{
+          aspect-ratio:auto!important;
+          height:auto!important;
+          max-height:none!important;
+          display:flex!important;
+          flex-direction:column!important;
+          align-items:stretch!important;
+          justify-content:flex-start!important;
+          overflow:hidden!important;
+          border-radius:16px!important;
+          background:#180f29!important;
+        }
+        #gameDetailsModal .lux-game-details-grid #gameDetailsCover>img{
+          width:100%!important;
+          height:auto!important;
+          aspect-ratio:2/3!important;
+          object-fit:cover!important;
+          display:block!important;
+          flex:0 0 auto!important;
+        }
+        #gameDetailsModal .lux-game-details-grid .lux-game-details-main{grid-column:2!important;grid-row:1!important;min-width:0}
+        #gameDetailsModal #gameDetailsPlayTime.lux-game-playtime-pill{
+          position:static!important;
+          width:100%!important;
+          box-sizing:border-box!important;
+          margin:0!important;
+          flex:0 0 auto!important;
+          justify-content:flex-start!important;
+          text-align:left!important;
+          padding:10px 11px!important;
+          border:0!important;
+          border-top:1px solid rgba(168,85,247,.24)!important;
+          border-radius:0!important;
+          background:linear-gradient(180deg,rgba(46,16,101,.46),rgba(24,15,41,.98))!important;
+          color:#eadcff!important;
+          font-size:10px!important;
+          font-weight:900!important;
+          line-height:1.25!important;
+          box-shadow:none!important;
+        }
+        #gameDetailsModal #gameDetailsPlayTime.lux-game-playtime-pill::before{flex:0 0 auto;font-size:13px}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsStoragePanel{grid-column:1/-1!important;grid-row:2!important}
+        #gameDetailsModal .lux-game-details-grid #${CARD_ID}{grid-column:1/-1!important;grid-row:3!important;width:100%!important;margin-top:0!important}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsAboutSection{grid-column:1/-1!important;grid-row:4!important}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsReviewsSection{grid-column:1/-1!important;grid-row:5!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsSaveStatus.lux-game-save-status{grid-column:1/-1!important;grid-row:2!important;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:0!important;padding:10px 12px;border:1px solid rgba(88,28,135,.55);border-radius:13px;background:rgba(46,16,101,.22);color:#c4b5fd;font-size:10px;font-weight:800;text-align:center}
         #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsSaveStatus.lux-game-save-status::before{content:'☁';font-size:13px;color:#c084fc}
-        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsStoragePanel{grid-row:4!important}
-        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #${CARD_ID}{grid-row:5!important}
-        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsAboutSection{grid-row:6!important}
-        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsReviewsSection{grid-row:7!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsStoragePanel{grid-row:3!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #${CARD_ID}{grid-row:4!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsAboutSection{grid-row:5!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsReviewsSection{grid-row:6!important}
       }
+
       @media(max-width:560px){
         #${CARD_ID} .lux-hltb-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
         #${CARD_ID} .lux-hltb-stat{padding:8px 7px;text-align:center}
         #${CARD_ID} .lux-hltb-label{font-size:9px}
         #${CARD_ID} .lux-hltb-value{font-size:14px}
-        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill{margin:-10px 0 0!important;padding:9px 9px;font-size:9px;border-radius:0 0 14px 14px!important}
+        #gameDetailsModal #gameDetailsPlayTime.lux-game-playtime-pill{padding:9px!important;font-size:9px!important}
         #gameDetailsSaveStatus.lux-game-save-status{padding:9px 8px;font-size:9px}
         .lux-review-form-rating{align-items:flex-start;flex-direction:column;gap:8px}
       }
@@ -156,11 +186,6 @@
     return document.getElementById('gameDetailsCover')?.parentElement || null;
   }
 
-  function detailsMain() {
-    const actions = detailsAnchor();
-    return actions?.closest?.('.min-w-0.flex.flex-col') || document.getElementById('gameDetailsTitle')?.parentElement || null;
-  }
-
   function ensureCard() {
     ensureStyle();
     let card = document.getElementById(CARD_ID);
@@ -171,6 +196,20 @@
     card.id = CARD_ID;
     anchor.insertAdjacentElement('afterend', card);
     return card;
+  }
+
+  function positionCard() {
+    const card = document.getElementById(CARD_ID);
+    const grid = detailsGrid();
+    const actions = detailsAnchor();
+    if (!card) return;
+    if (isCompactDetails() && grid) {
+      const about = document.getElementById('gameDetailsAboutSection');
+      const reviews = document.getElementById('gameDetailsReviewsSection');
+      if (card.parentElement !== grid) grid.insertBefore(card, about || reviews || null);
+    } else if (actions && card.parentElement !== actions.parentElement) {
+      actions.insertAdjacentElement('afterend', card);
+    }
   }
 
   function removeLegacyLinks() {
@@ -200,10 +239,9 @@
     playTime.classList.add('lux-game-playtime-pill');
 
     const actions = detailsAnchor();
-    const grid = detailsGrid();
-    const storage = document.getElementById('gameDetailsStoragePanel');
-    if (isCompactDetails() && grid) {
-      if (playTime.parentElement !== grid) grid.insertBefore(playTime, storage || grid.children[1] || null);
+    const cover = document.getElementById('gameDetailsCover');
+    if (isCompactDetails() && cover) {
+      if (playTime.parentElement !== cover) cover.appendChild(playTime);
     } else if (actions && playTime.parentElement !== actions) {
       actions.appendChild(playTime);
     }
@@ -216,6 +254,7 @@
       grid?.classList.remove('lux-has-save-status');
       return;
     }
+
     const status = candidates.at(-1);
     candidates.slice(0, -1).forEach(node => node.remove());
     status.id = 'gameDetailsSaveStatus';
@@ -255,6 +294,7 @@
     ensureStyle();
     removeLegacyLinks();
     polishPlayTime();
+    positionCard();
     polishSaveStatus();
     polishReviewComposer();
   }
