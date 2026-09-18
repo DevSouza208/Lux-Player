@@ -2,7 +2,31 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260912-stability2';
+  window.__luxRuntimeStabilityFixInstalled = '20260917-stability-trace14';
+
+  const devRepairEvent = (status, label, message = '', durationMs = null, data = null) => {
+    window.LuxDevkit?.emit({
+      category: 'PLAYBACK-REPAIR',
+      status,
+      label,
+      message,
+      durationMs,
+      data
+    });
+  };
+
+  const devRepairRun = async (label, job, data = null) => {
+    const started = performance.now();
+    devRepairEvent('running', label, 'Iniciando...', null, data);
+    try {
+      const result = await job();
+      devRepairEvent('success', label, 'Concluído', Math.round(performance.now() - started), data);
+      return result;
+    } catch (error) {
+      devRepairEvent('error', label, error?.message || 'Falha desconhecida', Math.round(performance.now() - started), data);
+      throw error;
+    }
+  };
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -69,10 +93,22 @@
     const playlistUrl = String(manifest?.playlist || '').trim();
     if (!playlistUrl || typeof window.parseM3U !== 'function') return [];
 
-    const response = await fetch(playlistUrl, { cache: 'no-store' });
+    const response = await devRepairRun(
+      'playlist-fetch',
+      () => fetch(playlistUrl, { cache: 'no-store' })
+    );
     if (!response.ok) throw new Error(`playlist HTTP ${response.status}`);
-    const text = await response.text();
-    return window.parseM3U(text).filter(item => item?.url);
+
+    const text = await devRepairRun(
+      'playlist-body',
+      () => response.text()
+    );
+
+    return devRepairRun(
+      'playlist-parse',
+      () => window.parseM3U(text).filter(item => item?.url),
+      { bytes: text.length }
+    );
   };
 
   const repairSyncedPlaybackUrls = async () => {
@@ -92,6 +128,8 @@
     const byTypeAndName = new Map();
     const byTypeAndLogo = new Map();
 
+    const indexStarted = performance.now();
+    devRepairEvent('running', 'criar-indices', 'Indexando playlist bruta...', null, { rawItems: rawItems.length });
     rawItems.forEach(raw => {
       const type = normalizeType(raw.type);
       const id = extractFlexibleStreamId(raw.url);
@@ -101,11 +139,21 @@
       addToMap(byTypeAndName, `${type}|${normalizeText(raw.name)}`, raw);
       addToMap(byTypeAndLogo, `${type}|${normalizeAssetUrl(raw.logo)}`, raw);
     });
+    devRepairEvent('success', 'criar-indices', 'Índices prontos', Math.round(performance.now() - indexStarted), {
+      rawItems: rawItems.length,
+      ids: byTypeAndId.size,
+      names: byTypeAndName.size,
+      logos: byTypeAndLogo.size
+    });
 
     let repaired = 0;
     let directFallbacks = 0;
     let stillMissing = 0;
 
+    const matchStarted = performance.now();
+    devRepairEvent('running', 'casar-enderecos', 'Validando itens do catálogo...', null, {
+      catalogItems: allMediaItems.length
+    });
     for (const item of allMediaItems) {
       if (item?.source !== 'synced-xtream') continue;
       const type = normalizeType(item.type);
@@ -150,6 +198,13 @@
       stillMissing += 1;
     }
 
+    devRepairEvent('success', 'casar-enderecos', 'Validação concluída', Math.round(performance.now() - matchStarted), {
+      catalogItems: allMediaItems.length,
+      repaired,
+      directFallbacks,
+      stillMissing
+    });
+
     if (window.__luxSyncedXtreamStats) {
       window.__luxSyncedXtreamStats.playbackRepaired = repaired;
       window.__luxSyncedXtreamStats.playbackDirectFallbacks = directFallbacks;
@@ -157,6 +212,11 @@
     }
 
     console.info('[Lux Play] Endereços de reprodução validados.', { repaired, directFallbacks, stillMissing });
+    devRepairEvent('success', 'resultado', 'Endereços de reprodução validados', null, {
+      repaired,
+      directFallbacks,
+      stillMissing
+    });
   };
 
   const installCatalogRepair = () => {
@@ -166,7 +226,12 @@
     const originalLoad = window.loadMediaSourcesInPriority;
     window.loadMediaSourcesInPriority = async function () {
       const result = await originalLoad.apply(this, arguments);
-      if (result && window.__luxSyncedXtreamActive) await repairSyncedPlaybackUrls();
+      if (result && window.__luxSyncedXtreamActive) {
+        const repairStarted = performance.now();
+        devRepairEvent('running', 'reparo-total', 'Preparando endereços de reprodução...');
+        await repairSyncedPlaybackUrls();
+        devRepairEvent('success', 'reparo-total', 'Reparo finalizado', Math.round(performance.now() - repairStarted));
+      }
       return result;
     };
 

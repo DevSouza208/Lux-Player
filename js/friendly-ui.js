@@ -98,7 +98,7 @@
   const loadRuntimeStabilityFix = () => {
     if (document.querySelector('script[data-lux-runtime-stability]')) return;
     const script = document.createElement('script');
-    script.src = 'js/runtime-stability-fix.js?v=20260912-stability2';
+    script.src = 'js/runtime-stability-fix.js?v=20260917-stability-trace14';
     script.async = true;
     script.dataset.luxRuntimeStability = '1';
     document.head.appendChild(script);

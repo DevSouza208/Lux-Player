@@ -1,5 +1,27 @@
 (() => {
-  const BRIDGE_VERSION = '20260912-xtream-sync-2';
+  const BRIDGE_VERSION = '20260917-catalog-trace-14';
+
+  const devCatalogRun = async (label, job, meta = null) => {
+    const started = performance.now();
+    window.LuxDevkit?.running('CATALOG', label, 'Iniciando...', meta);
+    try {
+      const result = await job();
+      const duration = Math.round(performance.now() - started);
+      window.LuxDevkit?.success('CATALOG', label, 'Concluído', duration, meta);
+      return result;
+    } catch (error) {
+      const duration = Math.round(performance.now() - started);
+      window.LuxDevkit?.emit({
+        category: 'CATALOG',
+        status: 'error',
+        label,
+        message: error?.message || 'Falha desconhecida',
+        durationMs: duration,
+        data: meta
+      });
+      throw error;
+    }
+  };
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -224,7 +246,7 @@
     const splash = document.getElementById('splashStatusMessage');
     if (splash) splash.innerText = 'Baixando catálogo HTTPS sincronizado...';
 
-    const manifest = await fetchJson(manifestUrl);
+    const manifest = await devCatalogRun('manifesto', () => fetchJson(manifestUrl));
     if (!manifest?.files || !manifest?.playlist) throw new Error('Manifesto do catálogo está incompleto.');
 
     const [
@@ -236,16 +258,16 @@
       movies,
       series
     ] = await Promise.all([
-      fetchText(manifest.playlist),
-      fetchJson(manifest.files.liveCategories),
-      fetchJson(manifest.files.movieCategories),
-      fetchJson(manifest.files.seriesCategories),
-      fetchJson(manifest.files.live),
-      fetchJson(manifest.files.movies),
-      fetchJson(manifest.files.series)
+      devCatalogRun('playlist-https', () => fetchText(manifest.playlist)),
+      devCatalogRun('categorias-tv', () => fetchJson(manifest.files.liveCategories)),
+      devCatalogRun('categorias-filmes', () => fetchJson(manifest.files.movieCategories)),
+      devCatalogRun('categorias-series', () => fetchJson(manifest.files.seriesCategories)),
+      devCatalogRun('streams-tv', () => fetchJson(manifest.files.live)),
+      devCatalogRun('streams-filmes', () => fetchJson(manifest.files.movies)),
+      devCatalogRun('streams-series', () => fetchJson(manifest.files.series))
     ]);
 
-    const built = buildCatalogItems({
+    const built = await devCatalogRun('montagem-catalogo', () => buildCatalogItems({
       playlistText,
       liveCategories,
       movieCategories,
@@ -253,12 +275,22 @@
       live,
       movies,
       series
+    }), {
+      live: Array.isArray(live) ? live.length : 0,
+      movies: Array.isArray(movies) ? movies.length : 0,
+      series: Array.isArray(series) ? series.length : 0
     });
 
     if (!built.items.length) throw new Error('Catálogo HTTPS não retornou itens utilizáveis.');
 
-    allMediaItems = built.items.map(item => applySharedCategoryToItem(item)).filter(profileAllowsMedia);
-    mergeSharedVodsIntoPlayer();
+    await devCatalogRun('categorias-e-perfil', () => {
+      allMediaItems = built.items.map(item => applySharedCategoryToItem(item)).filter(profileAllowsMedia);
+      return allMediaItems.length;
+    }, { official: built.items.length });
+
+    await devCatalogRun('mesclar-vod', () => mergeSharedVodsIntoPlayer(), {
+      currentItems: allMediaItems.length
+    });
 
     window.__luxSyncedXtreamActive = true;
     window.__luxSyncedXtreamManifest = manifest;
