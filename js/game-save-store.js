@@ -190,20 +190,22 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   document.head.appendChild(customControlsScript);
 }
 
-if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-profile-entry-fastboot]')) {
-  const profileEntryFastbootScript = document.createElement('script');
-  profileEntryFastbootScript.src = 'js/profile-entry-fastboot.js?v=20260917-profile-fastboot3';
-  profileEntryFastbootScript.async = false;
-  profileEntryFastbootScript.dataset.luxProfileEntryFastboot = '1';
-  document.head.appendChild(profileEntryFastbootScript);
-}
-
+// IPTV is installed before profile fastboot. This is intentional: every device
+// must use the same Cloudflare HTTPS snapshot and no legacy source may win a race.
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-https-snapshot]')) {
   const iptvHttpsSnapshotScript = document.createElement('script');
   iptvHttpsSnapshotScript.src = 'js/iptv-https-snapshot.js?v=20260918-https-snapshot-clean1';
   iptvHttpsSnapshotScript.async = false;
   iptvHttpsSnapshotScript.dataset.luxHttpsSnapshot = '1';
   document.head.appendChild(iptvHttpsSnapshotScript);
+}
+
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-profile-entry-fastboot]')) {
+  const profileEntryFastbootScript = document.createElement('script');
+  profileEntryFastbootScript.src = 'js/profile-entry-fastboot.js?v=20260918-profile-fastboot4-https-only';
+  profileEntryFastbootScript.async = false;
+  profileEntryFastbootScript.dataset.luxProfileEntryFastboot = '1';
+  document.head.appendChild(profileEntryFastbootScript);
 }
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-provider-grouping-sync]')) {
