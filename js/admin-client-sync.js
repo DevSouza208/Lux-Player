@@ -318,3 +318,21 @@
   script.dataset.luxGlobalSearch = '1';
   document.head.appendChild(script);
 })();
+
+(() => {
+  'use strict';
+  const install = () => {
+    if (document.getElementById('luxGlobalSearchOverflowFix')) return;
+    const style = document.createElement('style');
+    style.id = 'luxGlobalSearchOverflowFix';
+    style.textContent = `
+      #luxGlobalSearchPage .lux-search-card{overflow:hidden!important}
+      #luxGlobalSearchPage .lux-search-info{min-width:0!important;max-width:100%!important;overflow:hidden!important;display:block!important}
+      #luxGlobalSearchPage .lux-search-name,
+      #luxGlobalSearchPage .lux-search-detail{display:block!important;min-width:0!important;max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+    `;
+    document.head.appendChild(style);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+  else install();
+})();
