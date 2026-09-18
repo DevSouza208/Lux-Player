@@ -646,7 +646,7 @@
 
   if (!document.querySelector('script[data-lux-game-local-cache]')) {
     const script = document.createElement('script');
-    script.src = 'js/game-local-cache-flow.js?v=20260916-r2-rom-cache4';
+    script.src = 'js/game-local-cache-flow.js?v=20260918-mobile-details1';
     script.async = true;
     script.dataset.luxGameLocalCache = '1';
     document.head.appendChild(script);
