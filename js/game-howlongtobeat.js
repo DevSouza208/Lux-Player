@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-hltb3';
+  const VERSION = '20260918-hltb4';
   const CACHE_PREFIX = 'lux-hltb-duration:';
   const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
   const CARD_ID = 'gameDetailsHltb';
@@ -91,6 +91,11 @@
     return `https://howlongtobeat.com/?q=${encodeURIComponent(gameTitle(game))}`;
   }
 
+  function isCompactDetails() {
+    try { return window.matchMedia('(max-width:1023px)').matches; }
+    catch (_) { return window.innerWidth <= 1023; }
+  }
+
   function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
     const style = document.createElement('style');
@@ -107,12 +112,26 @@
       #${CARD_ID} .lux-hltb-value{display:block;margin-top:3px;color:#fff;font-size:17px;font-weight:900;letter-spacing:-.02em}
       #${CARD_ID} .lux-hltb-note{margin-top:9px;color:#78658f;font-size:9px;line-height:1.4}
       #${CARD_ID}.lux-hltb-loading .lux-hltb-stat{animation:luxHltbPulse 1.15s ease-in-out infinite alternate}
+      #gameDetailsPlayTime.lux-game-playtime-pill{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;padding:8px 10px;border:1px solid rgba(88,28,135,.56);border-radius:999px;background:rgba(46,16,101,.28);color:#d8c8ef;font-size:11px;font-weight:800;line-height:1.2}
+      #gameDetailsPlayTime.lux-game-playtime-pill::before{content:'◷';color:#c084fc;font-size:12px}
+      #gameDetailsSaveStatus.lux-game-save-status{margin-top:8px;color:#c4b5fd;font-size:11px;line-height:1.4}
       @keyframes luxHltbPulse{from{opacity:.56}to{opacity:1}}
+      @media(max-width:1023px){
+        #gameDetailsPlayTime.lux-game-playtime-pill{grid-column:1!important;grid-row:2!important;width:100%;margin:0!important;align-self:start}
+        #gameDetailsStoragePanel{grid-column:1/-1!important;grid-row:3!important}
+        #gameDetailsSaveStatus.lux-game-save-status{grid-column:1/-1!important;grid-row:4!important;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:0!important;padding:10px 12px;border:1px solid rgba(88,28,135,.55);border-radius:13px;background:rgba(46,16,101,.22);color:#c4b5fd;font-size:10px;font-weight:800;text-align:center}
+        #gameDetailsSaveStatus.lux-game-save-status::before{content:'☁';font-size:13px;color:#c084fc}
+        #${CARD_ID}{grid-column:1/-1!important;grid-row:5!important;width:100%!important;margin-top:0!important}
+        #gameDetailsAboutSection{grid-column:1/-1!important;grid-row:6!important}
+        #gameDetailsReviewsSection{grid-column:1/-1!important;grid-row:7!important}
+      }
       @media(max-width:560px){
         #${CARD_ID} .lux-hltb-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
         #${CARD_ID} .lux-hltb-stat{padding:8px 7px;text-align:center}
         #${CARD_ID} .lux-hltb-label{font-size:9px}
         #${CARD_ID} .lux-hltb-value{font-size:14px}
+        #gameDetailsPlayTime.lux-game-playtime-pill{padding:7px 6px;font-size:9px}
+        #gameDetailsSaveStatus.lux-game-save-status{padding:9px 8px;font-size:9px}
       }
     `;
     document.head.appendChild(style);
@@ -120,6 +139,15 @@
 
   function detailsAnchor() {
     return document.querySelector('.game-details-primary-actions');
+  }
+
+  function detailsGrid() {
+    return document.getElementById('gameDetailsCover')?.parentElement || null;
+  }
+
+  function detailsMain() {
+    const actions = detailsAnchor();
+    return actions?.closest?.('.min-w-0.flex.flex-col') || document.getElementById('gameDetailsTitle')?.parentElement || null;
   }
 
   function ensureCard() {
@@ -134,16 +162,65 @@
     return card;
   }
 
-  function oldHltbLink() {
+  function removeLegacyLinks() {
     const card = document.getElementById(CARD_ID);
-    const scope = card?.parentElement || document;
-    return Array.from(scope.querySelectorAll('a[href*="howlongtobeat.com"]'))
-      .find(link => !card?.contains(link)) || null;
+    document.querySelectorAll('a[href*="howlongtobeat.com"]').forEach(link => {
+      if (!card?.contains(link)) link.remove();
+    });
   }
 
-  function hideLegacyLink() {
-    const legacy = oldHltbLink();
-    if (legacy) legacy.style.display = 'none';
+  function findSaveStatusCandidates() {
+    const actions = detailsAnchor();
+    const candidates = [...document.querySelectorAll('.lux-game-save-status')];
+    if (actions) {
+      actions.querySelectorAll('p').forEach(node => {
+        const text = String(node.textContent || '').trim();
+        if (text.startsWith('Saves sincronizados') || text.startsWith('Nuvem indisponível')) candidates.push(node);
+      });
+    }
+    return [...new Set(candidates)];
+  }
+
+  function polishPlayTime() {
+    const items = [...document.querySelectorAll('#gameDetailsPlayTime')];
+    if (!items.length) return;
+    const playTime = items.at(-1);
+    items.slice(0, -1).forEach(node => node.remove());
+    playTime.classList.add('lux-game-playtime-pill');
+
+    const actions = detailsAnchor();
+    const grid = detailsGrid();
+    const storage = document.getElementById('gameDetailsStoragePanel');
+    if (isCompactDetails() && grid) {
+      if (playTime.parentElement !== grid) grid.insertBefore(playTime, storage || grid.children[1] || null);
+    } else if (actions && playTime.parentElement !== actions) {
+      actions.appendChild(playTime);
+    }
+  }
+
+  function polishSaveStatus() {
+    const candidates = findSaveStatusCandidates();
+    if (!candidates.length) return;
+    const status = candidates.at(-1);
+    candidates.slice(0, -1).forEach(node => node.remove());
+    status.id = 'gameDetailsSaveStatus';
+    status.classList.add('lux-game-save-status');
+
+    const actions = detailsAnchor();
+    const grid = detailsGrid();
+    const card = document.getElementById(CARD_ID);
+    if (isCompactDetails() && grid) {
+      if (status.parentElement !== grid) grid.insertBefore(status, card || document.getElementById('gameDetailsAboutSection') || null);
+    } else if (actions && status.parentElement !== actions) {
+      actions.appendChild(status);
+    }
+  }
+
+  function polishDetailsChrome() {
+    ensureStyle();
+    removeLegacyLinks();
+    polishPlayTime();
+    polishSaveStatus();
   }
 
   function renderLoading() {
@@ -157,6 +234,7 @@
         <div class="lux-hltb-stat"><span class="lux-hltb-label">+ Extras</span><span class="lux-hltb-value">…</span></div>
         <div class="lux-hltb-stat"><span class="lux-hltb-label">100%</span><span class="lux-hltb-value">…</span></div>
       </div>`;
+    polishDetailsChrome();
   }
 
   function renderDuration(duration, game) {
@@ -175,7 +253,7 @@
         <div class="lux-hltb-stat"><span class="lux-hltb-label">Complecionista</span><span class="lux-hltb-value">${formatHours(duration?.completionist)}</span></div>
       </div>
       <div class="lux-hltb-note">Estimativas da comunidade · ${String(duration?.title || gameTitle(game)).replace(/[&<>]/g, '')}</div>`;
-    hideLegacyLink();
+    polishDetailsChrome();
   }
 
   function renderFallback(game) {
@@ -194,7 +272,7 @@
         <div class="lux-hltb-stat"><span class="lux-hltb-label">Complecionista</span><span class="lux-hltb-value">--</span></div>
       </div>
       <div class="lux-hltb-note">Dados de duração indisponíveis para este jogo.</div>`;
-    hideLegacyLink();
+    polishDetailsChrome();
   }
 
   async function fetchDuration(game) {
@@ -245,6 +323,7 @@
 
   function detectGameDetails() {
     scheduled = false;
+    polishDetailsChrome();
     const game = currentGame();
     if (!game || !detailsAnchor()) return;
     const key = gameKey(game);
@@ -261,6 +340,8 @@
   const observer = new MutationObserver(scheduleDetect);
   const start = () => {
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', scheduleDetect, { passive: true });
+    window.addEventListener('orientationchange', scheduleDetect, { passive: true });
     scheduleDetect();
   };
 
