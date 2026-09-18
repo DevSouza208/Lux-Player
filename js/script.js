@@ -1928,10 +1928,42 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     async function hideSplashScreen() {
       const splash = document.getElementById('loadingSplash');
       const started = performance.now();
-      await transitionScreen(splash, false);
-      if (splash && !splash.classList.contains('hidden')) splash.classList.add('hidden');
+      window.LuxDevkit?.running('HOME', 'splash-transition', 'Ocultando splash...');
+
+      if (!splash) {
+        window.LuxDevkit?.success('HOME', 'splash-transition', 'Splash não presente', 0);
+        return;
+      }
+
+      let timedOut = false;
+      try {
+        await Promise.race([
+          Promise.resolve(transitionScreen(splash, false)),
+          new Promise(resolve => setTimeout(() => {
+            timedOut = true;
+            resolve();
+          }, 450))
+        ]);
+      } catch (error) {
+        console.warn('[Lux Boot] Transição do splash falhou; ocultando diretamente.', error);
+      }
+
+      try {
+        splash.getAnimations?.().forEach(animation => animation.cancel());
+      } catch (_) {}
+
+      splash.classList.add('hidden');
+      splash.classList.remove('screen-visible', 'screen-hidden-up', 'screen-hidden-down');
       updateNavIndicator();
-      window.LuxDevkit?.success('HOME', 'splash-transition', 'Splash realmente oculto', Math.round(performance.now() - started));
+
+      const duration = Math.round(performance.now() - started);
+      window.LuxDevkit?.success(
+        'HOME',
+        'splash-transition',
+        timedOut ? 'Splash forçado após limite da animação' : 'Splash realmente oculto',
+        duration,
+        { forced: timedOut }
+      );
     }
 
     function logout() {
