@@ -156,10 +156,14 @@ async function activateAccountProfile(profile) {
   profilePickerBusy=true;
   const switchingUser=currentUser;
   try {
+    window.luxBootTraceStart?.(`perfil:${profile.name}`, true);
+    window.luxBootTraceStep?.('perfil-selecionado', 'Perfil selecionado. Preparando troca...');
     showSplashScreen();
     document.getElementById('splashUserName').textContent=profile.name;
-    document.getElementById('splashStatusMessage').textContent='Abrindo seu perfil...';
+    document.getElementById('splashStatusMessage').textContent='[1.3] Abrindo seu perfil...';
+    window.luxBootTraceStep?.('perfil-fechar-picker:start', 'Fechando seleção de perfil...');
     await transitionScreen(document.getElementById('profilePicker'),false);
+    window.luxBootTraceStep?.('perfil-fechar-picker:done');
     if(currentPlayingVodItem)closeVodPlayer();
     closeGameEmulator();closeGameDetails();closeAdultPinModal();closeMovieModal();closeSeriesModal();closeSearchModal();
     const live=document.getElementById('videoPlayerLive');if(live){live.pause();live.removeAttribute('src');live.load();}
@@ -175,7 +179,11 @@ async function activateAccountProfile(profile) {
     document.getElementById('liveCurrentName').textContent='Selecione um canal';
     document.getElementById('liveCurrentGroup').textContent='';
     document.getElementById('liveCurrentLogo').replaceChildren();
+    window.luxBootTraceStep?.('perfil-sync-pre:start', 'Sincronizando progresso antes de ativar o perfil...');
+    const preSyncStarted=performance.now();
     await syncCloudProgress();
+    console.info(`[Lux Boot 1.3] perfil-sync-pre concluiu em ${Math.round(performance.now()-preSyncStarted)}ms`);
+    window.luxBootTraceStep?.('perfil-sync-pre:done');
     if(currentUser!==switchingUser)return;
     window.LuxReadingAdmin?.stop();
     window.LuxReader?.close();
@@ -185,6 +193,7 @@ async function activateAccountProfile(profile) {
     gamesFavoritesOnly=false;gamesConsoleFilter='all';gamesStatusFilter='all';
     document.getElementById('adminModal').classList.add('hidden');
     document.getElementById('profileEditorDialog').close();
+    window.luxBootTraceStep?.('perfil-startApp', 'Perfil ativo. Iniciando catálogo...');
     await startApp();
   } catch(error) {
     if(currentUser===switchingUser || currentUser?.profile===profile) {

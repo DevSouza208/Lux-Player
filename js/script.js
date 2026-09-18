@@ -1705,6 +1705,99 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
+    // ============================================================
+    // [LUX-BOOT-013] DIAGNÓSTICO DO BOOT — DEVELOP
+    // ============================================================
+    const luxBootTrace = {
+      active: false,
+      startedAt: 0,
+      lastAt: 0,
+      context: '',
+      stage: '',
+      watchdog: null
+    };
+
+    function luxBootTracePersist(extra = {}) {
+      try {
+        sessionStorage.setItem('lux_boot_trace_13', JSON.stringify({
+          version: '1.3',
+          context: luxBootTrace.context,
+          stage: luxBootTrace.stage,
+          startedAt: luxBootTrace.startedAt,
+          lastAt: luxBootTrace.lastAt,
+          ...extra
+        }));
+      } catch (_) {}
+    }
+
+    function luxBootTraceStart(context = 'boot', force = false) {
+      if (luxBootTrace.active && !force) return;
+      const now = performance.now();
+      if (luxBootTrace.watchdog) clearTimeout(luxBootTrace.watchdog);
+      luxBootTrace.active = true;
+      luxBootTrace.startedAt = now;
+      luxBootTrace.lastAt = now;
+      luxBootTrace.context = context;
+      luxBootTrace.stage = 'start';
+      console.info(`[Lux Boot 1.3] INÍCIO — ${context}`);
+      luxBootTracePersist();
+    }
+
+    function luxBootTraceStep(stage, message = '') {
+      if (!luxBootTrace.active) luxBootTraceStart('boot');
+      const now = performance.now();
+      const total = Math.round(now - luxBootTrace.startedAt);
+      const delta = Math.round(now - luxBootTrace.lastAt);
+      luxBootTrace.lastAt = now;
+      luxBootTrace.stage = stage;
+
+      console.info(`[Lux Boot 1.3] +${total}ms (+${delta}ms) — ${stage}`);
+      if (message) {
+        const status = document.getElementById('splashStatusMessage');
+        if (status) status.textContent = `[1.3] ${message}`;
+      }
+      luxBootTracePersist({ totalMs: total });
+
+      if (luxBootTrace.watchdog) clearTimeout(luxBootTrace.watchdog);
+      luxBootTrace.watchdog = setTimeout(() => {
+        const elapsed = Math.round(performance.now() - luxBootTrace.lastAt);
+        console.warn(`[Lux Boot 1.3] PARADO HÁ ${elapsed}ms EM: ${luxBootTrace.stage}`);
+        const status = document.getElementById('splashStatusMessage');
+        if (status) status.textContent = `[1.3] Ainda carregando: ${luxBootTrace.stage} (${Math.round(elapsed / 1000)}s)`;
+        luxBootTracePersist({ stalledMs: elapsed });
+      }, 10000);
+    }
+
+    async function luxBootTraceRun(stage, message, job) {
+      luxBootTraceStep(stage + ':start', message);
+      const started = performance.now();
+      try {
+        const result = await job();
+        console.info(`[Lux Boot 1.3] ${stage} concluiu em ${Math.round(performance.now() - started)}ms`);
+        luxBootTraceStep(stage + ':done');
+        return result;
+      } catch (error) {
+        console.error(`[Lux Boot 1.3] ${stage} falhou após ${Math.round(performance.now() - started)}ms`, error);
+        luxBootTracePersist({ errorStage: stage, error: String(error?.message || error) });
+        throw error;
+      }
+    }
+
+    function luxBootTraceDone() {
+      const total = Math.round(performance.now() - luxBootTrace.startedAt);
+      if (luxBootTrace.watchdog) clearTimeout(luxBootTrace.watchdog);
+      luxBootTrace.watchdog = null;
+      luxBootTrace.stage = 'done';
+      luxBootTrace.active = false;
+      console.info(`[Lux Boot 1.3] FIM — ${total}ms`);
+      luxBootTracePersist({ totalMs: total, done: true });
+    }
+
+    window.luxBootTraceStart = luxBootTraceStart;
+    window.luxBootTraceStep = luxBootTraceStep;
+    window.luxBootTraceRun = luxBootTraceRun;
+    window.luxBootTraceDone = luxBootTraceDone;
+
     function showSplashScreen() {
       document.getElementById('splashUserName').textContent = currentUser?.profile?.name || currentUser?.name || 'Usuário';
       document.getElementById('splashStatusMessage').textContent = 'Preparando seu espaço...';
@@ -1751,6 +1844,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function startApp() {
+      luxBootTraceStart(`perfil:${currentUser?.profile?.name || currentUser?.name || 'desconhecido'}`);
+      luxBootTraceStep('startApp:init', 'Preparando o ambiente do perfil...');
       window.LuxReaderCloud?.flush();
       restoreAccountProgress();
       sharedVodCatalog = [];
@@ -1776,24 +1871,44 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       vodContainer.onscroll = () => handleScroll(vodContainer);
 
       const statusMsg = document.getElementById('splashStatusMessage');
-      if (statusMsg) statusMsg.innerText = "Configurando sua experiência... O primeiro acesso pode demorar cerca de 1 min.";
 
-      const mediaLoaded = await loadMediaSourcesInPriority();
+      const mediaLoaded = await luxBootTraceRun(
+        'catalogo-principal',
+        'Carregando catálogo principal...',
+        () => loadMediaSourcesInPriority()
+      );
       if (!mediaLoaded && statusMsg) {
-        statusMsg.innerText = 'Nenhuma lista principal configurada. Você ainda pode usar Jogos e Leitura.';
+        statusMsg.innerText = '[1.3] Nenhuma lista principal configurada. Jogos e Leitura continuam disponíveis.';
       }
 
-      try { await loadSharedVodCatalog(); } catch (error) { alert(error.message); }
-      await syncCloudProgress();
+      try {
+        await luxBootTraceRun(
+          'vod-compartilhado',
+          'Carregando vídeos adicionados manualmente...',
+          () => loadSharedVodCatalog()
+        );
+      } catch (error) {
+        console.warn('[Lux Boot 1.3] VOD compartilhado falhou, boot continua.', error);
+      }
+
+      await luxBootTraceRun(
+        'progresso-cloud',
+        'Sincronizando favoritos, progresso e histórico...',
+        () => syncCloudProgress()
+      );
+
+      luxBootTraceStep('saves-pendentes', 'Verificando saves pendentes...');
       retryPendingGameSaves();
 
-      if (statusMsg) statusMsg.innerText = "Tudo pronto! Iniciando o Lux Play...";
+      luxBootTraceStep('home-espera-final', 'Finalizando a abertura...');
       await new Promise(resolve => setTimeout(resolve, 640));
 
+      luxBootTraceStep('home-render', 'Abrindo a Home...');
       setSection('home');
       hideSplashScreen();
       lucide.createIcons();
       loadAndShowNotifications();
+      luxBootTraceDone();
     }
 
     function handleScroll(container) {
