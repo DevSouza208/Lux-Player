@@ -2890,7 +2890,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       });
     }
 
-    async function fetchXtreamJson(url, timeoutMs = 7000) {
+    async function fetchXtreamJson(url, timeoutMs = 15000) {
       if (!String(url || '').trim()) return [];
       let timer;
       try {
@@ -2904,7 +2904,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
-    async function fetchXtreamJsonTraced(label, url, timeoutMs = 7000) {
+    async function fetchXtreamJsonTraced(label, url, timeoutMs = 15000) {
       const started = performance.now();
       window.LuxDevkit?.running('IPTV', label, 'Consultando API do provedor...');
       const data = await fetchXtreamJson(url, timeoutMs);
