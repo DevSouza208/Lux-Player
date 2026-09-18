@@ -136,7 +136,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     let activeAdminTab = 'clientes';
 
     let mediaSourceState = { available: false, kind: '', label: '', count: 0 };
-    let xtreamMoviesState = { status: 'idle', count: 0, error: '' };
+    let xtreamMoviesState = { status: 'idle', count: 0, error: '', timeoutMs: 60000, reason: 'boot' };
+    let xtreamMovieContext = null;
+    let xtreamMovieSectionRetryDone = false;
     let xtreamLoadSequence = 0;
 
     function setMediaSourceState(kind, label, count = allMediaItems.length) {
@@ -2918,33 +2920,85 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function renderMoviesLoadingState() {
-      if (currentSection !== 'movies' || xtreamMoviesState.status !== 'loading') return;
+      if (currentSection !== 'movies') return;
       const container = document.getElementById('vodGridContainer');
       if (!container) return;
-      container.innerHTML = `
-        <div class="col-span-full flex flex-col items-center justify-center py-20 text-center">
-          <div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center mb-3">
-            <div class="w-5 h-5 animate-spin rounded-full border-2 border-purple-300/30 border-t-purple-300"></div>
+
+      if (xtreamMoviesState.status === 'loading') {
+        const manualAttempt = xtreamMoviesState.reason === 'manual';
+        container.innerHTML = `
+          <div class="col-span-full flex flex-col items-center justify-center py-20 text-center">
+            <div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center mb-3">
+              <div class="w-5 h-5 animate-spin rounded-full border-2 border-purple-300/30 border-t-purple-300"></div>
+            </div>
+            <h3 class="text-white font-bold text-base">Carregando catálogo de filmes...</h3>
+            <p class="text-purple-400/60 text-xs mt-1">
+              ${manualAttempt
+                ? 'O catálogo é grande. Esta tentativa pode levar até 2 minutos.'
+                : 'O catálogo é grande e pode levar alguns segundos.'}
+            </p>
           </div>
-          <h3 class="text-white font-bold text-base">Carregando catálogo de filmes...</h3>
-          <p class="text-purple-400/60 text-xs mt-1">Esse catálogo é maior e pode levar alguns segundos.</p>
-        </div>
-      `;
+        `;
+        return;
+      }
+
+      if (xtreamMoviesState.status === 'error') {
+        container.innerHTML = `
+          <div class="col-span-full flex flex-col items-center justify-center py-20 text-center">
+            <div class="w-14 h-14 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center text-purple-300 mb-3">
+              <i data-lucide="refresh-cw" class="w-7 h-7"></i>
+            </div>
+            <h3 class="text-white font-bold text-base">Não foi possível carregar os filmes</h3>
+            <p class="text-purple-400/60 text-xs mt-1 max-w-md">
+              O provedor pode estar demorando para entregar o catálogo. Você pode tentar novamente; a tentativa manual pode levar até 2 minutos.
+            </p>
+            <button
+              type="button"
+              onclick="manualReloadXtreamMovies()"
+              class="mt-4 bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all"
+            >
+              Carregar filmes
+            </button>
+          </div>
+        `;
+        try { lucide.createIcons(); } catch (_) {}
+      }
     }
 
-    async function mergeXtreamMoviesInBackground({ promise, loadId, sourceUser, cleanServer, user, pass, vodCatMap }) {
+    async function mergeXtreamMoviesInBackground({
+      promise,
+      loadId,
+      sourceUser,
+      cleanServer,
+      user,
+      pass,
+      vodCatMap,
+      timeoutMs = 60000,
+      reason = 'boot'
+    }) {
       try {
         const vodStreams = await promise;
-        if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return;
+        if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return false;
 
         if (!Array.isArray(vodStreams) || !vodStreams.length) {
-          xtreamMoviesState = { status: 'error', count: 0, error: 'O provedor não retornou filmes dentro do limite de 60s.' };
-          window.LuxDevkit?.warn('IPTV', 'filmes-background', xtreamMoviesState.error);
+          const seconds = Math.round(timeoutMs / 1000);
+          xtreamMoviesState = {
+            status: 'error',
+            count: 0,
+            error: `O provedor não retornou filmes nesta tentativa (${seconds}s).`,
+            timeoutMs,
+            reason
+          };
+          window.LuxDevkit?.warn('IPTV', 'filmes-background', xtreamMoviesState.error, {
+            reason,
+            timeoutMs
+          });
           if (currentSection === 'movies') {
             renderCategories();
             filterMedia();
+            renderMoviesLoadingState();
           }
-          return;
+          return false;
         }
 
         const movieItems = vodStreams.map((item, index) => {
@@ -2970,7 +3024,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           ...movieItems
         ].sort((a, b) => Number(Boolean(a.isAdult)) - Number(Boolean(b.isAdult)));
 
-        xtreamMoviesState = { status: 'ready', count: movieItems.length, error: '' };
+        xtreamMoviesState = {
+          status: 'ready',
+          count: movieItems.length,
+          error: '',
+          timeoutMs,
+          reason
+        };
         setMediaSourceState('xtream', 'Xtream Codes', allMediaItems.length);
 
         window.LuxDevkit?.success('IPTV', 'filmes-background', 'Catálogo de filmes integrado', 0, {
@@ -2985,12 +3045,61 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           try { renderHomeLancamentos2026(); } catch (_) {}
           Promise.resolve(loadTmdbHeroBanner()).catch(() => {});
         }
+        return true;
       } catch (error) {
-        if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return;
-        xtreamMoviesState = { status: 'error', count: 0, error: error?.message || 'Falha ao carregar filmes.' };
-        window.LuxDevkit?.warn('IPTV', 'filmes-background', xtreamMoviesState.error);
+        if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return false;
+        xtreamMoviesState = {
+          status: 'error',
+          count: 0,
+          error: error?.message || 'Falha ao carregar filmes.',
+          timeoutMs,
+          reason
+        };
+        window.LuxDevkit?.warn('IPTV', 'filmes-background', xtreamMoviesState.error, {
+          reason,
+          timeoutMs
+        });
+        if (currentSection === 'movies') renderMoviesLoadingState();
+        return false;
       }
     }
+
+    async function retryXtreamMovies(timeoutMs = 60000, reason = 'section') {
+      const ctx = xtreamMovieContext;
+      if (!ctx || ctx.loadId !== xtreamLoadSequence || currentUser !== ctx.sourceUser) return false;
+      if (xtreamMoviesState.status === 'ready') return true;
+      if (xtreamMoviesState.status === 'loading') return false;
+
+      xtreamMoviesState = { status: 'loading', count: 0, error: '', timeoutMs, reason };
+      if (currentSection === 'movies') renderMoviesLoadingState();
+
+      const label = reason === 'manual' ? 'streams-filmes-manual' : 'streams-filmes-retry';
+      window.LuxDevkit?.info('IPTV', 'filmes-retry', reason === 'manual'
+        ? 'Tentativa manual iniciada; pode levar até 2 minutos.'
+        : 'Nova tentativa iniciada ao abrir Filmes.', {
+          timeoutMs,
+          reason
+        });
+
+      const promise = fetchXtreamJsonTraced(
+        label,
+        `${ctx.baseApi}&action=get_vod_streams`,
+        timeoutMs
+      );
+
+      return mergeXtreamMoviesInBackground({
+        ...ctx,
+        promise,
+        timeoutMs,
+        reason
+      });
+    }
+
+    async function manualReloadXtreamMovies() {
+      if (xtreamMoviesState.status === 'loading') return;
+      return retryXtreamMovies(120000, 'manual');
+    }
+    window.manualReloadXtreamMovies = manualReloadXtreamMovies;
 
     async function loadFromXtreamApi(server, user, pass) {
       const cleanServer = server.replace(/\/+$/, '');
@@ -3003,7 +3112,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
         const loadId = ++xtreamLoadSequence;
         const sourceUser = currentUser;
-        xtreamMoviesState = { status: 'loading', count: 0, error: '' };
+        xtreamMovieSectionRetryDone = false;
+        xtreamMovieContext = null;
+        xtreamMoviesState = { status: 'loading', count: 0, error: '', timeoutMs: 60000, reason: 'boot' };
 
         // Filmes são muito maiores: começam junto, mas têm até 60s e NÃO bloqueiam o boot.
         const vodStreamsPromise = fetchXtreamJsonTraced(
@@ -3030,6 +3141,16 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         const vodCatMap = Object.fromEntries(vodCatsRes.map(c => [c.category_id, c.category_name]));
         const seriesCatMap = Object.fromEntries(seriesCatsRes.map(c => [c.category_id, c.category_name]));
 
+        xtreamMovieContext = {
+          loadId,
+          sourceUser,
+          cleanServer,
+          user,
+          pass,
+          vodCatMap,
+          baseApi
+        };
+
         void mergeXtreamMoviesInBackground({
           promise: vodStreamsPromise,
           loadId,
@@ -3037,7 +3158,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           cleanServer,
           user,
           pass,
-          vodCatMap
+          vodCatMap,
+          timeoutMs: 60000,
+          reason: 'boot'
         });
 
         const parsedItems = [];
@@ -3467,7 +3590,17 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
         renderCategories();
         filterMedia();
-        if (section === 'movies') renderMoviesLoadingState();
+        if (section === 'movies') {
+          if (
+            xtreamMoviesState.status === 'error' &&
+            !xtreamMovieSectionRetryDone &&
+            xtreamMovieContext
+          ) {
+            xtreamMovieSectionRetryDone = true;
+            void retryXtreamMovies(60000, 'section');
+          }
+          renderMoviesLoadingState();
+        }
       }
 
       ['home', 'live', 'movies', 'series', 'games', 'reading'].forEach(sec => {
