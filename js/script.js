@@ -2382,9 +2382,40 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
-    // Catálogo de ROMs: os registros ficam em `games` e os arquivos no bucket `games`.
+    // Lux Console: Supabase = catálogo/metadados; Cloudflare R2 = ROMs.
+    const GAME_R2_ROOT = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/r2/roms';
+    const GAME_R2_SYNC = 'https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync';
+    const GAME_R2_SCAN_BATCH = 5;
+
     let gamesCatalog = [];
     let editingGameId = null;
+
+    function normalizeGameR2Path(path) {
+      let clean = String(path || '').trim().replace(/^\/+/, '');
+      if (/^roms\//i.test(clean)) clean = clean.replace(/^roms\//i, '');
+      return clean;
+    }
+
+    function gameR2Url(path) {
+      const clean = normalizeGameR2Path(path);
+      if (!clean) return '';
+      return GAME_R2_ROOT + '/' + clean.split('/').filter(Boolean).map(part => encodeURIComponent(part)).join('/');
+    }
+
+    function gameRomUrl(game) {
+      const path = normalizeGameR2Path(game?.r2_path || game?.r2Path || game?.rom_path);
+      if (path) return gameR2Url(path);
+
+      const direct = String(game?.r2_url || game?.r2Url || game?.rom_url || '').trim();
+      if (!direct) return '';
+      try {
+        const url = new URL(direct, window.location.href);
+        const gatewayOrigin = new URL(GAME_R2_ROOT).origin;
+        return url.origin === gatewayOrigin ? url.href : '';
+      } catch (_) {
+        return '';
+      }
+    }
 
     function escapeGameHtml(value = '') {
       return String(value).replace(/[&<>'"]/g, char => ({
@@ -2498,7 +2529,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       if (event) pendingReviewQueue = [];
       clearGameAdminForm();
       editingGameId = game.id;
-      document.getElementById('gameAdminRom').value = '';
+      const legacyRomInput = document.getElementById('gameAdminRom');
+      if (legacyRomInput) legacyRomInput.value = '';
       document.getElementById('gameAdminTitle').value = game.title || '';
       document.getElementById('gameAdminConsole').value = game.console || 'snes';
       document.getElementById('gameAdminYear').value = game.release_year || '';
@@ -2526,32 +2558,89 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     async function syncGamesCatalogFromR2() {
       if (!currentUser || currentUser.role !== 'admin') return;
-      const confirmed = window.confirm('Ler todas as ROMs do bucket luxroms? O catálogo será reconstruído: jogos que não estiverem no R2 serão removidos e todos os encontrados voltarão para aprovação.');
+
+      const confirmed = window.confirm(
+        'Ler novas ROMs do Cloudflare R2? Jogos já cadastrados serão preservados; somente ROMs ainda não registradas entrarão como pendentes.'
+      );
       if (!confirmed) return;
+
       const button = document.getElementById('gameR2SyncButton');
       const status = document.getElementById('gameR2SyncStatus');
       if (button) button.disabled = true;
-      if (status) status.textContent = 'Lendo ROMs do R2 e reconstruindo o catálogo...';
+      if (status) {
+        status.className = 'mt-3 min-h-[18px] text-xs text-purple-300';
+        status.textContent = 'Escaneando R2 em pequenos lotes...';
+      }
+
+      window.LuxDevkit?.running('GAMES', 'r2-scan', 'Escaneando ROMs do Cloudflare R2...');
+
+      let cursor = null;
+      let processed = 0;
+      let created = 0;
+      let existing = 0;
+      let skipped = 0;
+      let failed = 0;
+
       try {
-        const response = await fetch('https://lux-r2-gateway.professorsouza-tech.workers.dev/api/games/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: currentUser.user, password: currentUser.pass })
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || `Gateway HTTP ${response.status}`);
+        while (true) {
+          const response = await fetch(GAME_R2_SYNC, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: currentUser.user,
+              password: currentUser.pass,
+              cursor,
+              batchSize: GAME_R2_SCAN_BATCH
+            })
+          });
+
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || `Gateway HTTP ${response.status}`);
+
+          processed += Number(result.processed) || 0;
+          created += Number(result.created) || 0;
+          existing += Number(result.existing) || 0;
+          skipped += Number(result.skipped) || 0;
+          failed += Number(result.failed) || 0;
+
+          if (status) {
+            status.textContent =
+              `R2: ${processed} processada(s) · ${created} nova(s) · ${existing} existente(s) · ${failed} falha(s)`;
+          }
+
+          if (result.done) break;
+
+          const nextCursor = String(result.nextCursor || '');
+          if (!nextCursor || nextCursor === cursor) {
+            throw new Error('O scan do R2 não avançou para o próximo lote.');
+          }
+          cursor = nextCursor;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
         await loadGamesCatalog();
         await renderGamesCatalog();
+
         if (status) {
           status.className = 'mt-3 min-h-[18px] text-xs text-emerald-300';
-          status.textContent = `Catálogo sincronizado: ${result.found} ROM(s), ${result.created} nova(s), ${result.updated} atualizada(s) e ${result.removed} removida(s). Todas aguardam aprovação.`;
+          status.textContent =
+            `Scan concluído: ${created} nova(s), ${existing} já cadastrada(s), ${skipped} ignorada(s) e ${failed} falha(s). Novas ROMs aguardam revisão.`;
         }
+
+        window.LuxDevkit?.success('GAMES', 'r2-scan', 'Scan do R2 concluído', null, {
+          processed,
+          created,
+          existing,
+          skipped,
+          failed
+        });
       } catch (error) {
-        console.error('Falha ao sincronizar jogos do R2:', error);
+        console.error('Falha ao escanear jogos do R2:', error);
         if (status) {
           status.className = 'mt-3 min-h-[18px] text-xs text-rose-300';
-          status.textContent = `Não foi possível sincronizar: ${gameImportErrorMessage(error)}`;
+          status.textContent = `Não foi possível concluir o scan: ${gameImportErrorMessage(error)}`;
         }
+        window.LuxDevkit?.warn('GAMES', 'r2-scan', error?.message || 'Falha no scan do R2');
       } finally {
         if (button) button.disabled = false;
       }
@@ -2561,8 +2650,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       if (!currentUser || currentUser.role !== 'admin') return;
       try {
         await loadGamesCatalog();
-        pendingReviewQueue = gamesCatalog.filter(game => game.status !== 'approved').map(game => game.id);
-        if (!pendingReviewQueue.length) return alert('Não há jogos não aprovados para revisar.');
+        pendingReviewQueue = gamesCatalog
+          .filter(game => ['pending', 'draft'].includes(String(game.status || 'pending')))
+          .map(game => game.id);
+        if (!pendingReviewQueue.length) return alert('Não há jogos pendentes ou rascunhos para revisar.');
         openNextPendingReview();
       } catch (error) {
         alert(`Não foi possível carregar os jogos para revisão: ${gameImportErrorMessage(error)}`);
@@ -2583,27 +2674,28 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     async function adminDeleteGame(id, event) {
       event?.stopPropagation();
       if (!currentUser || currentUser.role !== 'admin') return;
+
       const game = gamesCatalog.find(item => String(item.id) === String(id));
-      if (!game) return alert('Jogo não encontrado no catálogo. Atualize a página e tente novamente.');
-      if (!confirm(`Remover “${game.title || 'este jogo'}” do catálogo e apagar a ROM armazenada? Esta ação não pode ser desfeita.`)) return;
+      if (!game) return alert('Jogo não encontrado no catálogo.');
+
+      const confirmed = confirm(
+        `Ocultar “${game.title || 'este jogo'}” do catálogo? A ROM continuará intacta no Cloudflare R2.`
+      );
+      if (!confirmed) return;
 
       try {
-        const { error: deleteError } = await supabaseClient.from('games').delete().eq('id', game.id);
-        if (deleteError) throw deleteError;
+        const { error } = await supabaseClient
+          .from('games')
+          .update({ status: 'hidden' })
+          .eq('id', game.id);
+        if (error) throw error;
 
-        let storageError = null;
-        if (game.rom_path) {
-          const { error } = await supabaseClient.storage.from('games').remove([game.rom_path]);
-          storageError = error;
-        }
         closeGameDetails?.();
         await loadGamesCatalog();
         await renderGamesCatalog();
-        if (storageError) alert(`O jogo foi removido do catálogo, mas não foi possível apagar a ROM do Storage: ${gameImportErrorMessage(storageError)}`);
-        else alert('Jogo e ROM removidos com sucesso.');
       } catch (error) {
-        console.error('Erro ao remover jogo:', error);
-        alert(`Não foi possível remover o jogo: ${gameImportErrorMessage(error)}`);
+        console.error('Erro ao ocultar jogo:', error);
+        alert(`Não foi possível ocultar o jogo: ${gameImportErrorMessage(error)}`);
       }
     }
 
@@ -2660,218 +2752,150 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     async function adminImportGame(targetStatus = 'approved') {
       if (!currentUser || currentUser.role !== 'admin') {
-        alert('Somente administradores podem importar jogos.');
+        alert('Somente administradores podem editar o catálogo de jogos.');
+        return;
+      }
+      if (!editingGameId) {
+        setGameAdminStatus('Novas ROMs entram pelo botão “Ler ROMs do R2”.', true);
         return;
       }
 
-      const files = Array.from(document.getElementById('gameAdminRom')?.files || []);
-      const file = files[0];
       const title = document.getElementById('gameAdminTitle')?.value.trim();
       const consoleName = document.getElementById('gameAdminConsole')?.value;
       const yearRaw = document.getElementById('gameAdminYear')?.value;
       const genresRaw = document.getElementById('gameAdminGenres')?.value || '';
       const coverUrl = document.getElementById('gameAdminCoverUrl')?.value.trim() || null;
       const synopsis = document.getElementById('gameAdminSynopsis')?.value.trim() || null;
-      const published = targetStatus === 'approved';
-      const players = Number(document.getElementById('gameAdminPlayers').value);
-      const coopValue = document.getElementById('gameAdminCoop').value;
+      const players = Number(document.getElementById('gameAdminPlayers')?.value || 1);
+      const coopValue = document.getElementById('gameAdminCoop')?.value;
       const coop = coopValue === 'yes' ? true : coopValue === 'no' ? false : null;
+      const statusValue = targetStatus === 'draft'
+        ? 'draft'
+        : targetStatus === 'pending'
+          ? 'pending'
+          : 'approved';
+
+      if (!title || !consoleName) {
+        setGameAdminStatus('Informe o título e o console.', true);
+        return;
+      }
       if (!Number.isInteger(players) || players < 1 || players > 8 || (coop === true && players < 2)) {
         setGameAdminStatus('Informe de 1 a 8 jogadores. Cooperação exige pelo menos 2 jogadores.', true);
         return;
       }
+
       const submit = document.getElementById('gameAdminSubmit');
       const draft = document.getElementById('gameAdminDraft');
+      if (submit) submit.disabled = true;
+      if (draft) draft.disabled = true;
 
-      if ((!file && !editingGameId) || (!title && files.length <= 1) || !consoleName) {
-        setGameAdminStatus(editingGameId ? 'Informe o título e o console.' : 'Selecione a ROM, informe o título e o console.', true);
-        return;
-      }
-
-      if (editingGameId) {
-        submit.disabled = true;
-        draft.disabled = true;
-        const continueReview = String(pendingReviewQueue[0]) === String(editingGameId);
-        try {
-          const { data: existingGames, error: duplicateQueryError } = await supabaseClient.from('games').select('id,title,normalized_title').neq('id', editingGameId);
-          if (duplicateQueryError) throw duplicateQueryError;
-          if ((existingGames || []).some(game => normalizeGameDuplicateKey(game.normalized_title || game.title) === normalizeGameDuplicateKey(title))) {
-            setGameAdminStatus('Já existe um jogo com este título no catálogo.', true);
-            return;
-          }
-          const { error } = await supabaseClient.from('games').update({
-            title, normalized_title: normalizeGameDuplicateKey(title), console: consoleName,
-            release_year: yearRaw ? Number(yearRaw) : null,
-            genres: genresRaw.split(',').map(item => item.trim()).filter(Boolean),
-            players, coop,
-            synopsis, cover_url: coverUrl, status: published ? 'approved' : 'pending',
-            ...(selectedGameMetadata?{metadata_source:selectedGameMetadata.metadata_source||'igdb',metadata_external_id:selectedGameMetadata.external_id||null}:{})
-          }).eq('id', editingGameId);
-          if (error) throw error;
-          if (continueReview) pendingReviewQueue.shift();
-          clearGameAdminForm();
-          setGameAdminStatus('Dados do jogo atualizados.');
-          await loadGamesCatalog();
-          renderGamesCatalog();
-          if (continueReview) openNextPendingReview();
-          else if (published) cancelGameAdminForm();
-        } catch (error) {
-          setGameAdminStatus(`Não foi possível atualizar: ${error.message || 'erro desconhecido'}`, true);
-        } finally { submit.disabled = false; draft.disabled = false; }
-        return;
-      }
-
-      if (files.length > 1) {
-        const allowedExtensions = ['gba', 'gb', 'gbc', 'sfc', 'smc', 'zip', 'md', 'gen', 'bin', 'nes', 'sms', 'n64', 'z64', 'iso', 'cso', 'pbp'];
-        submit.disabled = true;
-        draft.disabled = true;
-        submit.classList.add('opacity-60', 'cursor-wait');
-        let completed = 0;
-        const skipped = [];
-        const failures = [];
-        try {
-          const { data: existingGames, error: catalogError } = await supabaseClient
-            .from('games').select('title, normalized_title, source_file_name, rom_sha256');
-          if (catalogError) throw catalogError;
-          const titleKeys = new Set((existingGames || []).map(game => normalizeGameDuplicateKey(game.normalized_title || game.title)).filter(Boolean));
-          const fileNames = new Set((existingGames || []).map(game => normalizeGameDuplicateKey(game.source_file_name)).filter(Boolean));
-          const fileHashes = new Set((existingGames || []).map(game => game.rom_sha256).filter(Boolean));
-
-          for (const item of files) {
-            const extension = item.name.split('.').pop()?.toLowerCase() || '';
-            const gameTitle = gameTitleFromFile(item);
-            const titleKey = normalizeGameDuplicateKey(gameTitle);
-            const fileNameKey = normalizeGameDuplicateKey(item.name);
-            if (!allowedExtensions.includes(extension)) { skipped.push({ name: item.name, reason: 'formato não suportado' }); continue; }
-            if (titleKeys.has(titleKey)) { skipped.push({ name: item.name, reason: 'já existe um jogo com o mesmo nome' }); continue; }
-            if (fileNames.has(fileNameKey)) { skipped.push({ name: item.name, reason: 'já existe um arquivo com o mesmo nome' }); continue; }
-
-            let fileHash;
-            try {
-              fileHash = await getGameFileHash(item);
-              if (fileHash && fileHashes.has(fileHash)) { skipped.push({ name: item.name, reason: 'o mesmo arquivo já foi enviado' }); continue; }
-            } catch (error) {
-              failures.push({ name: item.name, reason: `não foi possível verificar o arquivo: ${gameImportErrorMessage(error)}` });
-              continue;
-            }
-
-            let objectPath = null;
-            try {
-              setGameAdminStatus(`Enviando ${completed + skipped.length + failures.length + 1} de ${files.length}: ${item.name}`);
-              const cleanName = item.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-              objectPath = `roms/${consoleName}/${Date.now()}-${completed}-${cleanName}`;
-              const { error: uploadError } = await supabaseClient.storage.from('games').upload(objectPath, item, { contentType: item.type || 'application/octet-stream', upsert: false });
-              if (uploadError) throw uploadError;
-              const { error: insertError } = await supabaseClient.from('games').insert([{
-                title: gameTitle, normalized_title: normalizeGameDuplicateKey(gameTitle), console: consoleName, players: 1, genres: [],
-                rom_path: objectPath, rom_url: gameStorageUrl(objectPath), rom_sha256: fileHash,
-                source_file_name: item.name, status: published ? 'approved' : 'pending', metadata_source: null, metadata_external_id: null
-              }]);
-              if (insertError) throw insertError;
-              completed++;
-              titleKeys.add(titleKey); fileNames.add(fileNameKey); if (fileHash) fileHashes.add(fileHash);
-            } catch (error) {
-              let reason = gameImportErrorMessage(error);
-              if (objectPath) {
-                const { error: removeError } = await supabaseClient.storage.from('games').remove([objectPath]);
-                if (removeError) reason += ` (também não foi possível remover o arquivo enviado: ${gameImportErrorMessage(removeError)})`;
-              }
-              failures.push({ name: item.name, reason });
-            }
-          }
-          if (completed) clearGameAdminForm();
-          setGameBatchSummary(completed, skipped, failures);
-          await loadGamesCatalog(); renderGamesCatalog();
-          if (published && completed > 0 && !failures.length && !skipped.length) cancelGameAdminForm();
-        } catch (error) { setGameAdminStatus(`Não foi possível preparar o lote: ${gameImportErrorMessage(error)}`, true); }
-        finally { submit.disabled = false; draft.disabled = false; submit.classList.remove('opacity-60', 'cursor-wait'); }
-        return;
-      }
-
-      const extension = file.name.split('.').pop()?.toLowerCase();
-      const allowedExtensions = ['gba', 'gb', 'gbc', 'sfc', 'smc', 'zip', 'md', 'gen', 'bin', 'nes', 'n64', 'z64'];
-      if (!extension || !allowedExtensions.includes(extension)) {
-        setGameAdminStatus('Formato não suportado para esta primeira versão.', true);
-        return;
-      }
-
-      const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const objectPath = `roms/${consoleName}/${Date.now()}-${cleanName}`;
-      submit.disabled = true;
-      draft.disabled = true;
-      submit.classList.add('opacity-60', 'cursor-wait');
-      setGameAdminStatus('Enviando ROM para o Storage...');
+      const continueReview = String(pendingReviewQueue[0]) === String(editingGameId);
 
       try {
-        let fileHash = null;
-        try { fileHash = await getGameFileHash(file); } catch (error) { console.warn('Não foi possível calcular a assinatura da ROM:', error); }
-        const { data: existingGames, error: catalogError } = await supabaseClient
-          .from('games').select('title, normalized_title, source_file_name, rom_sha256');
-        if (catalogError) throw catalogError;
-        const sameTitle = (existingGames || []).some(game => normalizeGameDuplicateKey(game.normalized_title || game.title) === normalizeGameDuplicateKey(title));
-        const sameFileName = (existingGames || []).some(game => normalizeGameDuplicateKey(game.source_file_name) === normalizeGameDuplicateKey(file.name));
-        const sameFile = fileHash && (existingGames || []).some(game => game.rom_sha256 === fileHash);
-        if (sameTitle || sameFileName || sameFile) {
-          const reason = sameFile ? 'o mesmo arquivo já foi enviado' : (sameTitle ? 'já existe um jogo com o mesmo nome' : 'já existe um arquivo com o mesmo nome');
-          setGameAdminStatus(`Jogo ignorado: ${reason}.`);
+        const { data: existingGames, error: duplicateQueryError } = await supabaseClient
+          .from('games')
+          .select('id,title,normalized_title')
+          .neq('id', editingGameId);
+        if (duplicateQueryError) throw duplicateQueryError;
+
+        if ((existingGames || []).some(game =>
+          normalizeGameDuplicateKey(game.normalized_title || game.title) === normalizeGameDuplicateKey(title)
+        )) {
+          setGameAdminStatus('Já existe outro jogo com este título no catálogo.', true);
           return;
         }
 
-        const { error: uploadError } = await supabaseClient.storage.from('games').upload(objectPath, file, {
-          contentType: file.type || 'application/octet-stream', upsert: false
-        });
-        if (uploadError) throw uploadError;
-
-        setGameAdminStatus('Salvando dados do jogo...');
-        const { error: insertError } = await supabaseClient.from('games').insert([{
+        const { error } = await supabaseClient.from('games').update({
           title,
           normalized_title: normalizeGameDuplicateKey(title),
-          players, coop,
           console: consoleName,
           release_year: yearRaw ? Number(yearRaw) : null,
           genres: genresRaw.split(',').map(item => item.trim()).filter(Boolean),
+          players,
+          coop,
           synopsis,
           cover_url: coverUrl,
-          rom_path: objectPath,
-          rom_url: gameStorageUrl(objectPath),
-          rom_sha256: fileHash,
-          source_file_name: file.name,
-          status: published ? 'approved' : 'pending',
-          metadata_source: selectedGameMetadata ? (selectedGameMetadata.metadata_source || 'igdb') : null,
-          metadata_external_id: selectedGameMetadata?.external_id || null
-        }]);
-        if (insertError) throw insertError;
+          status: statusValue,
+          ...(selectedGameMetadata ? {
+            metadata_source: selectedGameMetadata.metadata_source || 'igdb',
+            metadata_external_id: selectedGameMetadata.external_id || null
+          } : {})
+        }).eq('id', editingGameId);
+        if (error) throw error;
+
+        if (continueReview) pendingReviewQueue.shift();
+
+        setGameAdminStatus(
+          statusValue === 'approved'
+            ? 'Jogo publicado no catálogo.'
+            : statusValue === 'draft'
+              ? 'Jogo salvo como rascunho.'
+              : 'Jogo mantido como pendente.'
+        );
 
         clearGameAdminForm();
-        selectedGameMetadata = null;
-        setGameAdminStatus(published ? 'Jogo publicado no catálogo.' : 'ROM enviada. O jogo ficou pendente para revisão.');
         await loadGamesCatalog();
-        renderGamesCatalog();
-        if (published) cancelGameAdminForm();
+        await renderGamesCatalog();
+
+        if (continueReview) openNextPendingReview();
+        else if (statusValue === 'approved') cancelGameAdminForm();
       } catch (error) {
-        console.error('Erro ao importar jogo:', error);
-        setGameAdminStatus(`Não foi possível importar: ${error.message || 'erro desconhecido'}`, true);
+        setGameAdminStatus(`Não foi possível salvar: ${gameImportErrorMessage(error)}`, true);
       } finally {
-        submit.disabled = false;
-        draft.disabled = false;
-        submit.classList.remove('opacity-60', 'cursor-wait');
+        if (submit) submit.disabled = false;
+        if (draft) draft.disabled = false;
       }
     }
 
     async function loadGamesCatalog() {
-      let query = supabaseClient.from('games').select('*').order('title', { ascending: true });
-      if (!currentUser || currentUser.role !== 'admin') query = query.eq('status', 'approved');
+      const started = performance.now();
+      const admin = currentUser?.role === 'admin';
+
+      window.LuxDevkit?.running('GAMES', 'catalog-request', admin
+        ? 'Carregando catálogo completo do Admin...'
+        : 'Carregando jogos publicados...');
+
+      let query = supabaseClient
+        .from('games')
+        .select('*')
+        .order('title', { ascending: true });
+
+      if (!admin) query = query.eq('status', 'approved');
+
       const { data, error } = await query;
-      if (error) throw error;
-      gamesCatalog = (data || []).filter(profileAllowsMedia);
+      if (error) {
+        window.LuxDevkit?.error('GAMES', 'catalog-request', error.message || 'Falha ao consultar catálogo');
+        throw error;
+      }
+
+      gamesCatalog = Array.isArray(data) ? data : [];
+
+      window.LuxDevkit?.success('GAMES', 'catalog-response', 'Catálogo recebido do Supabase', Math.round(performance.now() - started), {
+        role: admin ? 'admin' : 'user',
+        rows: gamesCatalog.length,
+        approved: gamesCatalog.filter(game => game.status === 'approved').length,
+        pending: admin ? gamesCatalog.filter(game => game.status === 'pending').length : undefined,
+        draft: admin ? gamesCatalog.filter(game => game.status === 'draft').length : undefined,
+        hidden: admin ? gamesCatalog.filter(game => game.status === 'hidden').length : undefined
+      });
+
       return gamesCatalog;
     }
 
     function openGameEmulatorById(id) {
       const game = gamesCatalog.find(item => String(item.id) === String(id));
       if (!game) return;
-      const url = game.rom_url || gameStorageUrl(game.rom_path);
-      if (!url) return alert('Este jogo ainda não possui uma URL de ROM válida.');
+
+      const path = normalizeGameR2Path(game.r2_path || game.r2Path || game.rom_path);
+      const url = gameRomUrl(game);
+      if (!url) return alert('A ROM deste jogo ainda não está disponível no Cloudflare R2.');
+
+      window.LuxDevkit?.info('GAMES', 'rom-resolve', 'ROM resolvida somente ao abrir o jogo', {
+        gameId: game.id,
+        console: game.console,
+        path
+      });
+
       const genres = Array.isArray(game.genres) ? game.genres.join(', ') : (game.genres || game.genre || '');
       openGameDetails({
         id: game.id,
@@ -2879,9 +2903,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         players: game.players,
         coop: game.coop,
         console: game.console,
-        r2Path: game.r2_path || game.r2Path || '',
-        r2Url: game.r2_url || game.r2Url || '',
-        consoleLabel: String(game.console || 'Console').replace('mastersystem', 'Master System').replace('megadrive', 'Mega Drive').replace('psp', 'PSP').toUpperCase(),
+        r2Path: path,
+        r2Url: url,
+        consoleLabel: String(game.console || 'Console')
+          .replace('mastersystem', 'Master System')
+          .replace('megadrive', 'Mega Drive')
+          .replace('psp', 'PSP')
+          .toUpperCase(),
         url,
         logo: game.cover_url || gameStorageUrl(game.cover_path),
         synopsis: game.synopsis || game.sinopse,
@@ -6295,12 +6323,17 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         </div>
       </div>`;
       let gamesList = [];
+      const gamesRenderStarted = performance.now();
+      window.LuxDevkit?.running('GAMES', 'render', 'Preparando biblioteca...');
       try {
         const records = await loadGamesCatalog();
         const luxGames = records.map(game => ({
           id: game.id, name: game.title || 'Sem título', console: game.console || 'snes',
           players: Math.max(1, Number(game.players) || 1), coop: game.coop,
-          url: game.rom_url || gameStorageUrl(game.rom_path), r2Path: game.r2_path || game.r2Path || '', r2Url: game.r2_url || game.r2Url || '', logo: game.cover_url || gameStorageUrl(game.cover_path),
+          url: gameRomUrl(game),
+          r2Path: normalizeGameR2Path(game.r2_path || game.r2Path || game.rom_path),
+          r2Url: gameRomUrl(game),
+          logo: game.cover_url || gameStorageUrl(game.cover_path),
           status: game.status || 'pending', sourceFileName: game.source_file_name || '', source: 'lux'
         }));
         const externalGames = (await window.LuxExternalRoms?.list?.() || []).map(game => ({ ...game, source: 'external', status: 'external', players: Math.max(1, Number(game.players) || 1) }));
@@ -6326,7 +6359,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             <div class="games-catalog-actions flex flex-wrap justify-end gap-2">
               <select onchange="setGamesFilter('console', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">🎮 Todos</option><option value="gba">🟣 GBA</option><option value="gb">🟡 GB</option><option value="gbc">🎨 GBC</option><option value="snes">🕹️ SNES</option><option value="megadrive">🔵 Mega Drive</option><option value="nes">🔴 NES</option><option value="mastersystem">🟠 Master System</option><option value="n64">🟢 N64</option><option value="psp">🔴 PSP</option></select><select onchange="setGamesFilter('origin', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">📚 Todos os jogos</option><option value="lux">⭐ Catálogo Lux</option><option value="external">📁 ROMs do dispositivo</option></select><button onclick="document.getElementById('externalRomInput').click()" class="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 rounded-lg px-3 py-2 text-[11px] font-bold text-white transition-colors">Abrir ROM</button><input id="externalRomInput" type="file" accept=".gb,.gbc,.gba,.nes,.sfc,.smc,.sms,.md,.gen,.n64,.z64,.v64,.iso,.cso,.pbp" class="hidden" onchange="importExternalRom(this.files[0]); this.value=''">
               <button onclick="setGamesFilter('favorites')" aria-pressed="${gamesFavoritesOnly}" class="${gamesFavoritesOnly ? 'bg-rose-500/20 border-rose-400/60 text-rose-200' : 'bg-[#120c1f] border-purple-900/60 text-purple-200 hover:border-rose-400/60'} border rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors flex items-center gap-1"><i data-lucide="heart" class="w-3.5 h-3.5 ${gamesFavoritesOnly ? 'fill-current' : ''}"></i> Favoritos</button>
-              ${currentUser?.role === 'admin' ? `<button onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-rose-200 transition-colors">Revisar não aprovados</button><select onchange="setGamesFilter('status', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">Status: todos</option><option value="approved">✓ Aprovados</option><option value="pending">◷ Pendentes</option></select>` : ''}
+              ${currentUser?.role === 'admin' ? `<button onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-rose-200 transition-colors">Revisar não aprovados</button><select onchange="setGamesFilter('status', this.value)" class="bg-[#120c1f] border border-purple-900/60 rounded-lg px-2 py-1.5 text-[11px] text-purple-200"><option value="all">Status: todos</option><option value="approved">✓ Aprovados</option><option value="pending">◷ Pendentes</option><option value="draft">✎ Rascunhos</option><option value="hidden">⊘ Ocultos</option></select>` : ''}
             </div>
           </div>
           <div id="gameCoreStatusPanel" class="mb-5 rounded-2xl border border-purple-900/50 bg-purple-950/20 p-4">
@@ -6362,7 +6395,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
               ${gameFeatureBadges(game)}
               <h4 class="text-xs font-bold text-slate-100 truncate group-hover:text-purple-300">${escapeGameHtml(game.name)}</h4>
               <p class="text-[10px] text-purple-400/70 uppercase mt-0.5">Jogar Agora</p>
-              ${currentUser?.role === 'admin' ? `<p class="text-[9px] uppercase mt-1 font-bold ${game.status === 'approved' ? 'text-emerald-400' : 'text-rose-400'}">${game.status === 'approved' ? 'Aprovado' : 'Pendente'}</p>` : ''}
+              ${currentUser?.role === 'admin' ? `<p class="text-[9px] uppercase mt-1 font-bold ${game.status === 'approved' ? 'text-emerald-400' : game.status === 'draft' ? 'text-amber-300' : game.status === 'hidden' ? 'text-slate-400' : 'text-rose-400'}">${game.status === 'approved' ? 'Aprovado' : game.status === 'draft' ? 'Rascunho' : game.status === 'hidden' ? 'Oculto' : 'Pendente'}</p>` : ''}
             </div>
           </div>
         `;
@@ -6370,6 +6403,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       html += `</div></div>`;
       container.innerHTML = html;
+      window.LuxDevkit?.success('GAMES', 'render', 'Biblioteca renderizada', Math.round(performance.now() - gamesRenderStarted), {
+        catalogRows: gamesCatalog.length,
+        visibleCards: gamesList.length
+      });
       setupDesktopGamesFilters(container);
       renderPublicCoreStatusList();
       syncCoreStatusesFromCloud();

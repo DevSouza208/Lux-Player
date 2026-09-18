@@ -150,30 +150,6 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   document.head.appendChild(emulatorPerformanceScript);
 }
 
-if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-r2-only-roms]')) {
-  const r2OnlyScript = document.createElement('script');
-  r2OnlyScript.src = 'js/game-r2-only.js?v=20260917-r2-only-roms6';
-  r2OnlyScript.async = false;
-  r2OnlyScript.dataset.luxR2OnlyRoms = '1';
-  document.head.appendChild(r2OnlyScript);
-}
-
-if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-console-visibility]')) {
-  const gameConsoleVisibilityScript = document.createElement('script');
-  gameConsoleVisibilityScript.src = 'js/game-console-visibility.js?v=20260917-game-console-visibility2';
-  gameConsoleVisibilityScript.async = false;
-  gameConsoleVisibilityScript.dataset.luxGameConsoleVisibility = '1';
-  document.head.appendChild(gameConsoleVisibilityScript);
-}
-
-if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-game-catalog-cache]')) {
-  const gameCatalogCacheScript = document.createElement('script');
-  gameCatalogCacheScript.src = 'js/game-catalog-cache.js?v=20260917-game-catalog-cache1';
-  gameCatalogCacheScript.async = false;
-  gameCatalogCacheScript.dataset.luxGameCatalogCache = '1';
-  document.head.appendChild(gameCatalogCacheScript);
-}
-
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-arcade-core-autodetect]')) {
   const arcadeCoreScript = document.createElement('script');
   arcadeCoreScript.src = 'js/arcade-core-autodetect.js?v=20260917-arcade-core-auto5';

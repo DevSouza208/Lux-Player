@@ -495,10 +495,9 @@
       <div id="adminTabGames" class="admin-tab-panel hidden overflow-y-auto pr-1">
         <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6">
           <h3 class="text-base font-bold text-white">Gerenciar jogos</h3>
-          <p class="mt-2 text-xs text-purple-300">Envie ROMs ou revise os jogos pendentes antes de publicá-los.</p>
+          <p class="mt-2 text-xs text-purple-300">O Cloudflare R2 guarda as ROMs; o Supabase guarda catálogo, metadata e status. O scan só adiciona ROMs novas como pendentes.</p>
           <div class="mt-4 flex flex-wrap gap-3">
-            <button type="button" onclick="toggleGameUploadModal()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs">Enviar jogos</button>
-            <button type="button" id="gameR2SyncButton" onclick="syncGamesCatalogFromR2()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs">Ler ROMs do R2</button>
+            <button type="button" id="gameR2SyncButton" onclick="syncGamesCatalogFromR2()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs">Ler novas ROMs do R2</button>
             <button type="button" onclick="reviewUnapprovedGames()" class="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800/60 text-rose-200 font-bold px-4 py-2.5 rounded-xl text-xs">Revisar não aprovados</button>
           </div>
           <p id="gameR2SyncStatus" role="status" class="mt-3 min-h-[18px] text-xs text-purple-300"></p>
@@ -567,15 +566,12 @@
   <div id="gameUploadModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
     <div class="bg-[#120c1f] border border-purple-900/60 rounded-3xl p-5 md:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto lux-glow">
       <div class="flex items-center justify-between pb-3 border-b border-purple-950 mb-4">
-        <h3 class="text-base font-bold text-white flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 text-indigo-300"></i> Enviar jogo</h3>
+        <h3 class="text-base font-bold text-white flex items-center gap-2"><i data-lucide="pencil" class="w-5 h-5 text-indigo-300"></i> Revisar jogo</h3>
         <button onclick="cancelGameAdminForm()" title="Fechar" aria-label="Fechar" class="text-purple-400 hover:text-white p-1 rounded-lg">✕</button>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div class="sm:col-span-2">
-          <label class="text-[11px] text-purple-300 font-medium">Arquivo da ROM</label>
-          <input id="gameAdminRom" type="file" multiple accept=".gba,.gb,.gbc,.sfc,.smc,.zip,.md,.gen,.bin,.nes,.n64,.z64" onchange="fillGameTitleFromRom()" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-purple-200 file:mr-3 file:border-0 file:rounded-lg file:bg-purple-600 file:px-3 file:py-1 file:text-xs file:font-bold file:text-white hover:file:bg-purple-500">
-          <div id="gameAdminSourceFile" class="hidden mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"></div>
-        </div>
+        <input id="gameAdminRom" type="file" class="hidden" aria-hidden="true">
+        <div id="gameAdminSourceFile" class="hidden sm:col-span-2 mt-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100"></div>
         <div><div class="flex items-center justify-between gap-2"><label class="text-[11px] text-purple-300 font-medium">Título</label><button type="button" onclick="searchGameMetadata()" class="text-[10px] font-bold text-indigo-300 hover:text-white transition-colors flex items-center gap-1"><i data-lucide="search" class="w-3 h-3"></i> Buscar dados</button></div><input id="gameAdminTitle" type="text" placeholder="Nome do jogo" onkeydown="if(event.key === 'Enter') { event.preventDefault(); searchGameMetadata(); }" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
         <div><label class="text-[11px] text-purple-300 font-medium">Console</label><select id="gameAdminConsole" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"><option value="gba">Game Boy Advance</option><option value="gb">Game Boy</option><option value="gbc">Game Boy Color</option><option value="snes">SNES</option><option value="megadrive">Mega Drive</option><option value="mastersystem">Master System</option><option value="psp">PlayStation Portable</option><option value="nes">NES</option><option value="n64">Nintendo 64</option></select></div>
         <div><label class="text-[11px] text-purple-300 font-medium">Ano (opcional)</label><input id="gameAdminYear" type="number" min="1950" max="2100" placeholder="1994" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
@@ -586,8 +582,8 @@
         <div class="sm:col-span-2"><label class="text-[11px] text-purple-300 font-medium">Sinopse (opcional)</label><textarea id="gameAdminSynopsis" rows="3" placeholder="Descrição do jogo" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></textarea></div>
         <div id="gameMetadataResults" class="sm:col-span-2 empty:hidden"></div>
       </div>
-      <p class="text-[10px] text-purple-400/80 mt-2">Você pode selecionar várias ROMs. Em lote, o título será criado pelo nome de cada arquivo; duplicados são ignorados e falhas não interrompem os demais envios.</p>
-      <div class="mt-4 flex gap-2"><button onclick="adminImportGame('approved')" id="gameAdminSubmit" data-game-admin-action class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Publicar</button><button onclick="adminImportGame('pending')" id="gameAdminDraft" data-game-admin-action class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Rascunho</button><button onclick="cancelGameAdminForm()" class="px-4 bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-semibold rounded-xl text-xs border border-purple-900/40">Cancelar</button></div>
+      <p class="text-[10px] text-purple-400/80 mt-2">A ROM permanece no Cloudflare R2. Aqui você revisa somente metadata e status do catálogo.</p>
+      <div class="mt-4 flex gap-2"><button onclick="adminImportGame('approved')" id="gameAdminSubmit" data-game-admin-action class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Publicar</button><button onclick="adminImportGame('draft')" id="gameAdminDraft" data-game-admin-action class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Rascunho</button><button onclick="cancelGameAdminForm()" class="px-4 bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-semibold rounded-xl text-xs border border-purple-900/40">Cancelar</button></div>
       <p id="gameAdminStatus" aria-live="polite" class="mt-3 text-xs text-purple-400"></p>
     </div>
   </div>
@@ -939,10 +935,10 @@
   </dialog>
   <script src="js/devkit-logger.js?v=20260917-devkit133"></script>
   <script src="js/ui-motion.js?v=20260918-postboot1"></script>
-  <script src="js/script.js?v=20260918-timeouts1"></script>
+  <script src="js/script.js?v=20260918-games-core1"></script>
   <script src="js/profiles.js?v=20260917-progress-bg1"></script>
   <script src="js/avatar-gallery.js"></script>
-  <script src="js/game-save-store.js"></script>
+  <script src="js/game-save-store.js?v=20260918-games-core1"></script>
   <script src="js/game-rom-cache.js?v=20260917-r2-title-path1"></script>
   <script src="js/external-roms.js"></script>
   <script src="js/emulator.js"></script>
