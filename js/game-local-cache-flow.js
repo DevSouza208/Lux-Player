@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-r2-rom-cache4';
+  const VERSION = '20260918-mobile-details1';
   const OVERLAY_ID = 'luxGameCacheOverlay';
   const STYLE_ID = 'luxGameCacheOverlayStyle';
   const MAX_REVIEW_LENGTH = 500;
@@ -11,6 +11,7 @@
 
   let latestReviewState = null;
   let reviewBusy = false;
+  let detailsLayoutObserver = null;
 
   function currentGame() {
     try { return typeof currentGameDetails !== 'undefined' ? currentGameDetails : null; }
@@ -131,12 +132,42 @@
       .lux-review-text{margin-top:10px;font-size:12px;line-height:1.65;color:#d8d1e3;white-space:pre-wrap;overflow-wrap:anywhere}
       .lux-review-empty{margin-top:16px;padding:18px;border:1px dashed rgba(88,28,135,.5);border-radius:16px;text-align:center;color:#8b7ba8;font-size:12px}
 
-      @media(max-width:767px){
-        #gameDetailsCover,#gameDetailsStoragePanel,#gameDetailsStoragePanel + .min-w-0.flex.flex-col,#gameDetailsAboutSection,#gameDetailsReviewsSection{grid-column:1;grid-row:auto}
-        #gameDetailsStoragePanel{width:min(330px,100%);margin:0 auto}
+      @media(max-width:1023px){
+        #gameDetailsModal{padding:0!important}
+        #gameDetailsModal .lux-game-details-shell{width:calc(100vw - 16px)!important;max-height:calc(100dvh - 16px)!important;border-radius:20px!important}
+        #gameDetailsModal .lux-game-details-grid{grid-template-columns:clamp(96px,28vw,220px) minmax(0,1fr)!important;gap:16px!important;padding-left:16px!important;padding-right:16px!important;padding-bottom:18px!important;align-items:start}
+        #gameDetailsCover{grid-column:1!important;grid-row:1!important;width:100%;max-height:none!important;margin:0!important}
+        #gameDetailsStoragePanel{grid-column:1/-1!important;grid-row:2!important;width:100%!important;margin:0!important}
+        #gameDetailsModal .lux-game-details-main{grid-column:2!important;grid-row:1!important;min-width:0}
+        #gameDetailsHltb{grid-column:1/-1!important;grid-row:3!important;width:100%!important;margin-top:0!important}
+        #gameDetailsAboutSection{grid-column:1/-1!important;grid-row:4!important;margin-top:0!important}
+        #gameDetailsReviewsSection{grid-column:1/-1!important;grid-row:5!important}
         .lux-game-storage-panel{margin-top:0}
         .lux-review-summary{align-items:flex-start}
         .lux-review-form-footer{align-items:flex-end}
+      }
+      @media(max-width:480px){
+        #gameDetailsModal .lux-game-details-shell{width:calc(100vw - 8px)!important;max-height:calc(100dvh - 8px)!important;border-radius:16px!important}
+        #gameDetailsModal .lux-game-details-grid{grid-template-columns:clamp(92px,34vw,118px) minmax(0,1fr)!important;gap:10px!important;padding-left:10px!important;padding-right:10px!important;padding-bottom:14px!important}
+        #gameDetailsModal .lux-game-details-main > p:first-child{font-size:9px!important;margin-bottom:5px!important}
+        #gameDetailsTitle{font-size:15px!important;line-height:1.15!important;overflow-wrap:anywhere}
+        #gameDetailsFavoriteHeart{top:6px;right:6px;width:34px;height:34px}
+        #gameDetailsFavoriteHeart svg{width:16px!important;height:16px!important}
+        .game-details-primary-actions{margin-top:12px!important}
+        .game-details-primary-actions > button{padding-top:9px!important;padding-bottom:9px!important;font-size:11px!important}
+        .game-details-primary-actions #gameDetailsPlayTime,
+        .game-details-primary-actions > p{font-size:10px!important;line-height:1.35}
+        .lux-game-storage-option{padding:9px 7px;font-size:11px}
+        .lux-game-cache-clear{padding:9px;font-size:10px}
+        #gameDetailsHltb{padding:11px 10px!important;border-radius:14px!important}
+        #gameDetailsHltb .lux-hltb-head{gap:7px!important;flex-wrap:wrap!important}
+        #gameDetailsHltb .lux-hltb-title{font-size:9px!important}
+        #gameDetailsHltb .lux-hltb-source{font-size:8px!important}
+        #gameDetailsHltb .lux-hltb-grid{gap:4px!important}
+        #gameDetailsHltb .lux-hltb-stat{padding:7px 5px!important}
+        #gameDetailsHltb .lux-hltb-label{font-size:8px!important}
+        #gameDetailsHltb .lux-hltb-value{font-size:13px!important}
+        #gameDetailsAboutSection,#gameDetailsReviewsSection{padding-top:18px!important}
       }
     `;
     document.head.appendChild(style);
@@ -287,6 +318,43 @@
     try { window.lucide?.createIcons?.(); } catch (_) {}
   }
 
+  function syncResponsiveDetailsLayout() {
+    const modal = document.getElementById('gameDetailsModal');
+    const cover = document.getElementById('gameDetailsCover');
+    const actions = document.getElementById('gameDetailsActions');
+    if (!modal || !cover) return;
+
+    const shell = modal.firstElementChild;
+    const grid = cover.parentElement;
+    const main = actions?.closest?.('.min-w-0.flex.flex-col') || document.getElementById('gameDetailsTitle')?.parentElement;
+    if (!grid || !main) return;
+
+    shell?.classList.add('lux-game-details-shell');
+    grid.classList.add('lux-game-details-grid');
+    main.classList.add('lux-game-details-main');
+
+    const hltb = document.getElementById('gameDetailsHltb');
+    if (!hltb) return;
+
+    const compact = window.matchMedia('(max-width:1023px)').matches;
+    if (compact) {
+      if (hltb.parentElement !== grid) {
+        const about = document.getElementById('gameDetailsAboutSection');
+        const reviews = document.getElementById('gameDetailsReviewsSection');
+        grid.insertBefore(hltb, about || reviews || null);
+      }
+    } else if (actions && hltb.parentElement !== main) {
+      actions.insertAdjacentElement('afterend', hltb);
+    }
+  }
+
+  function ensureDetailsLayoutObserver() {
+    const modal = document.getElementById('gameDetailsModal');
+    if (!modal || detailsLayoutObserver) return;
+    detailsLayoutObserver = new MutationObserver(() => syncResponsiveDetailsLayout());
+    detailsLayoutObserver.observe(modal, { childList: true, subtree: true });
+  }
+
   function moveDetailsSections() {
     const modal = document.getElementById('gameDetailsModal');
     const cover = document.getElementById('gameDetailsCover');
@@ -296,6 +364,10 @@
     if (!modal || !cover || !rating || !synopsis || !consoleTag) return;
     const grid = cover.parentElement;
     if (!grid) return;
+    modal.firstElementChild?.classList.add('lux-game-details-shell');
+    grid.classList.add('lux-game-details-grid');
+    const main = document.getElementById('gameDetailsActions')?.closest?.('.min-w-0.flex.flex-col') || document.getElementById('gameDetailsTitle')?.parentElement;
+    main?.classList.add('lux-game-details-main');
 
     let about = document.getElementById('gameDetailsAboutSection');
     if (!about) {
@@ -320,6 +392,7 @@
       grid.appendChild(reviews);
     }
     if (rating.parentElement !== reviews) reviews.appendChild(rating);
+    syncResponsiveDetailsLayout();
   }
 
   function reviewStarsMarkup(rating) {
@@ -505,6 +578,9 @@
     ensureFavoriteHeart(game);
     ensureStoragePanel(game);
     moveDetailsSections();
+    ensureDetailsLayoutObserver();
+    syncResponsiveDetailsLayout();
+    setTimeout(syncResponsiveDetailsLayout, 80);
     await refreshStoragePanel(game);
     try { window.lucide?.createIcons?.(); } catch (_) {}
   }
@@ -617,5 +693,11 @@
     if ((a && b && c && d) || attempts >= 240) clearInterval(timer);
   }, 50);
 
-  window.addEventListener('beforeunload', () => clearInterval(timer), { once: true });
+  window.addEventListener('resize', syncResponsiveDetailsLayout, { passive: true });
+  window.addEventListener('orientationchange', () => setTimeout(syncResponsiveDetailsLayout, 80), { passive: true });
+  window.addEventListener('beforeunload', () => {
+    clearInterval(timer);
+    detailsLayoutObserver?.disconnect();
+    detailsLayoutObserver = null;
+  }, { once: true });
 })();
