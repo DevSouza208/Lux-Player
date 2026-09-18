@@ -165,3 +165,17 @@
 // [LUX-PRIMARY-SOURCE-12]
 // Fontes secundárias e providers externos foram retirados do runtime.
 // VOD manual, IPTV principal, jogos e leitura permanecem independentes.
+
+(() => {
+  const loadRuntime = (marker, src) => {
+    if (document.querySelector(`script[data-${marker}]`)) return;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.setAttribute(`data-${marker}`, '1');
+    document.head.appendChild(script);
+  };
+
+  loadRuntime('lux-synced-catalog', 'js/synced-catalog.js?v=20260918-provider-grouping1');
+  loadRuntime('lux-provider-grouping-sync', 'js/provider-grouping-sync.js?v=20260918-provider-grouping-sync1');
+})();
