@@ -1831,8 +1831,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       transitionScreen(document.getElementById('authScreen'), false);
     }
 
-    function hideSplashScreen() {
-      transitionScreen(document.getElementById('loadingSplash'), false).then(updateNavIndicator);
+    async function hideSplashScreen() {
+      const splash = document.getElementById('loadingSplash');
+      const started = performance.now();
+      await transitionScreen(splash, false);
+      if (splash && !splash.classList.contains('hidden')) splash.classList.add('hidden');
+      updateNavIndicator();
+      window.LuxDevkit?.success('HOME', 'splash-transition', 'Splash realmente oculto', Math.round(performance.now() - started));
     }
 
     function logout() {
@@ -1933,8 +1938,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       setSection('home');
       window.LuxDevkit?.success('HOME', 'set-section', 'Seção Home ativada', Math.round(performance.now() - homeOpenStarted));
 
-      hideSplashScreen();
-      window.LuxDevkit?.success('HOME', 'splash', 'Splash liberado');
+      await hideSplashScreen();
+      window.LuxDevkit?.success('HOME', 'splash', 'Splash liberado e transição concluída');
 
       luxBootTraceDone();
 
