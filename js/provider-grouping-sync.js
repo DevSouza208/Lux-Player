@@ -1,46 +1,32 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-provider-grouping-sync4-http-mirror';
+  const VERSION = '20260918-provider-sync-https-only1';
   const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
-  const DEV_CATEGORY = 'IPTV-GLOBAL';
+  const GLOBAL_ACCOUNT = 'admin';
+  const SNAPSHOT_SRC = 'js/iptv-https-snapshot.js?v=20260918-https-snapshot-clean1';
 
-  if (window.__luxProviderGroupingSync === VERSION) return;
-  window.__luxProviderGroupingSync = VERSION;
+  if (window.__luxProviderHttpsSync === VERSION) return;
+  window.__luxProviderHttpsSync = VERSION;
 
   let busy = false;
 
-  const isAdmin = () => String(currentUser?.accountRole || currentUser?.role || '').trim().toLowerCase() === 'admin';
+  const ensureSnapshotModule = () => {
+    if (window.LuxHttpsIptv) return true;
+    if (!document.querySelector('script[data-lux-https-snapshot]')) {
+      const script = document.createElement('script');
+      script.src = SNAPSHOT_SRC;
+      script.async = false;
+      script.dataset.luxHttpsSnapshot = '1';
+      document.head.appendChild(script);
+    }
+    return false;
+  };
+
   const button = () => document.getElementById('adminCategorySyncButton');
   const status = () => document.getElementById('adminCategorySyncStatus');
 
-  function devRunning(label, message, data = null) {
-    window.LuxDevkit?.running?.(DEV_CATEGORY, label, message, data);
-    return performance.now();
-  }
-
-  function devSuccess(label, message, startedAt, data = null) {
-    window.LuxDevkit?.success?.(
-      DEV_CATEGORY,
-      label,
-      message,
-      Math.round(performance.now() - startedAt),
-      data
-    );
-  }
-
-  function devError(label, error, startedAt = null, data = null) {
-    window.LuxDevkit?.emit?.({
-      category: DEV_CATEGORY,
-      status: 'error',
-      label,
-      message: error?.message || String(error || 'Falha desconhecida'),
-      durationMs: startedAt == null ? undefined : Math.round(performance.now() - startedAt),
-      data
-    });
-  }
-
-  function setStatus(message, kind = 'normal') {
+  const setStatus = (message, kind = 'normal') => {
     const node = status();
     if (!node) return;
     node.textContent = message;
@@ -50,268 +36,123 @@
       kind === 'warn' ? 'text-amber-300' :
       'text-purple-300'
     );
-  }
+  };
 
-  function sourceCandidatesFromCore(user = currentUser) {
-    if (!user || typeof window.getMediaSourceCandidates !== 'function') return [];
-    try {
-      return window.getMediaSourceCandidates(user) || [];
-    } catch (_) {
-      return [];
+  const isAdmin = () => String(currentUser?.accountRole || currentUser?.role || '').trim().toLowerCase() === 'admin';
+
+  const waitForSnapshotModule = async () => {
+    ensureSnapshotModule();
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (window.LuxHttpsIptv?.reload) return window.LuxHttpsIptv;
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
-  }
-
-  function canonicalSourceCandidates(user = currentUser) {
-    const candidates = sourceCandidatesFromCore(user);
-    const originalUrl = String(user?.m3uUrl || '').trim();
-    const httpsUrl = String(user?.m3uHttpsUrl || '').trim();
-    const isElectron = Boolean(window.luxElectron);
-
-    const httpsMirror = candidates.filter(source =>
-      source?.kind === 'm3u-url' && httpsUrl && String(source.value || '') === httpsUrl
-    );
-    const original = candidates.filter(source =>
-      source?.kind === 'm3u-url' && originalUrl && String(source.value || '') === originalUrl
-    );
-    const localStorageSources = candidates.filter(source => source?.kind === 'm3u-storage');
-    const xtream = candidates.filter(source => source?.kind === 'xtream');
-    const remaining = candidates.filter(source =>
-      !httpsMirror.includes(source) &&
-      !original.includes(source) &&
-      !localStorageSources.includes(source) &&
-      !xtream.includes(source)
-    );
-
-    // Regra oficial:
-    // navegador/PWA consome a cópia HTTPS integral da lista HTTP;
-    // Electron pode consumir o HTTP original diretamente.
-    if (isElectron) {
-      return [...original, ...httpsMirror, ...localStorageSources, ...xtream, ...remaining];
-    }
-    return [...httpsMirror, ...localStorageSources, ...xtream, ...original, ...remaining];
-  }
-
-  async function loadCanonicalMediaSources() {
-    const candidates = canonicalSourceCandidates();
-    const failures = [];
-
-    window.__luxSyncedXtreamActive = false;
-    window.LuxDevkit?.info?.('IPTV', 'ordem-fontes', 'M3U espelhada é a fonte canônica', {
-      candidates: candidates.map(source => ({ kind: source.kind, label: source.label }))
-    });
-
-    if (!candidates.length) {
-      if (typeof window.clearMediaSourceState === 'function') window.clearMediaSourceState();
-      return false;
-    }
-
-    for (const source of candidates) {
-      const started = performance.now();
-      try {
-        window.LuxDevkit?.running?.('IPTV', `fonte-${source.kind}`, source.label || source.kind);
-
-        let result;
-        if (source.kind === 'xtream') {
-          result = await window.loadFromXtreamApi(source.server, source.user, source.pass);
-        } else {
-          result = await window.loadPlaylist(source.value);
-        }
-
-        const count = Number(result?.count ?? allMediaItems.length);
-        if (!count) throw new Error('A fonte não retornou nenhum item utilizável.');
-
-        if (typeof window.setMediaSourceState === 'function') {
-          window.setMediaSourceState(source.kind, source.label || source.kind, count);
-        }
-
-        window.__luxSyncedXtreamActive = false;
-        window.LuxDevkit?.success?.(
-          'IPTV',
-          `fonte-${source.kind}`,
-          source.kind === 'm3u-url' ? 'M3U integral carregada' : 'Fonte fallback carregada',
-          Math.round(performance.now() - started),
-          { count, groupedCount: result?.groupedCount ?? null }
-        );
-        return true;
-      } catch (error) {
-        failures.push(`${source.label || source.kind}: ${error?.message || 'falha desconhecida'}`);
-        window.LuxDevkit?.warn?.('IPTV', `fonte-${source.kind}`, error?.message || 'Fonte indisponível');
-        console.warn('[Lux Play] Fonte indisponível:', source.label || source.kind, error);
-      }
-    }
-
-    if (typeof window.clearMediaSourceState === 'function') window.clearMediaSourceState();
-    console.warn('[Lux Play] Nenhuma fonte principal carregada.', failures);
-    return false;
-  }
-
-  function installCanonicalSourcePriority() {
-    if (typeof window.getMediaSourceCandidates !== 'function') return false;
-    if (typeof window.loadPlaylist !== 'function' || typeof window.loadFromXtreamApi !== 'function') return false;
-
-    if (window.loadMediaSourcesInPriority?.__luxHttpMirrorPriority === VERSION) return true;
-
-    const patched = async function () {
-      return loadCanonicalMediaSources();
-    };
-    patched.__luxHttpMirrorPriority = VERSION;
-    window.loadMediaSourcesInPriority = patched;
-
-    if (typeof window.resolveUserCredentials === 'function') {
-      const resolvePatched = function (user = currentUser) {
-        const source = canonicalSourceCandidates(user)[0];
-        if (!source) return { isXc: false, url: '' };
-        if (source.kind === 'xtream') {
-          return { isXc: true, server: source.server, user: source.user, pass: source.pass };
-        }
-        return { isXc: false, url: source.value };
-      };
-      resolvePatched.__luxHttpMirrorPriority = VERSION;
-      window.resolveUserCredentials = resolvePatched;
-    }
-
-    window.__luxSyncedXtreamActive = false;
-    return true;
-  }
-
-  async function syncAdminAccount() {
-    const response = await fetch(`${WORKER_BASE}/sync-account`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: String(currentUser?.user || '').trim(),
-        password: String(currentUser?.pass || ''),
-        targetUsername: String(currentUser?.user || '').trim()
-      })
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data?.ok || data?.result?.status === 'error') {
-      throw new Error(data?.error || data?.result?.message || `Worker respondeu HTTP ${response.status}`);
-    }
-    return data.result || {};
-  }
-
-  async function publishAdminGrouping() {
-    const sender = typeof window.adminSendCategoriesToUsers === 'function'
-      ? window.adminSendCategoriesToUsers
-      : (typeof adminSendCategoriesToUsers === 'function' ? adminSendCategoriesToUsers : null);
-
-    if (!sender) throw new Error('O publicador de categorias do admin ainda não está disponível.');
-    await sender();
-  }
+    throw new Error('O leitor HTTPS do Lux não ficou disponível.');
+  };
 
   window.adminSyncProviderCatalogForAll = async function () {
     if (busy) return;
     if (!isAdmin()) {
-      setStatus('Apenas o administrador pode atualizar o agrupamento oficial.', 'error');
+      setStatus('Apenas o administrador pode atualizar a IPTV HTTPS.', 'error');
       return;
     }
 
     const username = String(currentUser?.user || '').trim();
-    const password = String(currentUser?.pass || '');
-    if (!username || !password) {
-      setStatus('Faça login novamente antes de atualizar o agrupamento.', 'error');
+    const credential = String(currentUser?.pass || '');
+    if (!username || !credential) {
+      setStatus('Faça login novamente antes de atualizar.', 'error');
       return;
     }
 
     const action = button();
-    const totalStarted = devRunning('publicar-agrupamento', 'Publicação global iniciada', { admin: username });
     busy = true;
     if (action) {
       action.disabled = true;
-      action.textContent = 'Atualizando catálogo do admin...';
+      action.textContent = 'Atualizando IPTV HTTPS...';
     }
 
+    const started = performance.now();
+    window.LuxDevkit?.running?.('IPTV-HTTPS', 'sync-admin', 'Cloudflare baixando lista + dados oficiais...', {
+      target: GLOBAL_ACCOUNT
+    });
+
     try {
-      setStatus('Espelhando a lista HTTP completa do fornecedor para HTTPS...');
-      const syncStarted = devRunning('sincronizar-admin', 'Espelhando lista HTTP integral...', { admin: username });
-      const result = await syncAdminAccount();
-      devSuccess('sincronizar-admin', 'Lista HTTP integral espelhada no Cloudflare', syncStarted, {
-        status: result?.status || 'success',
-        playlistBytes: result?.playlistBytes || null
+      setStatus('Cloudflare está baixando novamente a lista e os dados do fornecedor...');
+      const response = await fetch(`${WORKER_BASE}/sync-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, credential, targetUsername: GLOBAL_ACCOUNT })
       });
 
-      if (action) action.textContent = 'Aplicando lista HTTPS...';
-      setStatus('Lista HTTPS atualizada. Recarregando exatamente o conteúdo espelhado...');
-
-      const reloadStarted = devRunning('recarregar-catalogo', 'Carregando M3U HTTPS integral...');
-      installCanonicalSourcePriority();
-      const loaded = await loadCanonicalMediaSources();
-      if (!loaded) throw new Error('A lista foi espelhada, mas o Lux não conseguiu carregar a M3U HTTPS.');
-
-      if (!Array.isArray(allMediaItems) || !allMediaItems.length) {
-        throw new Error('A lista HTTPS foi carregada, mas não há itens utilizáveis no catálogo.');
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.ok || payload?.result?.status === 'error') {
+        throw new Error(payload?.error || payload?.result?.message || `Worker respondeu HTTP ${response.status}`);
       }
-      devSuccess('recarregar-catalogo', 'M3U HTTPS integral aplicada no player', reloadStarted, {
-        items: allMediaItems.length
-      });
 
-      if (action) action.textContent = 'Publicando para todos...';
-      setStatus('Publicando o agrupamento atual como fallback para todas as contas...');
+      const result = payload.result || {};
+      setStatus('Cloudflare terminou. Aplicando o snapshot HTTPS no Lux...');
+      const snapshot = await waitForSnapshotModule();
+      await snapshot.reload();
 
-      const publishStarted = devRunning('enviar-agrupamento', 'Publicando mapa de categorias como fallback...');
-      await publishAdminGrouping();
-      const categoryCount = Object.keys(currentUser?.categoryMap || {}).length;
-      devSuccess('enviar-agrupamento', 'Agrupamento fallback publicado', publishStarted, {
-        categories: categoryCount,
-        items: allMediaItems.length
-      });
+      if (typeof window.setSection === 'function') window.setSection(currentSection || 'home');
 
-      const partial = result?.status === 'partial';
+      const partial = result.status === 'partial';
       setStatus(
         partial
-          ? 'Lista HTTPS aplicada e agrupamento publicado. A sincronização do fornecedor terminou parcialmente.'
-          : 'Lista HTTP completa espelhada em HTTPS e aplicada. Os usuários usarão essa rota no próximo carregamento.',
+          ? 'A lista foi atualizada, mas parte dos dados do fornecedor falhou. O último snapshot completo continua protegido.'
+          : 'IPTV HTTPS atualizada e aplicada. Todos usam o snapshot global do admin.',
         partial ? 'warn' : 'ok'
       );
-      devSuccess('publicar-agrupamento', 'Publicação global concluída', totalStarted, {
-        status: partial ? 'partial' : 'success',
-        categories: categoryCount,
-        items: allMediaItems.length
-      });
+
+      window.LuxDevkit?.success?.(
+        'IPTV-HTTPS',
+        'sync-admin',
+        partial ? 'Sincronização parcial concluída' : 'Snapshot global atualizado',
+        Math.round(performance.now() - started),
+        {
+          status: result.status || 'success',
+          playlistBytes: result.playlistBytes || null,
+          snapshot: window.__luxHttpsSnapshotStats || null
+        }
+      );
     } catch (error) {
-      console.warn('[Lux Provider Sync] Falha ao publicar agrupamento global do admin:', error);
-      setStatus(error?.message || 'Não foi possível atualizar a lista espelhada.', 'error');
-      devError('publicar-agrupamento', error, totalStarted);
+      setStatus(error?.message || 'Falha ao atualizar a IPTV HTTPS.', 'error');
+      window.LuxDevkit?.emit?.({
+        category: 'IPTV-HTTPS',
+        status: 'error',
+        label: 'sync-admin',
+        message: error?.message || 'Falha desconhecida',
+        durationMs: Math.round(performance.now() - started)
+      });
     } finally {
       busy = false;
       if (action) {
         action.disabled = false;
-        action.textContent = 'Atualizar lista HTTPS para todos';
+        action.textContent = 'Atualizar IPTV HTTPS';
       }
     }
   };
 
-  function installAdminButton() {
+  const installButton = () => {
     const action = button();
     if (!action) return false;
-
     action.removeAttribute('onclick');
     action.onclick = event => {
       event?.preventDefault?.();
       window.adminSyncProviderCatalogForAll?.();
     };
-    action.textContent = 'Atualizar lista HTTPS para todos';
-    action.title = 'Espelha a lista HTTP integral no Cloudflare e mantém o agrupamento original da M3U';
+    action.textContent = 'Atualizar IPTV HTTPS';
+    action.title = 'Força o Cloudflare a baixar novamente a lista e os dados oficiais do fornecedor';
     return true;
-  }
+  };
 
-  function installAll() {
-    const sourceOk = installCanonicalSourcePriority();
-    const buttonOk = installAdminButton();
-    return sourceOk && buttonOk;
-  }
+  ensureSnapshotModule();
+  installButton();
 
-  installAll();
-
-  // O synced-catalog antigo também tenta instalar um wrapper. Reafirmamos a
-  // prioridade da M3U por alguns segundos durante o boot para evitar corrida de carga.
   let attempts = 0;
   const timer = setInterval(() => {
     attempts += 1;
-    const done = installAll();
-    if (done && attempts >= 30) clearInterval(timer);
-    if (attempts >= 120) clearInterval(timer);
+    ensureSnapshotModule();
+    if (installButton() && window.LuxHttpsIptv && attempts >= 20) clearInterval(timer);
+    if (attempts >= 160) clearInterval(timer);
   }, 100);
 })();
