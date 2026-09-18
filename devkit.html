@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lux Player — DevKit</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Consolas, "Cascadia Code", "Courier New", monospace;
+      background: #050505;
+      color: #d7d7d7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #050505;
+      color: #d7d7d7;
+      overflow: hidden;
+    }
+    header {
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      border-bottom: 1px solid #242424;
+      background: #090909;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .title { font-weight: 800; letter-spacing: .08em; color: #fff; white-space: nowrap; }
+    .version { color: #777; font-size: 12px; }
+    .spacer { flex: 1; }
+    .connection { font-size: 12px; color: #888; white-space: nowrap; }
+    .connection.live { color: #74e394; }
+    button {
+      background: #111;
+      color: #d7d7d7;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover { border-color: #666; background: #181818; }
+    .summary {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 0 16px;
+      border-bottom: 1px solid #181818;
+      background: #070707;
+      font-size: 11px;
+      color: #777;
+    }
+    .summary strong { color: #aaa; font-weight: 600; }
+    #terminal {
+      height: calc(100vh - 92px);
+      overflow-y: auto;
+      padding: 10px 14px 40px;
+      scroll-behavior: smooth;
+    }
+    .line {
+      display: grid;
+      grid-template-columns: 76px 88px 20px minmax(130px, 230px) 1fr auto;
+      gap: 10px;
+      align-items: baseline;
+      min-height: 24px;
+      padding: 3px 0;
+      border-bottom: 1px solid #0c0c0c;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .time, .category, .duration { color: #666; }
+    .category { color: #8f8f8f; }
+    .dot { font-size: 15px; line-height: 1; }
+    .label { color: #cfcfcf; font-weight: 700; word-break: break-word; }
+    .message { color: #a6a6a6; white-space: pre-wrap; word-break: break-word; }
+    .duration { text-align: right; white-space: nowrap; }
+    .status-info .dot { color: #8b8b8b; }
+    .status-running .dot { color: #d6d6d6; }
+    .status-success .dot, .status-success .label { color: #65dc86; }
+    .status-warning .dot, .status-warning .label { color: #f0c75e; }
+    .status-error .dot, .status-error .label { color: #ff6262; }
+    .details {
+      grid-column: 4 / -1;
+      margin: 2px 0 6px;
+      color: #6f6f6f;
+      font-size: 11px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .empty {
+      color: #555;
+      padding: 28px 4px;
+      font-size: 13px;
+    }
+    @media (max-width: 860px) {
+      header { flex-wrap: wrap; height: auto; padding: 10px; }
+      .spacer { display: none; }
+      .summary { overflow-x: auto; }
+      #terminal { height: calc(100vh - 126px); }
+      .line {
+        grid-template-columns: 68px 74px 16px 1fr;
+        gap: 7px;
+        font-size: 12px;
+      }
+      .message { grid-column: 4; }
+      .duration { grid-column: 4; text-align: left; }
+      .details { grid-column: 4; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">LUX PLAYER // DEVKIT</div>
+    <div class="version">1.3.2</div>
+    <div class="spacer"></div>
+    <div id="connection" class="connection">aguardando Lux Player…</div>
+    <button id="pauseBtn" type="button">Pausar scroll</button>
+    <button id="copyBtn" type="button">Copiar log</button>
+    <button id="clearBtn" type="button">Limpar</button>
+  </header>
+
+  <div class="summary">
+    <span>Total <strong id="totalCount">0</strong></span>
+    <span>OK <strong id="okCount">0</strong></span>
+    <span>Avisos <strong id="warnCount">0</strong></span>
+    <span>Paradas/erros <strong id="errorCount">0</strong></span>
+    <span>Em andamento <strong id="runningCount">0</strong></span>
+  </div>
+
+  <main id="terminal" aria-live="polite">
+    <div class="empty" id="emptyState">Esperando eventos do Lux Player…</div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const CHANNEL_NAME = 'lux-player-devkit-v1';
+      const STORAGE_KEY = 'lux_devkit_events_v1';
+      const SIGNAL_KEY = 'lux_devkit_signal_v1';
+      const MAX_EVENTS = 500;
+
+      const terminal = document.getElementById('terminal');
+      const connection = document.getElementById('connection');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const copyBtn = document.getElementById('copyBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      let paused = false;
+      let connected = false;
+      let events = [];
+      let channel = null;
+      const ids = new Set();
+
+      const counters = {
+        total: document.getElementById('totalCount'),
+        success: document.getElementById('okCount'),
+        warning: document.getElementById('warnCount'),
+        error: document.getElementById('errorCount'),
+        running: document.getElementById('runningCount')
+      };
+
+      function markConnected(source = 'canal') {
+        connected = true;
+        connection.textContent = 'ao vivo · ' + source;
+        connection.classList.add('live');
+      }
+
+      function safeParse(raw, fallback) {
+        try { return JSON.parse(raw); } catch (_) { return fallback; }
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[char]));
+      }
+
+      function formatDuration(ms) {
+        if (ms == null || !Number.isFinite(Number(ms))) return '';
+        const value = Number(ms);
+        return value >= 1000 ? (value / 1000).toFixed(value >= 10000 ? 1 : 2) + ' s' : Math.round(value) + ' ms';
+      }
+
+      function statusDot(status) {
+        return status === 'success' ? '●'
+          : status === 'warning' ? '▲'
+          : status === 'error' ? '■'
+          : status === 'running' ? '●'
+          : '·';
+      }
+
+      function updateCounters() {
+        counters.total.textContent = events.length;
+        counters.success.textContent = events.filter(item => item.status === 'success').length;
+        counters.warning.textContent = events.filter(item => item.status === 'warning').length;
+        counters.error.textContent = events.filter(item => item.status === 'error').length;
+        counters.running.textContent = events.filter(item => item.status === 'running').length;
+      }
+
+      function lineHtml(event) {
+        const details = event.data == null ? '' :
+          '<div class="details">' + escapeHtml(JSON.stringify(event.data, null, 2)) + '</div>';
+        return '<div class="line status-' + escapeHtml(event.status || 'info') + '" data-id="' + escapeHtml(event.id) + '">' +
+          '<span class="time">' + escapeHtml(event.time || '') + '</span>' +
+          '<span class="category">' + escapeHtml(event.category || 'APP') + '</span>' +
+          '<span class="dot">' + statusDot(event.status) + '</span>' +
+          '<span class="label">' + escapeHtml(event.label || 'evento') + '</span>' +
+          '<span class="message">' + escapeHtml(event.message || '') + '</span>' +
+          '<span class="duration">' + escapeHtml(formatDuration(event.durationMs)) + '</span>' +
+          details +
+        '</div>';
+      }
+
+      function renderAll() {
+        terminal.innerHTML = events.length
+          ? events.map(lineHtml).join('')
+          : '<div class="empty" id="emptyState">Esperando eventos do Lux Player…</div>';
+        updateCounters();
+        if (!paused) terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      function addEvent(event) {
+        if (!event || !event.id || ids.has(event.id)) return;
+        ids.add(event.id);
+        events.push(event);
+        if (events.length > MAX_EVENTS) {
+          const removed = events.splice(0, events.length - MAX_EVENTS);
+          removed.forEach(item => ids.delete(item.id));
+          renderAll();
+          return;
+        }
+        document.getElementById('emptyState')?.remove();
+        terminal.insertAdjacentHTML('beforeend', lineHtml(event));
+        updateCounters();
+        if (!paused) terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      function mergeSnapshot(list) {
+        if (!Array.isArray(list)) return;
+        list.slice(-MAX_EVENTS).forEach(addEvent);
+      }
+
+      function readStorage() {
+        const stored = safeParse(localStorage.getItem(STORAGE_KEY) || '[]', []);
+        mergeSnapshot(stored);
+      }
+
+      function clearLocal() {
+        events = [];
+        ids.clear();
+        renderAll();
+      }
+
+      function requestClear() {
+        clearLocal();
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(SIGNAL_KEY);
+        } catch (_) {}
+        try { channel?.postMessage({ type: 'clear' }); } catch (_) {}
+        try { window.opener?.postMessage({ type: 'LUX_DEVKIT_CLEAR' }, '*'); } catch (_) {}
+      }
+
+      function copyLog() {
+        const text = events.map(event => {
+          const duration = formatDuration(event.durationMs);
+          const details = event.data == null ? '' : ' ' + JSON.stringify(event.data);
+          return [event.time, event.category, event.status.toUpperCase(), event.label, event.message, duration]
+            .filter(Boolean).join(' | ') + details;
+        }).join('\n');
+
+        navigator.clipboard?.writeText(text).then(() => {
+          copyBtn.textContent = 'Copiado!';
+          setTimeout(() => { copyBtn.textContent = 'Copiar log'; }, 1200);
+        }).catch(() => {
+          const area = document.createElement('textarea');
+          area.value = text;
+          document.body.appendChild(area);
+          area.select();
+          document.execCommand('copy');
+          area.remove();
+          copyBtn.textContent = 'Copiado!';
+          setTimeout(() => { copyBtn.textContent = 'Copiar log'; }, 1200);
+        });
+      }
+
+      pauseBtn.addEventListener('click', () => {
+        paused = !paused;
+        pauseBtn.textContent = paused ? 'Retomar scroll' : 'Pausar scroll';
+        if (!paused) terminal.scrollTop = terminal.scrollHeight;
+      });
+      copyBtn.addEventListener('click', copyLog);
+      clearBtn.addEventListener('click', requestClear);
+
+      window.addEventListener('storage', event => {
+        if (event.key === SIGNAL_KEY && event.newValue) {
+          const item = safeParse(event.newValue, null);
+          if (item) {
+            markConnected('storage');
+            addEvent(item);
+          }
+        } else if (event.key === STORAGE_KEY && event.newValue) {
+          markConnected('storage');
+          mergeSnapshot(safeParse(event.newValue, []));
+        }
+      });
+
+      window.addEventListener('message', event => {
+        const data = event.data || {};
+        if (data.type === 'LUX_DEVKIT_EVENT') {
+          markConnected('janela');
+          addEvent(data.event);
+        } else if (data.type === 'LUX_DEVKIT_SNAPSHOT') {
+          markConnected('janela');
+          mergeSnapshot(data.events);
+        } else if (data.type === 'LUX_DEVKIT_CLEAR') {
+          clearLocal();
+        }
+      });
+
+      try {
+        if ('BroadcastChannel' in window) {
+          channel = new BroadcastChannel(CHANNEL_NAME);
+          channel.onmessage = event => {
+            const data = event.data || {};
+            if (data.type === 'event') {
+              markConnected('BroadcastChannel');
+              addEvent(data.event);
+            } else if (data.type === 'snapshot') {
+              markConnected('BroadcastChannel');
+              mergeSnapshot(data.events);
+            } else if (data.type === 'clear') {
+              clearLocal();
+            }
+          };
+          channel.postMessage({ type: 'request-snapshot' });
+        }
+      } catch (_) {
+        channel = null;
+      }
+
+      readStorage();
+
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'LUX_DEVKIT_READY' }, '*');
+        }
+      } catch (_) {}
+
+      setInterval(() => {
+        if (!connected) readStorage();
+      }, 1000);
+    })();
+  </script>
+</body>
+</html>

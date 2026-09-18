@@ -1740,10 +1740,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       luxBootTrace.context = context;
       luxBootTrace.stage = 'start';
       console.info(`[Lux Boot 1.3] INÍCIO — ${context}`);
+      window.LuxDevkit?.running('BOOT', context, 'Início do diagnóstico de abertura');
       luxBootTracePersist();
     }
 
-    function luxBootTraceStep(stage, message = '') {
+    function luxBootTraceStep(stage, message = '', explicitStatus = '', durationMs = null) {
       if (!luxBootTrace.active) luxBootTraceStart('boot');
       const now = performance.now();
       const total = Math.round(now - luxBootTrace.startedAt);
@@ -1752,6 +1753,16 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       luxBootTrace.stage = stage;
 
       console.info(`[Lux Boot 1.3] +${total}ms (+${delta}ms) — ${stage}`);
+      const baseStage = stage.replace(/:(start|done)$/,'');
+      const status = explicitStatus || (stage.endsWith(':done') ? 'success' : stage.endsWith(':start') ? 'running' : 'info');
+      window.LuxDevkit?.emit({
+        category: 'BOOT',
+        status,
+        label: baseStage,
+        message: message || (status === 'success' ? 'Concluído' : ''),
+        durationMs,
+        data: { stage, totalMs: total, deltaMs: delta }
+      });
       if (message) {
         const status = document.getElementById('splashStatusMessage');
         if (status) status.textContent = `[1.3] ${message}`;
@@ -1762,22 +1773,36 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       luxBootTrace.watchdog = setTimeout(() => {
         const elapsed = Math.round(performance.now() - luxBootTrace.lastAt);
         console.warn(`[Lux Boot 1.3] PARADO HÁ ${elapsed}ms EM: ${luxBootTrace.stage}`);
+        window.LuxDevkit?.error('BOOT', luxBootTrace.stage.replace(/:(start|done)$/,''), `PARADO HÁ ${Math.round(elapsed / 1000)}s`, {
+          stage: luxBootTrace.stage,
+          stalledMs: elapsed
+        });
         const status = document.getElementById('splashStatusMessage');
         if (status) status.textContent = `[1.3] Ainda carregando: ${luxBootTrace.stage} (${Math.round(elapsed / 1000)}s)`;
         luxBootTracePersist({ stalledMs: elapsed });
       }, 10000);
     }
 
-    async function luxBootTraceRun(stage, message, job) {
+    async function luxBootTraceRun(stage, message, job, options = {}) {
       luxBootTraceStep(stage + ':start', message);
       const started = performance.now();
       try {
         const result = await job();
-        console.info(`[Lux Boot 1.3] ${stage} concluiu em ${Math.round(performance.now() - started)}ms`);
-        luxBootTraceStep(stage + ':done');
+        const duration = Math.round(performance.now() - started);
+        console.info(`[Lux Boot 1.3] ${stage} concluiu em ${duration}ms`);
+        luxBootTraceStep(stage + ':done', '', 'success', duration);
         return result;
       } catch (error) {
-        console.error(`[Lux Boot 1.3] ${stage} falhou após ${Math.round(performance.now() - started)}ms`, error);
+        const duration = Math.round(performance.now() - started);
+        console.error(`[Lux Boot 1.3] ${stage} falhou após ${duration}ms`, error);
+        window.LuxDevkit?.emit({
+          category: 'BOOT',
+          status: options.nonBlocking ? 'warning' : 'error',
+          label: stage,
+          message: error?.message || 'Falha desconhecida',
+          durationMs: duration,
+          data: { nonBlocking: Boolean(options.nonBlocking) }
+        });
         luxBootTracePersist({ errorStage: stage, error: String(error?.message || error) });
         throw error;
       }
@@ -1790,6 +1815,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       luxBootTrace.stage = 'done';
       luxBootTrace.active = false;
       console.info(`[Lux Boot 1.3] FIM — ${total}ms`);
+      window.LuxDevkit?.success('BOOT', 'boot-completo', 'Home liberada', total);
       luxBootTracePersist({ totalMs: total, done: true });
     }
 
@@ -1885,7 +1911,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         await luxBootTraceRun(
           'vod-compartilhado',
           'Carregando vídeos adicionados manualmente...',
-          () => loadSharedVodCatalog()
+          () => loadSharedVodCatalog(),
+          { nonBlocking: true }
         );
       } catch (error) {
         console.warn('[Lux Boot 1.3] VOD compartilhado falhou, boot continua.', error);
