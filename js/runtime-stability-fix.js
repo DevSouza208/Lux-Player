@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260917-stability-trace14';
+  window.__luxRuntimeStabilityFixInstalled = '20260917-stability-perf15';
 
   const devRepairEvent = (status, label, message = '', durationMs = null, data = null) => {
     window.LuxDevkit?.emit({
@@ -89,6 +89,15 @@
   };
 
   const loadRawPlaylistItems = async () => {
+    const reused = window.__luxSyncedRawPlaylistItems;
+    if (Array.isArray(reused) && reused.length) {
+      window.__luxSyncedRawPlaylistItems = null;
+      devRepairEvent('success', 'playlist-reuse', 'M3U já parseada reaproveitada', 0, {
+        rawItems: reused.length
+      });
+      return reused;
+    }
+
     const manifest = window.__luxSyncedXtreamManifest;
     const playlistUrl = String(manifest?.playlist || '').trim();
     if (!playlistUrl || typeof window.parseM3U !== 'function') return [];

@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260917-catalog-trace-14';
+  const BRIDGE_VERSION = '20260917-catalog-perf-15';
 
   const devCatalogRun = async (label, job, meta = null) => {
     const started = performance.now();
@@ -104,6 +104,21 @@
     const used = new Set();
     const byLogo = mapBy(groupedSeries, item => normalizeAssetUrl(item.logo));
     const byName = mapBy(groupedSeries, item => normalizeText(item.name));
+    const byToken = new Map();
+    const metadata = new Map();
+
+    groupedSeries.forEach((item, index) => {
+      const normalized = normalizeText(item?.name);
+      const tokens = [...new Set(normalized.split(' ').filter(token => token.length > 1))];
+      const record = { item, index, tokens: new Set(tokens) };
+      metadata.set(item, record);
+
+      tokens.forEach(token => {
+        const list = byToken.get(token) || [];
+        list.push(record);
+        byToken.set(token, list);
+      });
+    });
 
     return official => {
       const coverKey = normalizeAssetUrl(official?.cover || official?.cover_big || official?.backdrop_path?.[0]);
@@ -124,16 +139,34 @@
         }
       }
 
+      const officialTokens = [...new Set(nameKey.split(' ').filter(token => token.length > 1))];
+      if (!officialTokens.length) return null;
+
+      const officialTokenSet = new Set(officialTokens);
+      const candidateRecords = new Set();
+      officialTokens.forEach(token => {
+        (byToken.get(token) || []).forEach(record => {
+          if (!used.has(record.item)) candidateRecords.add(record);
+        });
+      });
+
       let best = null;
       let bestScore = 0;
-      for (const candidate of groupedSeries) {
-        if (used.has(candidate)) continue;
-        const score = tokenScore(official?.name, candidate?.name);
-        if (score > bestScore) {
+      let bestIndex = Number.POSITIVE_INFINITY;
+
+      candidateRecords.forEach(record => {
+        let common = 0;
+        officialTokenSet.forEach(token => {
+          if (record.tokens.has(token)) common += 1;
+        });
+        const score = common / Math.max(officialTokenSet.size, record.tokens.size || 1);
+
+        if (score > bestScore || (score === bestScore && record.index < bestIndex)) {
           bestScore = score;
-          best = candidate;
+          best = record.item;
+          bestIndex = record.index;
         }
-      }
+      });
 
       if (best && bestScore >= 0.72) {
         used.add(best);
@@ -144,8 +177,22 @@
   };
 
   const buildCatalogItems = ({ playlistText, liveCategories, movieCategories, seriesCategories, live, movies, series }) => {
+    const parseStarted = performance.now();
     const rawM3uItems = parseM3U(playlistText);
+    window.LuxDevkit?.success('CATALOG-BUILD', 'parse-m3u', 'M3U parseada', Math.round(performance.now() - parseStarted), {
+      rawItems: rawM3uItems.length,
+      bytes: playlistText.length
+    });
+
+    const groupingStarted = performance.now();
     const groupedM3u = groupM3uSeriesEpisodes(rawM3uItems);
+    window.LuxDevkit?.success('CATALOG-BUILD', 'agrupar-series-m3u', 'Agrupamento concluído', Math.round(performance.now() - groupingStarted), {
+      rawItems: rawM3uItems.length,
+      groupedItems: groupedM3u.length
+    });
+
+    // Reaproveitado pelo Playback Repair e descartado logo depois.
+    window.__luxSyncedRawPlaylistItems = rawM3uItems;
 
     const rawLiveById = new Map();
     const rawMoviesById = new Map();
@@ -157,7 +204,11 @@
     });
 
     const groupedSeries = groupedM3u.filter(item => item?.type === 'series' && item?.m3uEpisodes);
+    const matcherStarted = performance.now();
     const matchSeries = buildSeriesMatcher(groupedSeries);
+    window.LuxDevkit?.success('CATALOG-BUILD', 'indice-series', 'Índice de séries pronto', Math.round(performance.now() - matcherStarted), {
+      groupedSeries: groupedSeries.length
+    });
 
     const liveCatMap = Object.fromEntries((liveCategories || []).map(item => [String(item.category_id), item.category_name]));
     const movieCatMap = Object.fromEntries((movieCategories || []).map(item => [String(item.category_id), item.category_name]));
@@ -168,6 +219,7 @@
     let matchedMovies = 0;
     let matchedSeries = 0;
 
+    const liveBuildStarted = performance.now();
     (live || []).forEach(item => {
       const streamId = String(item.stream_id ?? '');
       const m3u = rawLiveById.get(streamId);
@@ -187,6 +239,11 @@
       });
     });
 
+    window.LuxDevkit?.success('CATALOG-BUILD', 'montar-tv', 'Canais montados', Math.round(performance.now() - liveBuildStarted), {
+      items: (live || []).length
+    });
+
+    const movieBuildStarted = performance.now();
     (movies || []).forEach(item => {
       const streamId = String(item.stream_id ?? '');
       const m3u = rawMoviesById.get(streamId);
@@ -206,6 +263,11 @@
       });
     });
 
+    window.LuxDevkit?.success('CATALOG-BUILD', 'montar-filmes', 'Filmes montados', Math.round(performance.now() - movieBuildStarted), {
+      items: (movies || []).length
+    });
+
+    const seriesBuildStarted = performance.now();
     (series || []).forEach(item => {
       const m3uSeries = matchSeries(item);
       if (m3uSeries) matchedSeries += 1;
@@ -223,6 +285,11 @@
         m3uSeriesName: m3uSeries?.name || '',
         isAdult: isAdultContent(groupName, item.name || m3uSeries?.name) || item.adult === true || String(item.is_adult || '') === '1'
       });
+    });
+
+    window.LuxDevkit?.success('CATALOG-BUILD', 'montar-series', 'Séries montadas', Math.round(performance.now() - seriesBuildStarted), {
+      items: (series || []).length,
+      matchedSeries
     });
 
     return {
@@ -295,6 +362,13 @@
     window.__luxSyncedXtreamActive = true;
     window.__luxSyncedXtreamManifest = manifest;
     window.__luxSyncedXtreamStats = built.stats;
+
+    const rawReuseRef = window.__luxSyncedRawPlaylistItems;
+    setTimeout(() => {
+      if (window.__luxSyncedRawPlaylistItems === rawReuseRef) {
+        window.__luxSyncedRawPlaylistItems = null;
+      }
+    }, 60000);
 
     console.info('[Lux Play] Catálogo Xtream HTTPS carregado.', built.stats);
     return { count: built.items.length, stats: built.stats };

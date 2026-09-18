@@ -193,7 +193,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260917-catalog-trace14']);
+  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260917-catalog-perf15']);
   loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
   loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags4']);
   loadModule(['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5']);
