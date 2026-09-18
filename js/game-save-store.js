@@ -197,3 +197,19 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   profileEntryFastbootScript.dataset.luxProfileEntryFastboot = '1';
   document.head.appendChild(profileEntryFastbootScript);
 }
+
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-synced-catalog]')) {
+  const syncedCatalogScript = document.createElement('script');
+  syncedCatalogScript.src = 'js/synced-catalog.js?v=20260918-provider-grouping1';
+  syncedCatalogScript.async = false;
+  syncedCatalogScript.dataset.luxSyncedCatalog = '1';
+  document.head.appendChild(syncedCatalogScript);
+}
+
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-provider-grouping-sync]')) {
+  const providerGroupingSyncScript = document.createElement('script');
+  providerGroupingSyncScript.src = 'js/provider-grouping-sync.js?v=20260918-provider-grouping-sync1';
+  providerGroupingSyncScript.async = false;
+  providerGroupingSyncScript.dataset.luxProviderGroupingSync = '1';
+  document.head.appendChild(providerGroupingSyncScript);
+}
