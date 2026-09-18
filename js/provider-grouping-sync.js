@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-provider-grouping-sync1';
+  const VERSION = '20260918-provider-grouping-sync2-admin-global';
   const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
 
   if (window.__luxProviderGroupingSync === VERSION) return;
@@ -25,14 +25,14 @@
     );
   }
 
-  async function syncAccount(targetUsername) {
+  async function syncAdminAccount() {
     const response = await fetch(`${WORKER_BASE}/sync-account`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: String(currentUser?.user || '').trim(),
         password: String(currentUser?.pass || ''),
-        targetUsername
+        targetUsername: String(currentUser?.user || '').trim()
       })
     });
 
@@ -43,17 +43,26 @@
     return data.result || {};
   }
 
+  async function publishAdminGrouping() {
+    const sender = typeof window.adminSendCategoriesToUsers === 'function'
+      ? window.adminSendCategoriesToUsers
+      : (typeof adminSendCategoriesToUsers === 'function' ? adminSendCategoriesToUsers : null);
+
+    if (!sender) throw new Error('O publicador de categorias do admin ainda não está disponível.');
+    await sender();
+  }
+
   window.adminSyncProviderCatalogForAll = async function () {
     if (busy) return;
     if (!isAdmin()) {
-      setStatus('Apenas o administrador pode atualizar o catálogo do fornecedor.', 'error');
+      setStatus('Apenas o administrador pode atualizar o agrupamento oficial.', 'error');
       return;
     }
 
     const username = String(currentUser?.user || '').trim();
     const password = String(currentUser?.pass || '');
     if (!username || !password) {
-      setStatus('Faça login novamente antes de atualizar o catálogo.', 'error');
+      setStatus('Faça login novamente antes de atualizar o agrupamento.', 'error');
       return;
     }
 
@@ -61,63 +70,46 @@
     busy = true;
     if (action) {
       action.disabled = true;
-      action.textContent = 'Preparando atualização...';
+      action.textContent = 'Atualizando catálogo do admin...';
     }
 
     try {
-      const { data, error } = await supabaseClient
-        .from('usuarios')
-        .select('usuario,lista_m3u')
-        .order('usuario', { ascending: true });
-      if (error) throw error;
+      setStatus('Baixando o catálogo oficial do fornecedor para o admin...');
+      const result = await syncAdminAccount();
 
-      const users = (Array.isArray(data) ? data : []).filter(user =>
-        user?.usuario && /^https?:\/\//i.test(String(user.lista_m3u || '').trim())
-      );
-      if (!users.length) throw new Error('Nenhuma conta com lista HTTP/HTTPS foi encontrada.');
+      if (action) action.textContent = 'Aplicando agrupamento...';
+      setStatus('Catálogo do admin atualizado. Aplicando o agrupamento oficial...');
 
-      let success = 0;
-      let partial = 0;
-      const failures = [];
-
-      for (let index = 0; index < users.length; index += 1) {
-        const target = String(users[index].usuario || '').trim();
-        if (action) action.textContent = `Atualizando ${index + 1}/${users.length}...`;
-        setStatus(`Atualizando lista + agrupamento de ${target} (${index + 1}/${users.length})...`);
-
-        try {
-          const result = await syncAccount(target);
-          if (result.status === 'partial') partial += 1;
-          else success += 1;
-        } catch (syncError) {
-          failures.push({ user: target, message: syncError?.message || 'Falha desconhecida' });
-          console.warn('[Lux Provider Sync] Falha em', target, syncError);
-        }
-      }
-
-      // A conta que está aberta pode aplicar o snapshot novo sem exigir logout.
       if (typeof window.LuxSyncedCatalog?.reload === 'function') {
-        try { await window.LuxSyncedCatalog.reload(); }
-        catch (reloadError) { console.warn('[Lux Provider Sync] Catálogo sincronizado, mas a recarga local falhou:', reloadError); }
+        await window.LuxSyncedCatalog.reload();
+      } else if (typeof window.loadMediaSourcesInPriority === 'function') {
+        const loaded = await window.loadMediaSourcesInPriority();
+        if (!loaded) throw new Error('O catálogo do admin foi atualizado, mas não pôde ser recarregado.');
       }
 
-      if (failures.length) {
-        const first = failures[0];
-        setStatus(
-          `Atualização concluída: ${success} ok, ${partial} parcial, ${failures.length} com erro. Primeiro erro: ${first.user} — ${first.message}`,
-          success || partial ? 'warn' : 'error'
-        );
-      } else {
-        setStatus(`Catálogo atualizado para todos: ${success} ok${partial ? `, ${partial} parcial` : ''}.`, partial ? 'warn' : 'ok');
+      if (!Array.isArray(allMediaItems) || !allMediaItems.length) {
+        throw new Error('O catálogo do admin foi sincronizado, mas não há itens carregados para gerar o agrupamento.');
       }
+
+      if (action) action.textContent = 'Publicando para todos...';
+      setStatus('Publicando o agrupamento do admin para todas as contas...');
+      await publishAdminGrouping();
+
+      const partial = result?.status === 'partial';
+      setStatus(
+        partial
+          ? 'Agrupamento do admin publicado para todos. A sincronização do catálogo terminou parcialmente.'
+          : 'Agrupamento do admin publicado para todos. Os usuários receberão esse mapa no próximo carregamento.',
+        partial ? 'warn' : 'ok'
+      );
     } catch (error) {
-      console.warn('[Lux Provider Sync] Falha na atualização global:', error);
-      setStatus(error?.message || 'Não foi possível atualizar o catálogo do fornecedor.', 'error');
+      console.warn('[Lux Provider Sync] Falha ao publicar agrupamento global do admin:', error);
+      setStatus(error?.message || 'Não foi possível publicar o agrupamento do admin.', 'error');
     } finally {
       busy = false;
       if (action) {
         action.disabled = false;
-        action.textContent = 'Atualizar catálogo para todos';
+        action.textContent = 'Publicar meu agrupamento para todos';
       }
     }
   };
@@ -131,8 +123,8 @@
       event?.preventDefault?.();
       window.adminSyncProviderCatalogForAll?.();
     };
-    action.textContent = 'Atualizar catálogo para todos';
-    action.title = 'Força o Worker a atualizar a lista, categorias e catálogo IPTV de todas as contas';
+    action.textContent = 'Publicar meu agrupamento para todos';
+    action.title = 'Atualiza o catálogo do admin e publica o mesmo mapa de categorias para todas as contas';
     return true;
   }
 
