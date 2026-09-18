@@ -87,6 +87,13 @@
     .status-success .dot, .status-success .label { color: #65dc86; }
     .status-warning .dot, .status-warning .label { color: #f0c75e; }
     .status-error .dot, .status-error .label { color: #ff6262; }
+
+    .perf-green .duration { color: #65dc86; font-weight: 700; }
+    .perf-yellow .dot, .perf-yellow .label, .perf-yellow .duration { color: #f0c75e; }
+    .perf-orange .dot, .perf-orange .label, .perf-orange .duration { color: #ff9f43; }
+    .perf-red .dot, .perf-red .label, .perf-red .duration { color: #ff6262; }
+    .status-error .dot, .status-error .label, .status-error .duration { color: #ff6262; }
+    .live-duration { font-variant-numeric: tabular-nums; }
     .details {
       grid-column: 4 / -1;
       margin: 2px 0 6px;
@@ -157,7 +164,7 @@
 <body>
   <header>
     <div class="title">LUX PLAYER // DEVKIT</div>
-    <div class="version">1.3.2</div>
+    <div class="version">1.3.3</div>
     <div class="spacer"></div>
     <div id="connection" class="connection">aguardando Lux Player…</div>
     <button id="pauseBtn" type="button">Pausar scroll</button>
@@ -212,6 +219,7 @@
       let events = [];
       let channel = null;
       const ids = new Set();
+      const activeOperations = new Map();
 
       const counters = {
         total: document.getElementById('totalCount'),
@@ -243,6 +251,23 @@
         return value >= 1000 ? (value / 1000).toFixed(value >= 10000 ? 1 : 2) + ' s' : Math.round(value) + ' ms';
       }
 
+      function performanceClass(ms) {
+        const value = Number(ms);
+        if (!Number.isFinite(value)) return '';
+        if (value >= 100) return 'perf-red';
+        if (value >= 60) return 'perf-orange';
+        if (value >= 30) return 'perf-yellow';
+        return 'perf-green';
+      }
+
+      function operationKey(event) {
+        return String(event?.category || 'APP') + '|' + String(event?.label || 'evento');
+      }
+
+      function isStallEvent(event) {
+        return event?.status === 'error' && /^PARADO HÁ/i.test(String(event?.message || ''));
+      }
+
       function statusDot(status) {
         return status === 'success' ? '●'
           : status === 'warning' ? '▲'
@@ -256,19 +281,22 @@
         counters.success.textContent = events.filter(item => item.status === 'success').length;
         counters.warning.textContent = events.filter(item => item.status === 'warning').length;
         counters.error.textContent = events.filter(item => item.status === 'error').length;
-        counters.running.textContent = events.filter(item => item.status === 'running').length;
+        counters.running.textContent = activeOperations.size;
       }
 
       function lineHtml(event) {
+        const isActive = activeOperations.get(operationKey(event)) === event.id;
+        const elapsed = isActive ? Math.max(0, Date.now() - Number(event.startedAt || event.ts || Date.now())) : event.durationMs;
+        const perf = performanceClass(elapsed);
         const details = event.data == null ? '' :
           '<div class="details">' + escapeHtml(JSON.stringify(event.data, null, 2)) + '</div>';
-        return '<div class="line status-' + escapeHtml(event.status || 'info') + '" data-id="' + escapeHtml(event.id) + '">' +
+        return '<div class="line status-' + escapeHtml(event.status || 'info') + ' ' + perf + '" data-id="' + escapeHtml(event.id) + '">' +
           '<span class="time">' + escapeHtml(event.time || '') + '</span>' +
           '<span class="category">' + escapeHtml(event.category || 'APP') + '</span>' +
-          '<span class="dot">' + statusDot(event.status) + '</span>' +
+          '<span class="dot">' + (event.status === 'success' ? '✓' : statusDot(event.status)) + '</span>' +
           '<span class="label">' + escapeHtml(event.label || 'evento') + '</span>' +
-          '<span class="message">' + escapeHtml(event.message || '') + '</span>' +
-          '<span class="duration">' + escapeHtml(formatDuration(event.durationMs)) + '</span>' +
+          '<span class="message">' + escapeHtml(event.message || (isActive ? 'Em andamento...' : '')) + '</span>' +
+          '<span class="duration live-duration" data-start-ts="' + (isActive ? escapeHtml(event.startedAt || event.ts || '') : '') + '">' + escapeHtml(formatDuration(elapsed)) + '</span>' +
           details +
         '</div>';
       }
@@ -284,17 +312,42 @@
       function addEvent(event) {
         if (!event || !event.id || ids.has(event.id)) return;
         ids.add(event.id);
-        events.push(event);
+
+        const key = operationKey(event);
+        const activeId = activeOperations.get(key);
+        const activeEvent = activeId ? events.find(item => item.id === activeId) : null;
+
+        if (event.status === 'running') {
+          event.startedAt = Number(event.ts || Date.now());
+          activeOperations.set(key, event.id);
+          events.push(event);
+        } else if (activeEvent && ['success', 'warning', 'error'].includes(event.status)) {
+          const stalled = isStallEvent(event);
+          const elapsed = Number.isFinite(Number(event.durationMs))
+            ? Number(event.durationMs)
+            : Math.max(0, Number(event.ts || Date.now()) - Number(activeEvent.startedAt || activeEvent.ts || Date.now()));
+
+          activeEvent.status = event.status;
+          activeEvent.message = event.message || (event.status === 'success' ? 'Concluído' : activeEvent.message);
+          activeEvent.durationMs = elapsed;
+          activeEvent.data = event.data ?? activeEvent.data;
+          activeEvent.completedAt = stalled ? null : Number(event.ts || Date.now());
+
+          if (!stalled) activeOperations.delete(key);
+        } else {
+          events.push(event);
+        }
+
         if (events.length > MAX_EVENTS) {
           const removed = events.splice(0, events.length - MAX_EVENTS);
-          removed.forEach(item => ids.delete(item.id));
-          renderAll();
-          return;
+          removed.forEach(item => {
+            ids.delete(item.id);
+            const itemKey = operationKey(item);
+            if (activeOperations.get(itemKey) === item.id) activeOperations.delete(itemKey);
+          });
         }
-        document.getElementById('emptyState')?.remove();
-        terminal.insertAdjacentHTML('beforeend', lineHtml(event));
-        updateCounters();
-        if (!paused) terminal.scrollTop = terminal.scrollHeight;
+
+        renderAll();
       }
 
       function mergeSnapshot(list) {
@@ -310,6 +363,7 @@
       function clearLocal() {
         events = [];
         ids.clear();
+        activeOperations.clear();
         renderAll();
       }
 
@@ -331,7 +385,7 @@
           running: events.filter(item => item.status === 'running').length
         };
         const header = [
-          'LUX PLAYER // DEVKIT 1.3.2',
+          'LUX PLAYER // DEVKIT 1.3.3',
           'Gerado em: ' + new Date().toLocaleString('pt-BR'),
           'Eventos: ' + events.length +
             ' | OK: ' + counts.success +
@@ -436,6 +490,24 @@
           copyFallback.classList.add('hidden');
         }
       });
+
+      setInterval(() => {
+        if (!activeOperations.size) return;
+        const now = Date.now();
+
+        activeOperations.forEach((id, key) => {
+          const event = events.find(item => item.id === id);
+          const line = terminal.querySelector('[data-id="' + CSS.escape(id) + '"]');
+          if (!event || !line) return;
+
+          const elapsed = Math.max(0, now - Number(event.startedAt || event.ts || now));
+          const duration = line.querySelector('.live-duration');
+          if (duration) duration.textContent = formatDuration(elapsed);
+
+          line.classList.remove('perf-green', 'perf-yellow', 'perf-orange', 'perf-red');
+          line.classList.add(performanceClass(elapsed));
+        });
+      }, 50);
 
       window.addEventListener('storage', event => {
         if (event.key === SIGNAL_KEY && event.newValue) {
