@@ -1,5 +1,5 @@
 (() => {
-  const BRIDGE_VERSION = '20260917-catalog-perf-16';
+  const BRIDGE_VERSION = '20260917-catalog-safe-17';
 
   const devCatalogRun = async (label, job, meta = null) => {
     const started = performance.now();
@@ -196,62 +196,12 @@
 
     const rawLiveById = new Map();
     const rawMoviesById = new Map();
-    const rawByTypeAndName = new Map();
-    const rawByTypeAndLogo = new Map();
-
-    const playbackIndexStarted = performance.now();
-    let playbackCandidates = 0;
-
     rawM3uItems.forEach(item => {
-      if (item.type !== 'live' && item.type !== 'movies') return;
-      playbackCandidates += 1;
-
       const streamId = extractXtreamStreamId(item.url);
-      if (streamId) {
-        if (item.type === 'live' && !rawLiveById.has(streamId)) rawLiveById.set(streamId, item);
-        if (item.type === 'movies' && !rawMoviesById.has(streamId)) rawMoviesById.set(streamId, item);
-      }
-
-      const nameKey = `${item.type}|${normalizeText(item.name)}`;
-      const logoKey = `${item.type}|${normalizeAssetUrl(item.logo)}`;
-
-      if (!rawByTypeAndName.has(nameKey)) rawByTypeAndName.set(nameKey, []);
-      rawByTypeAndName.get(nameKey).push(item);
-
-      if (logoKey !== `${item.type}|`) {
-        if (!rawByTypeAndLogo.has(logoKey)) rawByTypeAndLogo.set(logoKey, []);
-        rawByTypeAndLogo.get(logoKey).push(item);
-      }
+      if (!streamId) return;
+      if (item.type === 'live' && !rawLiveById.has(streamId)) rawLiveById.set(streamId, item);
+      if (item.type === 'movies' && !rawMoviesById.has(streamId)) rawMoviesById.set(streamId, item);
     });
-
-    window.LuxDevkit?.success('CATALOG-BUILD', 'indice-playback', 'Índice de reprodução pronto', Math.round(performance.now() - playbackIndexStarted), {
-      candidates: playbackCandidates,
-      ids: rawLiveById.size + rawMoviesById.size,
-      names: rawByTypeAndName.size,
-      logos: rawByTypeAndLogo.size
-    });
-
-    const resolvePlaybackItem = (type, official) => {
-      const streamId = String(official?.stream_id ?? '').trim();
-      let match = type === 'live' ? rawLiveById.get(streamId) : rawMoviesById.get(streamId);
-
-      if (!match) {
-        const nameMatches = rawByTypeAndName.get(`${type}|${normalizeText(official?.name)}`) || [];
-        if (nameMatches.length === 1) match = nameMatches[0];
-        else if (nameMatches.length > 1) {
-          const logo = normalizeAssetUrl(official?.stream_icon || official?.logo || official?.cover);
-          match = nameMatches.find(candidate => logo && normalizeAssetUrl(candidate.logo) === logo) || nameMatches[0];
-        }
-      }
-
-      if (!match) {
-        const logo = normalizeAssetUrl(official?.stream_icon || official?.logo || official?.cover);
-        const logoMatches = logo ? (rawByTypeAndLogo.get(`${type}|${logo}`) || []) : [];
-        if (logoMatches.length === 1) match = logoMatches[0];
-      }
-
-      return match || null;
-    };
 
     const groupedSeries = groupedM3u.filter(item => item?.type === 'series' && item?.m3uEpisodes);
     const matcherStarted = performance.now();
@@ -268,18 +218,12 @@
     let matchedLive = 0;
     let matchedMovies = 0;
     let matchedSeries = 0;
-    let playbackDirectFallbacks = 0;
-    let playbackMissing = 0;
 
     const liveBuildStarted = performance.now();
     (live || []).forEach(item => {
-      const m3u = resolvePlaybackItem('live', item);
+      const streamId = String(item.stream_id ?? '');
+      const m3u = rawLiveById.get(streamId);
       if (m3u) matchedLive += 1;
-      const direct = String(item.direct_source || item.directSource || '').trim();
-      const playbackUrl = m3u?.url || (/^https?:\/\//i.test(direct) ? direct : '');
-      if (!m3u && playbackUrl) playbackDirectFallbacks += 1;
-      if (!playbackUrl) playbackMissing += 1;
-
       const groupName = liveCatMap[String(item.category_id)] || 'Canais';
       parsedItems.push({
         ...item,
@@ -288,7 +232,7 @@
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
         logo: item.stream_icon || m3u?.logo || '',
-        url: playbackUrl,
+        url: m3u?.url || '',
         type: 'live',
         source: 'synced-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
@@ -301,13 +245,9 @@
 
     const movieBuildStarted = performance.now();
     (movies || []).forEach(item => {
-      const m3u = resolvePlaybackItem('movies', item);
+      const streamId = String(item.stream_id ?? '');
+      const m3u = rawMoviesById.get(streamId);
       if (m3u) matchedMovies += 1;
-      const direct = String(item.direct_source || item.directSource || '').trim();
-      const playbackUrl = m3u?.url || (/^https?:\/\//i.test(direct) ? direct : '');
-      if (!m3u && playbackUrl) playbackDirectFallbacks += 1;
-      if (!playbackUrl) playbackMissing += 1;
-
       const groupName = movieCatMap[String(item.category_id)] || 'Filmes';
       parsedItems.push({
         ...item,
@@ -316,7 +256,7 @@
         name: item.name || m3u?.name || 'Sem título',
         group: groupName,
         logo: item.stream_icon || m3u?.logo || '',
-        url: playbackUrl,
+        url: m3u?.url || '',
         type: 'movies',
         source: 'synced-xtream',
         isAdult: isAdultContent(groupName, item.name || m3u?.name) || item.adult === true || String(item.is_adult || '') === '1'
@@ -361,9 +301,6 @@
         matchedLive,
         matchedMovies,
         matchedSeries,
-        playbackResolvedDuringBuild: matchedLive + matchedMovies + playbackDirectFallbacks,
-        playbackDirectFallbacks,
-        playbackMissing,
         officialSeries: (series || []).length
       }
     };
@@ -425,7 +362,6 @@
     window.__luxSyncedXtreamActive = true;
     window.__luxSyncedXtreamManifest = manifest;
     window.__luxSyncedXtreamStats = built.stats;
-    window.__luxSyncedPlaybackResolvedDuringBuild = true;
 
     const rawReuseRef = window.__luxSyncedRawPlaylistItems;
     setTimeout(() => {

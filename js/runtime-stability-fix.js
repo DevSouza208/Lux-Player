@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260917-stability-perf16';
+  window.__luxRuntimeStabilityFixInstalled = '20260917-stability-safe17';
 
   const devRepairEvent = (status, label, message = '', durationMs = null, data = null) => {
     window.LuxDevkit?.emit({
@@ -27,6 +27,8 @@
       throw error;
     }
   };
+
+  const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
   const normalizeText = value => String(value || '')
     .normalize('NFD')
@@ -123,22 +125,6 @@
   const repairSyncedPlaybackUrls = async () => {
     if (!window.__luxSyncedXtreamActive || typeof allMediaItems === 'undefined' || !Array.isArray(allMediaItems)) return;
 
-    if (window.__luxSyncedPlaybackResolvedDuringBuild) {
-      const stats = window.__luxSyncedXtreamStats || {};
-      window.__luxSyncedRawPlaylistItems = null;
-      devRepairEvent('success', 'resultado', 'URLs resolvidas durante a montagem; segunda passada ignorada', 0, {
-        repaired: Number(stats.playbackResolvedDuringBuild || 0),
-        directFallbacks: Number(stats.playbackDirectFallbacks || 0),
-        stillMissing: Number(stats.playbackMissing || 0)
-      });
-      console.info('[Lux Play] Playback Repair ignorado: URLs já resolvidas durante a montagem.', {
-        repaired: Number(stats.playbackResolvedDuringBuild || 0),
-        directFallbacks: Number(stats.playbackDirectFallbacks || 0),
-        stillMissing: Number(stats.playbackMissing || 0)
-      });
-      return { skipped: true };
-    }
-
     let rawItems;
     try {
       rawItems = await loadRawPlaylistItems();
@@ -154,21 +140,46 @@
     const byTypeAndLogo = new Map();
 
     const indexStarted = performance.now();
-    devRepairEvent('running', 'criar-indices', 'Indexando playlist bruta...', null, { rawItems: rawItems.length });
-    rawItems.forEach(raw => {
-      const type = normalizeType(raw.type);
-      const id = extractFlexibleStreamId(raw.url);
-      if (id) addToMap(byAnyId, id, raw);
-      if (type !== 'live' && type !== 'movies') return;
-      if (id && !byTypeAndId.has(`${type}|${id}`)) byTypeAndId.set(`${type}|${id}`, raw);
-      addToMap(byTypeAndName, `${type}|${normalizeText(raw.name)}`, raw);
-      addToMap(byTypeAndLogo, `${type}|${normalizeAssetUrl(raw.logo)}`, raw);
+    const syncedStats = window.__luxSyncedXtreamStats || {};
+    const useIdMatching = Number(syncedStats.matchedLive || 0) + Number(syncedStats.matchedMovies || 0) > 0;
+    const INDEX_BATCH = 2500;
+
+    devRepairEvent('running', 'criar-indices', 'Indexando playlist bruta em lotes...', null, {
+      rawItems: rawItems.length,
+      batchSize: INDEX_BATCH,
+      strategy: useIdMatching ? 'id+nome+logo' : 'nome+logo'
     });
-    devRepairEvent('success', 'criar-indices', 'Índices prontos', Math.round(performance.now() - indexStarted), {
+
+    for (let i = 0; i < rawItems.length; i += 1) {
+      const raw = rawItems[i];
+      const type = normalizeType(raw.type);
+      if (type !== 'live' && type !== 'movies') {
+        if (i > 0 && i % INDEX_BATCH === 0) await yieldToBrowser();
+        continue;
+      }
+
+      let id = '';
+      if (useIdMatching) {
+        id = extractFlexibleStreamId(raw.url);
+        if (id) addToMap(byAnyId, id, raw);
+        if (id && !byTypeAndId.has(`${type}|${id}`)) byTypeAndId.set(`${type}|${id}`, raw);
+      }
+
+      const normalizedName = normalizeText(raw.name);
+      if (normalizedName) addToMap(byTypeAndName, `${type}|${normalizedName}`, raw);
+
+      const normalizedLogo = normalizeAssetUrl(raw.logo);
+      if (normalizedLogo) addToMap(byTypeAndLogo, `${type}|${normalizedLogo}`, raw);
+
+      if (i > 0 && i % INDEX_BATCH === 0) await yieldToBrowser();
+    }
+
+    devRepairEvent('success', 'criar-indices', 'Índices prontos sem bloquear a interface', Math.round(performance.now() - indexStarted), {
       rawItems: rawItems.length,
       ids: byTypeAndId.size,
       names: byTypeAndName.size,
-      logos: byTypeAndLogo.size
+      logos: byTypeAndLogo.size,
+      strategy: useIdMatching ? 'id+nome+logo' : 'nome+logo'
     });
 
     let repaired = 0;
@@ -176,51 +187,58 @@
     let stillMissing = 0;
 
     const matchStarted = performance.now();
-    devRepairEvent('running', 'casar-enderecos', 'Validando itens do catálogo...', null, {
-      catalogItems: allMediaItems.length
+    const MATCH_BATCH = 1000;
+    devRepairEvent('running', 'casar-enderecos', 'Validando itens do catálogo em lotes...', null, {
+      catalogItems: allMediaItems.length,
+      batchSize: MATCH_BATCH
     });
-    for (const item of allMediaItems) {
-      if (item?.source !== 'synced-xtream') continue;
-      const type = normalizeType(item.type);
-      if (type !== 'live' && type !== 'movies') continue;
-      if (String(item.url || '').trim()) continue;
 
-      const streamId = String(item.stream_id ?? '').trim();
-      let match = streamId ? byTypeAndId.get(`${type}|${streamId}`) : null;
+    for (let i = 0; i < allMediaItems.length; i += 1) {
+      const item = allMediaItems[i];
 
-      if (!match && streamId) {
-        const sameId = byAnyId.get(streamId) || [];
-        if (sameId.length === 1) match = sameId[0];
-      }
+      if (item?.source === 'synced-xtream') {
+        const type = normalizeType(item.type);
 
-      if (!match) {
-        const nameMatches = byTypeAndName.get(`${type}|${normalizeText(item.name)}`) || [];
-        if (nameMatches.length === 1) match = nameMatches[0];
-        else if (nameMatches.length > 1) {
-          const logo = normalizeAssetUrl(item.logo || item.stream_icon);
-          match = nameMatches.find(candidate => logo && normalizeAssetUrl(candidate.logo) === logo) || nameMatches[0];
+        if ((type === 'live' || type === 'movies') && !String(item.url || '').trim()) {
+          const streamId = useIdMatching ? String(item.stream_id ?? '').trim() : '';
+          let match = streamId ? byTypeAndId.get(`${type}|${streamId}`) : null;
+
+          if (!match && streamId) {
+            const sameId = byAnyId.get(streamId) || [];
+            if (sameId.length === 1) match = sameId[0];
+          }
+
+          if (!match) {
+            const nameMatches = byTypeAndName.get(`${type}|${normalizeText(item.name)}`) || [];
+            if (nameMatches.length === 1) match = nameMatches[0];
+            else if (nameMatches.length > 1) {
+              const logo = normalizeAssetUrl(item.logo || item.stream_icon);
+              match = nameMatches.find(candidate => logo && normalizeAssetUrl(candidate.logo) === logo) || nameMatches[0];
+            }
+          }
+
+          if (!match) {
+            const normalizedLogo = normalizeAssetUrl(item.logo || item.stream_icon);
+            const logoMatches = normalizedLogo ? (byTypeAndLogo.get(`${type}|${normalizedLogo}`) || []) : [];
+            if (logoMatches.length === 1) match = logoMatches[0];
+          }
+
+          if (match?.url) {
+            item.url = match.url;
+            repaired += 1;
+          } else {
+            const direct = String(item.direct_source || item.directSource || '').trim();
+            if (/^https?:\/\//i.test(direct)) {
+              item.url = direct;
+              directFallbacks += 1;
+            } else {
+              stillMissing += 1;
+            }
+          }
         }
       }
 
-      if (!match) {
-        const logoMatches = byTypeAndLogo.get(`${type}|${normalizeAssetUrl(item.logo || item.stream_icon)}`) || [];
-        if (logoMatches.length === 1) match = logoMatches[0];
-      }
-
-      if (match?.url) {
-        item.url = match.url;
-        repaired += 1;
-        continue;
-      }
-
-      const direct = String(item.direct_source || item.directSource || '').trim();
-      if (/^https?:\/\//i.test(direct)) {
-        item.url = direct;
-        directFallbacks += 1;
-        continue;
-      }
-
-      stillMissing += 1;
+      if (i > 0 && i % MATCH_BATCH === 0) await yieldToBrowser();
     }
 
     devRepairEvent('success', 'casar-enderecos', 'Validação concluída', Math.round(performance.now() - matchStarted), {
@@ -253,9 +271,11 @@
       const result = await originalLoad.apply(this, arguments);
       if (result && window.__luxSyncedXtreamActive) {
         const repairStarted = performance.now();
-        devRepairEvent('running', 'reparo-total', 'Preparando endereços de reprodução...');
+        devRepairEvent('running', 'reparo-total', 'Preparando endereços de reprodução sem bloquear a interface...');
         await repairSyncedPlaybackUrls();
-        devRepairEvent('success', 'reparo-total', 'Reparo finalizado', Math.round(performance.now() - repairStarted));
+        devRepairEvent('success', 'reparo-total', 'Reparo finalizado', Math.round(performance.now() - repairStarted), {
+          responsiveBatches: true
+        });
       }
       return result;
     };
