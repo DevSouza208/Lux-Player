@@ -912,21 +912,49 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
-    async function syncCloudProgress() {
-      if (!currentUser || cloudSyncInFlight) return;
+    function progressSyncInvoke(body, timeoutMs = 12000) {
+      return Promise.race([
+        supabaseClient.functions.invoke('progress-sync', { body }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('progress_sync_timeout')), timeoutMs))
+      ]);
+    }
+
+    async function syncCloudProgress(reason = 'background') {
+      if (!currentUser || !currentUser.profile || cloudSyncInFlight) return;
       cloudSyncInFlight = true;
       const syncUser = currentUser;
+      const syncProfileKey = currentUser.profile?.data_key || String(currentUser.profile?.slot || 1);
+      const syncStarted = performance.now();
       let syncSnapshot = null;
+
+      window.LuxDevkit?.running('PROGRESS', 'sync-cloud', 'Sincronizando em segundo plano...', null, {
+        reason,
+        profile: syncProfileKey
+      });
+
       try {
         seedCloudSyncRecords();
-        const credentials = { username: currentUser.user, password: currentUser.pass, profileSlot: currentUser.profile?.slot || 1, profileKey: currentUser.profile?.data_key || '' };
-        const response = await supabaseClient.functions.invoke('progress-sync', { body: { action: 'pull', ...credentials } });
+        const credentials = {
+          username: currentUser.user,
+          password: currentUser.pass,
+          profileSlot: currentUser.profile?.slot || 1,
+          profileKey: currentUser.profile?.data_key || ''
+        };
+
+        const pullStarted = performance.now();
+        window.LuxDevkit?.running('PROGRESS', 'pull', 'Buscando favoritos e progresso...');
+        const response = await progressSyncInvoke({ action: 'pull', ...credentials });
         if (currentUser !== syncUser) return;
         if (response.error || response.data?.error) throw response.error || new Error(response.data.error);
+
         const localRecords = getCloudSyncRecords();
         const cloudRecords = response.data?.records || [];
         const cloudByKey = new Map(cloudRecords.map(record => [record.key, record]));
         const pending = [];
+
+        window.LuxDevkit?.success('PROGRESS', 'pull', 'Dados recebidos', Math.round(performance.now() - pullStarted), {
+          records: cloudRecords.length
+        });
 
         applyingCloudSync = true;
         cloudRecords.forEach(record => {
@@ -941,23 +969,61 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         Object.entries(localRecords).forEach(([key, record]) => {
           const cloud = cloudByKey.get(key);
           if (Number(record.updatedAt || 0) <= 0 && !cloud) record.updatedAt = Date.now();
-          if (!cloud || Number(record.updatedAt) > Number(cloud.updatedAt || 0)) pending.push({ key, payload: record.payload, updatedAt: record.updatedAt });
+          if (!cloud || Number(record.updatedAt) > Number(cloud.updatedAt || 0)) {
+            pending.push({ key, payload: record.payload, updatedAt: record.updatedAt });
+          }
         });
+
         saveCloudSyncRecords(localRecords);
         syncSnapshot = JSON.stringify(localRecords);
-        for (let offset = 0; offset < pending.length; offset += 400) {
-          if (currentUser !== syncUser) return;
-          const push = await supabaseClient.functions.invoke('progress-sync', { body: { action: 'push', records: pending.slice(offset, offset + 400), ...credentials } });
-          if (push.error || push.data?.error) throw push.error || new Error(push.data.error);
+
+        if (pending.length) {
+          const pushStarted = performance.now();
+          window.LuxDevkit?.running('PROGRESS', 'push', 'Enviando alterações locais...', null, {
+            records: pending.length
+          });
+          let saved = 0;
+          for (let offset = 0; offset < pending.length; offset += 400) {
+            if (currentUser !== syncUser) return;
+            const batch = pending.slice(offset, offset + 400);
+            const push = await progressSyncInvoke({ action: 'push', records: batch, ...credentials });
+            if (push.error || push.data?.error) throw push.error || new Error(push.data.error);
+            saved += Number(push.data?.saved || batch.length);
+          }
+          window.LuxDevkit?.success('PROGRESS', 'push', 'Alterações enviadas', Math.round(performance.now() - pushStarted), {
+            records: pending.length,
+            saved
+          });
+        } else {
+          window.LuxDevkit?.success('PROGRESS', 'push', 'Nada novo para enviar', 0, { records: 0 });
         }
+
         if (currentUser !== syncUser) return;
         refreshResumeUI?.();
+        window.LuxDevkit?.success('PROGRESS', 'sync-cloud', 'Sincronização concluída', Math.round(performance.now() - syncStarted), {
+          cloudRecords: cloudRecords.length,
+          pendingRecords: pending.length,
+          profile: syncProfileKey
+        });
       } catch (error) {
+        const message = error?.message === 'progress_sync_timeout'
+          ? 'Tempo limite atingido; dados locais preservados'
+          : (error?.message || 'Sincronização indisponível; dados locais preservados');
         console.warn('Sincronização em nuvem indisponível; os dados locais foram preservados.', error);
+        window.LuxDevkit?.warn('PROGRESS', 'sync-cloud', message, {
+          reason,
+          profile: syncProfileKey
+        });
       } finally {
         applyingCloudSync = false;
         cloudSyncInFlight = false;
-        if (currentUser && (currentUser !== syncUser || (syncSnapshot !== null && JSON.stringify(getCloudSyncRecords()) !== syncSnapshot))) scheduleCloudSync();
+        if (
+          currentUser &&
+          (
+            currentUser !== syncUser ||
+            (syncSnapshot !== null && JSON.stringify(getCloudSyncRecords()) !== syncSnapshot)
+          )
+        ) scheduleCloudSync();
       }
     }
 
@@ -1944,11 +2010,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       try { localStorage.removeItem('lux_admin_vod_catalog'); } catch (_) {}
       window.LuxDevkit?.info('BOOT', 'vod-manual-desativado', 'VOD manual/R2 fora do boot nesta etapa.');
 
-      await luxBootTraceRun(
-        'progresso-cloud',
-        'Sincronizando favoritos, progresso e histórico...',
-        () => syncCloudProgress()
-      );
+      window.LuxDevkit?.info('BOOT', 'progresso-local', 'Favoritos e progresso locais prontos; nuvem será sincronizada após abrir a Home.');
 
       luxBootTraceStep('saves-pendentes', 'Verificando saves pendentes...');
       retryPendingGameSaves();
@@ -1963,6 +2025,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       window.LuxDevkit?.success('HOME', 'splash', 'Splash liberado e transição concluída');
 
       luxBootTraceDone();
+
+      setTimeout(() => {
+        if (!currentUser?.profile) return;
+        syncCloudProgress('post-boot').catch?.(() => {});
+      }, 250);
 
       // Ícones e notificações são pós-boot: não seguram mais a abertura visual.
       try {

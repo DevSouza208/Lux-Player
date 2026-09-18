@@ -179,11 +179,6 @@ async function activateAccountProfile(profile) {
     document.getElementById('liveCurrentName').textContent='Selecione um canal';
     document.getElementById('liveCurrentGroup').textContent='';
     document.getElementById('liveCurrentLogo').replaceChildren();
-    window.luxBootTraceStep?.('perfil-sync-pre:start', 'Sincronizando progresso antes de ativar o perfil...');
-    const preSyncStarted=performance.now();
-    await syncCloudProgress();
-    console.info(`[Lux Boot 1.3] perfil-sync-pre concluiu em ${Math.round(performance.now()-preSyncStarted)}ms`);
-    window.luxBootTraceStep?.('perfil-sync-pre:done');
     if(currentUser!==switchingUser)return;
     window.LuxReadingAdmin?.stop();
     window.LuxReader?.close();
