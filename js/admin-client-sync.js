@@ -308,3 +308,13 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
+
+(() => {
+  'use strict';
+  if (document.querySelector('script[data-lux-global-search]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/global-search-page.js?v=20260918-global-search1';
+  script.async = true;
+  script.dataset.luxGlobalSearch = '1';
+  document.head.appendChild(script);
+})();
