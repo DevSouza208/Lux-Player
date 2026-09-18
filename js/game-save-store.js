@@ -208,7 +208,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-provider-grouping-sync]')) {
   const providerGroupingSyncScript = document.createElement('script');
-  providerGroupingSyncScript.src = 'js/provider-grouping-sync.js?v=20260918-provider-grouping-sync1';
+  providerGroupingSyncScript.src = 'js/provider-grouping-sync.js?v=20260918-provider-grouping-sync2-admin-global';
   providerGroupingSyncScript.async = false;
   providerGroupingSyncScript.dataset.luxProviderGroupingSync = '1';
   document.head.appendChild(providerGroupingSyncScript);
