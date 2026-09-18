@@ -95,15 +95,6 @@
   // Autenticação pertence ao script.js desde a etapa 1.2.
   // Este módulo cuida apenas de apresentação e módulos auxiliares.
 
-  const loadRuntimeStabilityFix = () => {
-    if (document.querySelector('script[data-lux-runtime-stability]')) return;
-    const script = document.createElement('script');
-    script.src = 'js/runtime-stability-fix.js?v=20260917-stability-safe17';
-    script.async = true;
-    script.dataset.luxRuntimeStability = '1';
-    document.head.appendChild(script);
-  };
-
   const loadStreamSessionGuard = () => {
     if (document.querySelector('script[data-lux-stream-session-guard]')) return;
     const script = document.createElement('script');
@@ -190,7 +181,6 @@
   const start = () => {
     applyVersionEverywhere();
 
-    loadRuntimeStabilityFix();
     loadStreamSessionGuard();
     loadAccountUiPolish();
     loadGameDuplicateConsoleFix();

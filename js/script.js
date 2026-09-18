@@ -211,6 +211,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     async function loadMediaSourcesInPriority() {
       const candidates = getMediaSourceCandidates();
       const failures = [];
+      window.LuxDevkit?.info('IPTV', 'ordem-fontes', 'Ordem definida pelo núcleo do Lux', {
+        candidates: candidates.map(source => ({ kind: source.kind, label: source.label }))
+      });
       if (!candidates.length) {
         clearMediaSourceState();
         return false;
@@ -218,14 +221,18 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       for (const source of candidates) {
         try {
+          const sourceStarted = performance.now();
+          window.LuxDevkit?.running('IPTV', `fonte-${source.kind}`, source.label);
           const result = source.kind === 'xtream'
             ? await loadFromXtreamApi(source.server, source.user, source.pass)
             : await loadPlaylist(source.value);
           const count = Number(result?.count ?? allMediaItems.length);
           if (!count) throw new Error('A fonte não retornou nenhum item utilizável.');
           setMediaSourceState(source.kind, source.label, count);
+          window.LuxDevkit?.success('IPTV', `fonte-${source.kind}`, 'Fonte principal carregada', Math.round(performance.now() - sourceStarted), { count });
           return true;
         } catch (error) {
+          window.LuxDevkit?.warn('IPTV', `fonte-${source.kind}`, error?.message || 'Fonte indisponível');
           failures.push(source.label + ': ' + (error?.message || 'falha desconhecida'));
           console.warn('[Lux Play] Fonte indisponível:', source.label, error);
         }
@@ -2778,6 +2785,15 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
+    async function fetchXtreamJsonTraced(label, url, timeoutMs = 7000) {
+      const started = performance.now();
+      window.LuxDevkit?.running('IPTV', label, 'Consultando API do provedor...');
+      const data = await fetchXtreamJson(url, timeoutMs);
+      const count = Array.isArray(data) ? data.length : (data && typeof data === 'object' ? Object.keys(data).length : 0);
+      window.LuxDevkit?.success('IPTV', label, 'Resposta recebida', Math.round(performance.now() - started), { count });
+      return data;
+    }
+
     async function loadFromXtreamApi(server, user, pass) {
       const cleanServer = server.replace(/\/+$/, '');
       const baseApi = `${cleanServer}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
@@ -2796,12 +2812,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
           vodStreams,
           seriesStreams
         ] = await Promise.all([
-          fetchXtreamJson(`${baseApi}&action=get_live_categories`),
-          fetchXtreamJson(`${baseApi}&action=get_vod_categories`),
-          fetchXtreamJson(`${baseApi}&action=get_series_categories`),
-          fetchXtreamJson(`${baseApi}&action=get_live_streams`),
-          fetchXtreamJson(`${baseApi}&action=get_vod_streams`),
-          fetchXtreamJson(`${baseApi}&action=get_series`)
+          fetchXtreamJsonTraced('categorias-tv', `${baseApi}&action=get_live_categories`),
+          fetchXtreamJsonTraced('categorias-filmes', `${baseApi}&action=get_vod_categories`),
+          fetchXtreamJsonTraced('categorias-series', `${baseApi}&action=get_series_categories`),
+          fetchXtreamJsonTraced('streams-tv', `${baseApi}&action=get_live_streams`),
+          fetchXtreamJsonTraced('streams-filmes', `${baseApi}&action=get_vod_streams`),
+          fetchXtreamJsonTraced('streams-series', `${baseApi}&action=get_series`)
         ]);
 
         const liveCatMap = Object.fromEntries(liveCatsRes.map(c => [c.category_id, c.category_name]));
@@ -2860,6 +2876,13 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         if (!parsedItems.length) throw new Error('O Xtream não retornou canais, filmes ou séries.');
         allMediaItems = parsedItems.map(applySharedCategoryToItem).filter(profileAllowsMedia);
         mergeSharedVodsIntoPlayer();
+        window.LuxDevkit?.success('IPTV', 'catalogo-pronto', 'Catálogo Xtream disponível', null, {
+          live: liveStreams.length,
+          movies: vodStreams.length,
+          series: seriesStreams.length,
+          total: parsedItems.length,
+          visibleForProfile: allMediaItems.length
+        });
         return { count: parsedItems.length };
       } catch (err) {
         throw new Error('Falha ao carregar o Xtream Codes: ' + (err?.message || 'resposta inválida'));

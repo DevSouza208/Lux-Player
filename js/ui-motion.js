@@ -28,17 +28,14 @@
     './js/friendly-ui.js',
     './js/section-transition-loader.js',
     './js/script.js',
-    './js/synced-catalog.js',
     './js/admin-client-sync.js',
     './js/home-featured-banners.js',
     './js/home-content-rails.js',
     './js/home-series-2026.js',
     './js/home-series-internal-router.js',
     './js/sport-banner-tags.js',
-    './js/secondary-content-sources.js',
-    './js/provider-content-sources.js',
-    './js/secondary-background-loader.js',
     './js/profiles.js',
+    './js/reading-source-library.js',
     './js/game-save-store.js',
     './js/game-rom-cache.js',
     './js/external-roms.js',
@@ -193,7 +190,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadModule(['lux-synced-catalog', 'js/synced-catalog.js?v=20260917-catalog-safe17']);
+  // Etapa 1.2: script.js/Xtream volta a ser a fonte oficial do catálogo principal.
   loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
   loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags4']);
   loadModule(['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5']);
@@ -202,8 +199,8 @@ function animateDashboardEntry() {
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260915-n64-performance2'],
-    ['lux-secondary-background-loader', 'js/secondary-background-loader.js?v=20260914-secondary-background-2'],
-    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260914-admin-client-sync-2'],
+    ['lux-reading-source-library', 'js/reading-source-library.js?v=20260916-source-reading8'],
+    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260917-primary-source12'],
     ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260914-home-featured-1'],
     ['lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2']
   ];
@@ -274,28 +271,8 @@ function animateDashboardEntry() {
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
 
-  const installSourcePriorityFix = () => {
-    const original = window.getMediaSourceCandidates;
-    if (typeof original !== 'function') return false;
-    if (original.__luxM3uPrimaryFix) return true;
-
-    const patched = function (user) {
-      const candidates = original.call(this, user);
-      if (!Array.isArray(candidates) || candidates.length < 2) return candidates;
-
-      const m3u = [];
-      const fallback = [];
-      candidates.forEach(candidate => {
-        if (candidate?.kind === 'm3u-url' || candidate?.kind === 'm3u-storage') m3u.push(candidate);
-        else fallback.push(candidate);
-      });
-      return [...m3u, ...fallback];
-    };
-
-    patched.__luxM3uPrimaryFix = true;
-    window.getMediaSourceCandidates = patched;
-    return true;
-  };
+  // Etapa 1.2: a ordem das fontes pertence ao núcleo em script.js.
+  const installSourcePriorityFix = () => true;
 
   const installGenericCategoryGuard = () => {
     const original = window.getSharedCategoryForItem;
