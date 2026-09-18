@@ -1,13 +1,15 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260917-rom-cleanup1';
+  const VERSION = '20260918-rom-cleanup2-retention';
   const DB_NAME = 'lux-game-hybrid-rom-cache';
   const DB_VERSION = 1;
   const ROM_STORE = 'roms';
   const SETTINGS_STORE = 'settings';
   const DIRECTORY_KEY = 'rom-directory';
   const MAX_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+  const RETENTION_PREFIX = 'lux-play:rom-retention:v1:';
+  const LEGACY_MODE_PREFIX = 'lux-play:rom-mode:v3:';
   const INSTALL_ATTEMPTS = 240;
 
   if (window.__luxRomCleanupVersion === VERSION) return;
@@ -43,6 +45,18 @@
   const deleteRecord = key => requestResult(ROM_STORE, 'readwrite', store => store.delete(key));
   const putRecord = record => requestResult(ROM_STORE, 'readwrite', store => store.put(record));
 
+  function recordRetention(record) {
+    if (!record?.key) return record?.retention === 'permanent' ? 'permanent' : 'temporary';
+    try {
+      const encoded = encodeURIComponent(record.key);
+      const current = localStorage.getItem(RETENTION_PREFIX + encoded);
+      if (current === 'permanent' || current === 'temporary') return current;
+      const legacy = localStorage.getItem(LEGACY_MODE_PREFIX + encoded);
+      if (legacy === 'permanent' || legacy === 'temporary') return legacy;
+    } catch (_) {}
+    return record.retention === 'permanent' ? 'permanent' : 'temporary';
+  }
+
   async function hasWritePermission(handle) {
     if (!handle) return false;
     try {
@@ -71,6 +85,7 @@
     if (!records.length) return { removed: 0, pending: 0 };
 
     const expired = records.filter(record => {
+      if (recordRetention(record) === 'permanent') return false;
       const lastUse = Number(record?.lastUsedAt || record?.savedAt || 0);
       return !lastUse || now - lastUse >= MAX_IDLE_MS;
     });
@@ -151,14 +166,14 @@
     cache.maxRomIdleMs = MAX_IDLE_MS;
 
     // Never touches lux-user-game-saves or any save-sync data. This module only
-    // deletes ROM metadata and files under Lux Play/ROMs.
+    // deletes temporary ROM metadata and files under Lux Play/ROMs.
     patchedCleanup().catch(() => {});
     window.addEventListener('focus', () => patchedCleanup().catch(() => {}));
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) patchedCleanup().catch(() => {});
     });
 
-    console.info('[Lux ROM Cleanup] ROMs ficam por 7 dias sem uso; saves permanecem separados.');
+    console.info('[Lux ROM Cleanup] Nuvem expira após 7 dias sem uso; Local permanente é preservado; saves ficam separados.');
     return true;
   }
 
