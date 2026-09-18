@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-hltb4';
+  const VERSION = '20260918-hltb5';
   const CACHE_PREFIX = 'lux-hltb-duration:';
   const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
   const CARD_ID = 'gameDetailsHltb';
@@ -117,13 +117,18 @@
       #gameDetailsSaveStatus.lux-game-save-status{margin-top:8px;color:#c4b5fd;font-size:11px;line-height:1.4}
       @keyframes luxHltbPulse{from{opacity:.56}to{opacity:1}}
       @media(max-width:1023px){
-        #gameDetailsPlayTime.lux-game-playtime-pill{grid-column:1!important;grid-row:2!important;width:100%;margin:0!important;align-self:start}
-        #gameDetailsStoragePanel{grid-column:1/-1!important;grid-row:3!important}
-        #gameDetailsSaveStatus.lux-game-save-status{grid-column:1/-1!important;grid-row:4!important;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:0!important;padding:10px 12px;border:1px solid rgba(88,28,135,.55);border-radius:13px;background:rgba(46,16,101,.22);color:#c4b5fd;font-size:10px;font-weight:800;text-align:center}
-        #gameDetailsSaveStatus.lux-game-save-status::before{content:'☁';font-size:13px;color:#c084fc}
-        #${CARD_ID}{grid-column:1/-1!important;grid-row:5!important;width:100%!important;margin-top:0!important}
-        #gameDetailsAboutSection{grid-column:1/-1!important;grid-row:6!important}
-        #gameDetailsReviewsSection{grid-column:1/-1!important;grid-row:7!important}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill{grid-column:1!important;grid-row:2!important;width:100%;margin:0!important;align-self:start}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsStoragePanel{grid-column:1/-1!important;grid-row:3!important}
+        #gameDetailsModal .lux-game-details-grid #${CARD_ID}{grid-column:1/-1!important;grid-row:4!important;width:100%!important;margin-top:0!important}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsAboutSection{grid-column:1/-1!important;grid-row:5!important}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsReviewsSection{grid-column:1/-1!important;grid-row:6!important}
+
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsSaveStatus.lux-game-save-status{grid-column:1/-1!important;grid-row:3!important;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin:0!important;padding:10px 12px;border:1px solid rgba(88,28,135,.55);border-radius:13px;background:rgba(46,16,101,.22);color:#c4b5fd;font-size:10px;font-weight:800;text-align:center}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsSaveStatus.lux-game-save-status::before{content:'☁';font-size:13px;color:#c084fc}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsStoragePanel{grid-row:4!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #${CARD_ID}{grid-row:5!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsAboutSection{grid-row:6!important}
+        #gameDetailsModal .lux-game-details-grid.lux-has-save-status #gameDetailsReviewsSection{grid-row:7!important}
       }
       @media(max-width:560px){
         #${CARD_ID} .lux-hltb-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
@@ -199,20 +204,28 @@
   }
 
   function polishSaveStatus() {
+    const grid = detailsGrid();
     const candidates = findSaveStatusCandidates();
-    if (!candidates.length) return;
+    if (!candidates.length) {
+      grid?.classList.remove('lux-has-save-status');
+      return;
+    }
     const status = candidates.at(-1);
     candidates.slice(0, -1).forEach(node => node.remove());
     status.id = 'gameDetailsSaveStatus';
     status.classList.add('lux-game-save-status');
 
     const actions = detailsAnchor();
-    const grid = detailsGrid();
+    const storage = document.getElementById('gameDetailsStoragePanel');
     const card = document.getElementById(CARD_ID);
     if (isCompactDetails() && grid) {
-      if (status.parentElement !== grid) grid.insertBefore(status, card || document.getElementById('gameDetailsAboutSection') || null);
-    } else if (actions && status.parentElement !== actions) {
-      actions.appendChild(status);
+      grid.classList.add('lux-has-save-status');
+      if (status.parentElement !== grid || status.nextElementSibling !== storage) {
+        grid.insertBefore(status, storage || card || document.getElementById('gameDetailsAboutSection') || null);
+      }
+    } else {
+      grid?.classList.remove('lux-has-save-status');
+      if (actions && status.parentElement !== actions) actions.appendChild(status);
     }
   }
 
