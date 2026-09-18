@@ -192,7 +192,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-profile-entry-fastboot]')) {
   const profileEntryFastbootScript = document.createElement('script');
-  profileEntryFastbootScript.src = 'js/profile-entry-fastboot.js?v=20260918-iptv-empty1';
+  profileEntryFastbootScript.src = 'js/profile-entry-fastboot.js?v=20260918-profile-fastboot4-https-only';
   profileEntryFastbootScript.async = false;
   profileEntryFastbootScript.dataset.luxProfileEntryFastboot = '1';
   document.head.appendChild(profileEntryFastbootScript);
