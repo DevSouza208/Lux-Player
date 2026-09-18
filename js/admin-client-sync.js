@@ -146,7 +146,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-games-actions-layout2';
+  const VERSION = '20260918-games-actions-layout3';
   if (window.__luxGamesActionsLayoutVersion === VERSION) return;
   window.__luxGamesActionsLayoutVersion = VERSION;
 
@@ -162,34 +162,34 @@
   }
 
   function ensureStyles() {
-    if (document.getElementById('luxGamesActionsPolish')) return;
+    document.getElementById('luxGamesActionsPolish')?.remove();
     const style = document.createElement('style');
     style.id = 'luxGamesActionsPolish';
     style.textContent = `
       #gamesSection .games-catalog-actions {
         align-items: center !important;
-        gap: 10px !important;
+        gap: 8px !important;
       }
       #gamesSection .games-catalog-actions [data-lux-games-action] {
         box-sizing: border-box !important;
-        height: 50px !important;
-        min-height: 50px !important;
-        padding: 0 18px !important;
-        border-radius: 14px !important;
+        height: 42px !important;
+        min-height: 42px !important;
+        padding: 0 14px !important;
+        border-radius: 12px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
-        gap: 8px !important;
+        gap: 7px !important;
         margin: 0 !important;
-        font-size: 14px !important;
+        font-size: 12px !important;
         font-weight: 800 !important;
         line-height: 1 !important;
         white-space: nowrap !important;
         vertical-align: middle !important;
       }
       #gamesSection .games-catalog-actions [data-lux-games-action] svg {
-        width: 19px !important;
-        height: 19px !important;
+        width: 16px !important;
+        height: 16px !important;
         flex: 0 0 auto !important;
       }
       #gamesSection .games-catalog-actions .games-filter-menu {
@@ -207,19 +207,19 @@
       }
       @media (max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
         #gamesSection .games-catalog-actions {
-          gap: 8px !important;
+          gap: 6px !important;
         }
         #gamesSection .games-catalog-actions [data-lux-games-action] {
-          height: 44px !important;
-          min-height: 44px !important;
-          padding: 0 14px !important;
-          border-radius: 12px !important;
-          font-size: 12px !important;
-          gap: 7px !important;
+          height: 38px !important;
+          min-height: 38px !important;
+          padding: 0 11px !important;
+          border-radius: 10px !important;
+          font-size: 11px !important;
+          gap: 6px !important;
         }
         #gamesSection .games-catalog-actions [data-lux-games-action] svg {
-          width: 17px !important;
-          height: 17px !important;
+          width: 15px !important;
+          height: 15px !important;
         }
       }
     `;
