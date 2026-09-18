@@ -147,6 +147,172 @@ function r2HttpMetadata(contentType) {
   };
 }
 
+function normalizeCatalogText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\.(mkv|mp4|avi|mov|ts|m3u8?|flv|webm)$/i, "")
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
+    .replace(/\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeCatalogAsset(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "").toLowerCase();
+  } catch {
+    return raw.split("#")[0].split("?")[0].replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+function detectPlaylistMediaType(group, name, url) {
+  const g = String(group || "").toLowerCase();
+  const u = String(url || "").toLowerCase();
+
+  if (
+    g.includes("24h") ||
+    g.includes("canais") ||
+    g.includes("abertos") ||
+    (g.includes("tv") && !g.includes("filmes") && !g.includes("series"))
+  ) return "live";
+
+  if (g.includes("serie") || g.includes("séries") || g.includes("temporada") || u.includes("/series/")) {
+    return "series";
+  }
+
+  if (
+    g.includes("filme") ||
+    g.includes("movie") ||
+    g.includes("vod") ||
+    g.includes("cinema") ||
+    u.endsWith(".mp4") ||
+    u.endsWith(".mkv") ||
+    u.includes("/movie/")
+  ) return "movies";
+
+  return "live";
+}
+
+function extractPlaylistStreamId(url) {
+  const raw = String(url || "");
+  const match = raw.match(/\/(?:live|movie)\/[^/]+\/[^/]+\/(\d+)(?:\.[^/?#]+)?(?:[?#]|$)/i);
+  if (match) return String(match[1]);
+
+  try {
+    const parsed = new URL(raw);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const last = decodeURIComponent(parts.at(-1) || "");
+    const fallback = last.match(/^(\d+)(?:\.[a-z0-9]{1,10})?$/i);
+    return fallback ? String(fallback[1]) : "";
+  } catch {
+    return "";
+  }
+}
+
+function parseExtinfMeta(line) {
+  const groupMatch = line.match(/group-title="([^"]*)"/i);
+  const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+  const commaIdx = line.lastIndexOf(",");
+  return {
+    group: groupMatch?.[1]?.trim() || "Geral",
+    logo: logoMatch?.[1]?.trim() || "",
+    name: commaIdx !== -1 ? line.slice(commaIdx + 1).trim() : "Sem título"
+  };
+}
+
+async function buildPlaybackIndexFromR2(env, objectKey) {
+  const object = await env.LISTS_BUCKET.get(objectKey);
+  if (!object?.body) throw new Error("Playlist sincronizada não disponível no R2 para gerar índice.");
+
+  const reader = object.body.pipeThrough(new TextDecoderStream()).getReader();
+  const items = [];
+  let buffer = "";
+  let pending = null;
+  let rawEntries = 0;
+  let liveEntries = 0;
+  let movieEntries = 0;
+  let ignoredEntries = 0;
+
+  const consumeLine = lineValue => {
+    const line = String(lineValue || "").trim();
+    if (!line) return;
+
+    if (line.startsWith("#EXTINF:")) {
+      pending = parseExtinfMeta(line);
+      return;
+    }
+
+    if (line.startsWith("#") || !pending) return;
+
+    rawEntries += 1;
+    const type = detectPlaylistMediaType(pending.group, pending.name, line);
+
+    if (type === "live" || type === "movies") {
+      const item = {
+        t: type === "live" ? "l" : "m",
+        n: normalizeCatalogText(pending.name),
+        u: line
+      };
+
+      const logo = normalizeCatalogAsset(pending.logo);
+      const streamId = extractPlaylistStreamId(line);
+      if (logo) item.l = logo;
+      if (streamId) item.i = streamId;
+
+      items.push(item);
+      if (type === "live") liveEntries += 1;
+      else movieEntries += 1;
+    } else {
+      ignoredEntries += 1;
+    }
+
+    pending = null;
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value || "";
+
+    let newline;
+    while ((newline = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, newline).replace(/\r$/, "");
+      buffer = buffer.slice(newline + 1);
+      consumeLine(line);
+    }
+  }
+
+  if (buffer) consumeLine(buffer.replace(/\r$/, ""));
+
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    items,
+    stats: {
+      rawEntries,
+      indexedEntries: items.length,
+      liveEntries,
+      movieEntries,
+      ignoredEntries
+    }
+  };
+}
+
+async function saveJsonToR2(env, key, value) {
+  const text = JSON.stringify(value);
+  await env.LISTS_BUCKET.put(key, text, {
+    httpMetadata: r2HttpMetadata("application/json; charset=utf-8")
+  });
+  return new TextEncoder().encode(text).byteLength;
+}
+
 async function saveRemoteResponseToR2(env, key, response, contentType) {
   if (!response.body) throw new Error("Fornecedor retornou resposta sem conteúdo.");
 
@@ -199,12 +365,13 @@ async function cleanupOldCatalog(env, username, previousManifest, currentVersion
   if (!oldVersion || oldVersion === currentVersion) return;
 
   const prefix = `catalogos/${encodeURIComponent(username)}/${oldVersion}`;
-  await Promise.allSettled(
-    catalogParts.map(([, , filename]) => env.LISTS_BUCKET.delete(`${prefix}/${filename}`))
-  );
+  await Promise.allSettled([
+    ...catalogParts.map(([, , filename]) => env.LISTS_BUCKET.delete(`${prefix}/${filename}`)),
+    env.LISTS_BUCKET.delete(`${prefix}/playback-index.json`)
+  ]);
 }
 
-async function syncXtreamCatalog(env, username, source, playlistUrl) {
+async function syncXtreamCatalog(env, username, source, playlistUrl, playbackIndex = null) {
   const version = String(Date.now());
   const encodedUser = encodeURIComponent(username);
   const versionPrefix = `catalogos/${encodedUser}/${version}`;
@@ -224,13 +391,29 @@ async function syncXtreamCatalog(env, username, source, playlistUrl) {
     bytes[part.name] = part.bytes;
   });
 
+  if (playbackIndex?.items?.length) {
+    const playbackFilename = "playback-index.json";
+    const playbackKey = `${versionPrefix}/${playbackFilename}`;
+    bytes.playbackIndex = await saveJsonToR2(env, playbackKey, playbackIndex);
+    files.playbackIndex = `${baseUrl(env)}/${playbackKey}`;
+  }
+
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: files.playbackIndex ? 3 : 2,
     version,
     syncedAt: new Date().toISOString(),
     playlist: playlistUrl,
     files,
-    bytes
+    bytes,
+    playback: files.playbackIndex
+      ? {
+          mode: "compact-index",
+          schemaVersion: playbackIndex.schemaVersion,
+          stats: playbackIndex.stats
+        }
+      : {
+          mode: "legacy-playlist"
+        }
   };
 
   const manifestKey = `catalogos/${encodedUser}/manifest.json`;
@@ -281,10 +464,19 @@ async function syncUser(env, user) {
 
     let catalog = null;
     let catalogError = null;
+    let playbackIndex = null;
+    let playbackIndexError = null;
 
     if (xtreamSource) {
       try {
-        catalog = await syncXtreamCatalog(env, username, xtreamSource, httpsUrl);
+        playbackIndex = await buildPlaybackIndexFromR2(env, objectKey);
+      } catch (error) {
+        playbackIndexError = error?.message || "Falha ao gerar índice compacto de reprodução";
+        console.warn(`[Lux Playlist Sync] Índice de playback de ${username}:`, error);
+      }
+
+      try {
+        catalog = await syncXtreamCatalog(env, username, xtreamSource, httpsUrl, playbackIndex);
       } catch (error) {
         catalogError = error?.message || "Falha ao sincronizar catálogo Xtream";
         console.warn(`[Lux Playlist Sync] Catálogo de ${username}:`, error);
@@ -304,7 +496,20 @@ async function syncUser(env, user) {
       url: httpsUrl,
       playlistBytes,
       catalog: catalog
-        ? { status: "success", ...catalog }
+        ? {
+            status: "success",
+            ...catalog,
+            playbackIndex: playbackIndex
+              ? {
+                  status: "success",
+                  entries: playbackIndex.items.length,
+                  stats: playbackIndex.stats
+                }
+              : {
+                  status: "error",
+                  message: playbackIndexError
+                }
+          }
         : xtreamSource
           ? { status: "error", message: catalogError }
           : { status: "skipped", message: "A URL não contém credenciais Xtream reconhecíveis" }
@@ -391,7 +596,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.4" });
+      return json({ ok: true, worker: "lux-playlist-sync", version: "1.6.5" });
     }
 
     if (
@@ -441,7 +646,7 @@ export default {
     return json({
       ok: true,
       message: "Lux Playlist Sync ativo",
-      version: "1.6.4"
+      version: "1.6.5"
     });
   },
 
