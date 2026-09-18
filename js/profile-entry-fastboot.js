@@ -1,185 +1,120 @@
 (() => {
   'use strict';
 
-  // Profile entry must never start the media bootstrap before the canonical
-  // Cloudflare HTTPS snapshot has installed its loader. There is no fallback
-  // IPTV path: web, Electron and local builds all wait for the same source.
-  const VERSION = '20260918-profile-fastboot4-https-only';
-  const SNAPSHOT_SRC = 'js/iptv-https-snapshot.js?v=20260918-https-snapshot-clean1';
+  // IPTV EMPTY BASELINE — 18/09/2026
+  // Durante a reconstrução do catálogo, nenhuma fonte IPTV pode carregar.
+  // Este módulo bloqueia todas as rotas antigas (Xtream, M3U, snapshot, retry,
+  // importação local e conexão manual) antes de startApp() abrir o perfil.
+  const VERSION = '20260918-iptv-empty1';
   if (window.__luxProfileEntryFastbootInstalled === VERSION) return;
   window.__luxProfileEntryFastbootInstalled = VERSION;
+  window.__luxIptvRebuildDisabled = true;
 
-  const DEFERRED_BOOT_JOBS = [
-    'syncCurrentSubscriptionFromProvider',
-    'loadNotifications',
-    'loadLiveSchedule',
-    'loadGamesCatalog',
-    'loadReadingCatalog'
-  ];
+  const disabledMessage = 'IPTV temporariamente vazia: aguardando o novo carregador HTTPS.';
 
-  let snapshotReadyPromise = null;
-
-  const ensureHttpsSnapshotReady = () => {
-    if (window.LuxHttpsIptv?.install?.() && window.loadMediaSourcesInPriority?.__luxHttpsSnapshot) {
-      return Promise.resolve(window.LuxHttpsIptv);
-    }
-    if (snapshotReadyPromise) return snapshotReadyPromise;
-
-    snapshotReadyPromise = (async () => {
-      let script = document.querySelector('script[data-lux-https-snapshot]');
-      if (!script) {
-        script = document.createElement('script');
-        script.src = SNAPSHOT_SRC;
-        script.async = false;
-        script.dataset.luxHttpsSnapshot = '1';
-        document.head.appendChild(script);
-      }
-
-      window.LuxDevkit?.running?.('IPTV-HTTPS', 'boot-gate', 'Aguardando o leitor HTTPS obrigatório...');
-
-      for (let attempt = 0; attempt < 240; attempt += 1) {
-        const api = window.LuxHttpsIptv;
-        if (api?.install?.() && window.loadMediaSourcesInPriority?.__luxHttpsSnapshot) {
-          window.LuxDevkit?.success?.('IPTV-HTTPS', 'boot-gate', 'Leitor HTTPS confirmado antes do boot', 0, {
-            version: api.version || null,
-            source: 'cloudflare-snapshot-only'
-          });
-          return api;
-        }
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-
-      throw new Error('O snapshot IPTV HTTPS obrigatório não ficou disponível. O Lux não usará uma fonte alternativa.');
-    })().catch(error => {
-      snapshotReadyPromise = null;
-      window.LuxDevkit?.emit?.({
-        category: 'IPTV-HTTPS',
-        status: 'error',
-        label: 'boot-gate',
-        message: error?.message || 'Falha ao preparar o snapshot HTTPS.'
-      });
-      throw error;
-    });
-
-    return snapshotReadyPromise;
-  };
-
-  const sameProfile = (left, right) => {
-    if (!left || !right) return false;
-    if (left.data_key && right.data_key) return String(left.data_key) === String(right.data_key);
-    return Number(left.slot || 1) === Number(right.slot || 1);
-  };
-
-  const activeProfileIs = profile => {
+  const resetIptvState = () => {
+    try { ++xtreamLoadSequence; } catch (_) {}
+    try { xtreamMovieContext = null; } catch (_) {}
+    try { xtreamSeriesContext = null; } catch (_) {}
+    try { xtreamMovieSectionRetryDone = true; } catch (_) {}
+    try { xtreamSeriesSectionRetryDone = true; } catch (_) {}
     try {
-      return sameProfile(typeof currentUser !== 'undefined' ? currentUser?.profile : null, profile);
-    } catch (_) {
-      return false;
-    }
+      xtreamMoviesState = { status: 'idle', count: 0, error: '', timeoutMs: 0, reason: 'disabled' };
+      xtreamSeriesState = { status: 'idle', count: 0, error: '', timeoutMs: 0, reason: 'disabled' };
+    } catch (_) {}
+    try {
+      if (typeof clearMediaSourceState === 'function') clearMediaSourceState();
+      else if (typeof allMediaItems !== 'undefined') allMediaItems = [];
+    } catch (_) {}
   };
 
-  const safeRefresh = profile => {
-    if (!activeProfileIs(profile)) return;
-    requestAnimationFrame(() => {
-      if (!activeProfileIs(profile)) return;
-      try {
-        const section = typeof currentSection !== 'undefined' ? (currentSection || 'home') : 'home';
-        if (typeof window.setSection === 'function') window.setSection(section);
-        else if (section === 'home' && typeof window.renderHome === 'function') window.renderHome();
-      } catch (error) {
-        console.warn('[Lux Play] Atualização visual pós-perfil indisponível.', error);
-      }
+  const disabledLoader = async () => {
+    resetIptvState();
+    window.LuxDevkit?.info?.('IPTV', 'disabled', 'Carregamento de IPTV desativado para reconstrução HTTPS', {
+      candidates: [],
+      live: 0,
+      movies: 0,
+      series: 0
     });
+    return false;
   };
 
-  const runDeferredJobs = (jobs, profile) => {
-    if (!jobs.size || !activeProfileIs(profile)) return;
-
-    setTimeout(async () => {
-      if (!activeProfileIs(profile)) return;
-
-      // Provider refresh may change account metadata, but IPTV itself remains
-      // locked to the global HTTPS snapshot. A metadata change only reloads
-      // that same canonical source.
-      const providerJob = jobs.get('syncCurrentSubscriptionFromProvider');
-      if (providerJob) {
-        let before = '';
-        try {
-          before = JSON.stringify([
-            currentUser?.m3uUrl || '', currentUser?.m3uHttpsUrl || '',
-            currentUser?.urlXc || '', currentUser?.userXc || '', currentUser?.senhaXc || ''
-          ]);
-          await providerJob.fn.apply(providerJob.thisArg, providerJob.args);
-          const after = JSON.stringify([
-            currentUser?.m3uUrl || '', currentUser?.m3uHttpsUrl || '',
-            currentUser?.urlXc || '', currentUser?.userXc || '', currentUser?.senhaXc || ''
-          ]);
-          if (before !== after && activeProfileIs(profile) && typeof window.loadMediaSourcesInPriority === 'function') {
-            await ensureHttpsSnapshotReady();
-            await window.loadMediaSourcesInPriority();
-          }
-        } catch (error) {
-          console.warn('[Lux Play] Atualização da assinatura em segundo plano indisponível.', error);
-        }
-      }
-
-      const secondaryNames = ['loadNotifications', 'loadLiveSchedule', 'loadGamesCatalog', 'loadReadingCatalog'];
-      const secondary = secondaryNames
-        .map(name => jobs.get(name))
-        .filter(Boolean)
-        .map(job => Promise.resolve().then(() => job.fn.apply(job.thisArg, job.args)));
-
-      if (secondary.length) await Promise.allSettled(secondary);
-      safeRefresh(profile);
-    }, 0);
+  const disabledAction = async () => {
+    resetIptvState();
+    throw new Error(disabledMessage);
   };
 
-  const install = () => {
-    const original = window.activateAccountProfile;
-    if (typeof original !== 'function') return false;
-    if (original.__luxProfileEntryFastbootWrapped === VERSION) return true;
+  const installIptvEmptyBaseline = () => {
+    resetIptvState();
 
-    const wrapped = async function(profile) {
-      const deferred = new Map();
-      const restorers = [];
+    // Não existe seleção de fonte nesta fase.
+    window.getMediaSourceCandidates = () => [];
+    window.loadMediaSourcesInPriority = disabledLoader;
+    window.resolveUserCredentials = () => ({ isXc: false, url: '' });
 
-      DEFERRED_BOOT_JOBS.forEach(name => {
-        const fn = window[name];
-        if (typeof fn !== 'function') return;
-        const stub = function(...args) {
-          deferred.set(name, { fn, args, thisArg: this });
-          return Promise.resolve(null);
-        };
-        window[name] = stub;
-        restorers.push(() => {
-          if (window[name] === stub) window[name] = fn;
-        });
-      });
-
-      try {
-        // Hard gate: there is no Xtream/M3U/HTTP fallback anymore. The profile
-        // cannot enter startApp until the HTTPS snapshot owns the media loader.
-        await ensureHttpsSnapshotReady();
-        if (!window.loadMediaSourcesInPriority?.__luxHttpsSnapshot) {
-          throw new Error('A fonte IPTV HTTPS obrigatória não assumiu o carregamento do Lux.');
-        }
-        return await original.apply(this, arguments);
-      } finally {
-        restorers.reverse().forEach(restore => restore());
-        if (activeProfileIs(profile)) runDeferredJobs(deferred, profile);
-      }
+    // Bloqueia todas as rotas antigas, inclusive ações manuais.
+    window.loadFromXtreamApi = disabledAction;
+    window.loadPlaylist = disabledAction;
+    window.importLocalM3u = disabledAction;
+    window.retryXtreamMovies = async () => false;
+    window.retryXtreamSeries = async () => false;
+    window.manualReloadXtreamMovies = async () => false;
+    window.manualReloadXtreamSeries = async () => false;
+    window.saveManualConnection = () => {
+      resetIptvState();
+      alert(disabledMessage);
+    };
+    window.adminSendCategoriesToUsers = () => {
+      const status = document.getElementById('adminCategorySyncStatus');
+      if (status) status.textContent = 'IPTV em reconstrução. Nenhum catálogo está sendo carregado.';
     };
 
-    wrapped.__luxProfileEntryFastbootWrapped = VERSION;
-    wrapped.__luxProfileEntryFastbootOriginal = original;
+    // Módulos antigos não podem reativar o catálogo depois do boot.
+    window.LuxHttpsIptv = undefined;
+    window.LuxSyncedCatalog = undefined;
+    window.__luxHttpsSnapshotActive = false;
+    window.__luxSyncedXtreamActive = false;
+
+    const connectionButton = document.getElementById('connectionConfigBtn');
+    if (connectionButton) connectionButton.classList.add('hidden');
+    const localInput = document.getElementById('localM3uFile');
+    if (localInput) localInput.disabled = true;
+    const adminButton = document.getElementById('adminCategorySyncButton');
+    if (adminButton) {
+      adminButton.disabled = true;
+      adminButton.textContent = 'IPTV em reconstrução';
+      adminButton.removeAttribute('onclick');
+    }
+
+    window.__luxIptvEmptyBaselineInstalled = VERSION;
+    return true;
+  };
+
+  const installProfileWrapper = () => {
+    const original = window.activateAccountProfile;
+    if (typeof original !== 'function') return false;
+    if (original.__luxIptvEmptyWrapped === VERSION) return true;
+
+    const wrapped = async function(profile) {
+      installIptvEmptyBaseline();
+      return original.apply(this, arguments);
+    };
+    wrapped.__luxIptvEmptyWrapped = VERSION;
+    wrapped.__luxIptvEmptyOriginal = original;
     window.activateAccountProfile = wrapped;
     return true;
   };
 
+  // script.js e profiles.js já foram carregados quando este arquivo é injetado
+  // por game-save-store.js. Ainda assim repetimos por alguns ciclos para cobrir
+  // qualquer ordem de execução do navegador sem criar uma segunda rota IPTV.
+  installIptvEmptyBaseline();
+  installProfileWrapper();
+
   let attempts = 0;
   const timer = setInterval(() => {
     attempts += 1;
-    if (install() || attempts >= 240) clearInterval(timer);
-  }, 50);
-  install();
+    installIptvEmptyBaseline();
+    if (installProfileWrapper() || attempts >= 120) clearInterval(timer);
+  }, 25);
 })();
