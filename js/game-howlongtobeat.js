@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-hltb5';
+  const VERSION = '20260918-hltb6';
   const CACHE_PREFIX = 'lux-hltb-duration:';
   const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
   const CARD_ID = 'gameDetailsHltb';
@@ -117,7 +117,9 @@
       #gameDetailsSaveStatus.lux-game-save-status{margin-top:8px;color:#c4b5fd;font-size:11px;line-height:1.4}
       @keyframes luxHltbPulse{from{opacity:.56}to{opacity:1}}
       @media(max-width:1023px){
-        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill{grid-column:1!important;grid-row:2!important;width:100%;margin:0!important;align-self:start}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsCover{border-bottom-left-radius:0!important;border-bottom-right-radius:0!important}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill{grid-column:1!important;grid-row:2!important;width:100%;box-sizing:border-box;margin:-16px 0 0!important;align-self:start;justify-content:flex-start;text-align:left;padding:10px 11px;border-radius:0 0 16px 16px!important;border-top:1px solid rgba(168,85,247,.24);background:linear-gradient(180deg,rgba(46,16,101,.46),rgba(24,15,41,.95));color:#eadcff;font-size:10px;font-weight:900;line-height:1.25;box-shadow:0 10px 22px rgba(0,0,0,.18)}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill::before{flex:0 0 auto;font-size:13px}
         #gameDetailsModal .lux-game-details-grid #gameDetailsStoragePanel{grid-column:1/-1!important;grid-row:3!important}
         #gameDetailsModal .lux-game-details-grid #${CARD_ID}{grid-column:1/-1!important;grid-row:4!important;width:100%!important;margin-top:0!important}
         #gameDetailsModal .lux-game-details-grid #gameDetailsAboutSection{grid-column:1/-1!important;grid-row:5!important}
@@ -135,7 +137,7 @@
         #${CARD_ID} .lux-hltb-stat{padding:8px 7px;text-align:center}
         #${CARD_ID} .lux-hltb-label{font-size:9px}
         #${CARD_ID} .lux-hltb-value{font-size:14px}
-        #gameDetailsPlayTime.lux-game-playtime-pill{padding:7px 6px;font-size:9px}
+        #gameDetailsModal .lux-game-details-grid #gameDetailsPlayTime.lux-game-playtime-pill{margin:-10px 0 0!important;padding:9px 9px;font-size:9px;border-radius:0 0 14px 14px!important}
         #gameDetailsSaveStatus.lux-game-save-status{padding:9px 8px;font-size:9px}
       }
     `;
