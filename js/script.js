@@ -136,6 +136,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     let activeAdminTab = 'clientes';
 
     let mediaSourceState = { available: false, kind: '', label: '', count: 0 };
+    let xtreamMoviesState = { status: 'idle', count: 0, error: '' };
+    let xtreamLoadSequence = 0;
 
     function setMediaSourceState(kind, label, count = allMediaItems.length) {
       mediaSourceState = { available: true, kind, label, count: Number(count) || 0 };
@@ -2901,9 +2903,93 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const started = performance.now();
       window.LuxDevkit?.running('IPTV', label, 'Consultando API do provedor...');
       const data = await fetchXtreamJson(url, timeoutMs);
+      const elapsed = Math.round(performance.now() - started);
       const count = Array.isArray(data) ? data.length : (data && typeof data === 'object' ? Object.keys(data).length : 0);
-      window.LuxDevkit?.success('IPTV', label, 'Resposta recebida', Math.round(performance.now() - started), { count });
+
+      if (!count && elapsed >= timeoutMs - 150) {
+        window.LuxDevkit?.warn('IPTV', label, `Tempo limite de ${Math.round(timeoutMs / 1000)}s atingido`, {
+          count,
+          timeoutMs
+        });
+      } else {
+        window.LuxDevkit?.success('IPTV', label, 'Resposta recebida', elapsed, { count });
+      }
       return data;
+    }
+
+    function renderMoviesLoadingState() {
+      if (currentSection !== 'movies' || xtreamMoviesState.status !== 'loading') return;
+      const container = document.getElementById('vodGridContainer');
+      if (!container) return;
+      container.innerHTML = `
+        <div class="col-span-full flex flex-col items-center justify-center py-20 text-center">
+          <div class="w-12 h-12 rounded-2xl bg-purple-950/60 border border-purple-800/40 flex items-center justify-center mb-3">
+            <div class="w-5 h-5 animate-spin rounded-full border-2 border-purple-300/30 border-t-purple-300"></div>
+          </div>
+          <h3 class="text-white font-bold text-base">Carregando catálogo de filmes...</h3>
+          <p class="text-purple-400/60 text-xs mt-1">Esse catálogo é maior e pode levar alguns segundos.</p>
+        </div>
+      `;
+    }
+
+    async function mergeXtreamMoviesInBackground({ promise, loadId, sourceUser, cleanServer, user, pass, vodCatMap }) {
+      try {
+        const vodStreams = await promise;
+        if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return;
+
+        if (!Array.isArray(vodStreams) || !0) {
+          xtreamMoviesState = { status: 'error', count: 0, error: 'O provedor não retornou filmes dentro do limite de 60s.' };
+          window.LuxDevkit?.warn('IPTV', 'filmes-background', xtreamMoviesState.error);
+          if (currentSection === 'movies') {
+            renderCategories();
+            filterMedia();
+          }
+          return;
+        }
+
+        const movieItems = vodStreams.map((item, index) => {
+          const groupName = vodCatMap[item.category_id] || 'Filmes';
+          const ext = item.container_extension || 'mp4';
+          return {
+            id: `xtream-movie-${item.stream_id || index}`,
+            stream_id: item.stream_id,
+            name: item.name,
+            group: groupName,
+            logo: item.stream_icon || '',
+            url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
+            type: 'movies',
+            source: 'xtream',
+            isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
+          };
+        }).map(applySharedCategoryToItem).filter(profileAllowsMedia);
+
+        if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return;
+
+        allMediaItems = [
+          ...allMediaItems.filter(item => item.type !== 'movies'),
+          ...movieItems
+        ].sort((a, b) => Number(Boolean(a.isAdult)) - Number(Boolean(b.isAdult)));
+
+        xtreamMoviesState = { status: 'ready', count: movieItems.length, error: '' };
+        setMediaSourceState('xtream', 'Xtream Codes', allMediaItems.length);
+
+        window.LuxDevkit?.success('IPTV', 'filmes-background', 'Catálogo de filmes integrado', 0, {
+          movies: movieItems.length,
+          total: allMediaItems.length
+        });
+
+        if (currentSection === 'movies') {
+          renderCategories();
+          filterMedia();
+        } else if (currentSection === 'home') {
+          try { renderHomeLancamentos2026(); } catch (_) {}
+          Promise.resolve(loadTmdbHeroBanner()).catch(() => {});
+        }
+      } catch (error) {
+        if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return;
+        xtreamMoviesState = { status: 'error', count: 0, error: error?.message || 'Falha ao carregar filmes.' };
+        window.LuxDevkit?.warn('IPTV', 'filmes-background', xtreamMoviesState.error);
+      }
     }
 
     async function loadFromXtreamApi(server, user, pass) {
@@ -2915,26 +3001,44 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       try {
         document.getElementById('splashStatusMessage').innerText = 'Baixando catálogo e categorias...';
 
-        // Categorias e catálogo são independentes: baixamos as seis respostas na mesma rodada.
+        const loadId = ++xtreamLoadSequence;
+        const sourceUser = currentUser;
+        xtreamMoviesState = { status: 'loading', count: 0, error: '' };
+
+        // Filmes são muito maiores: começam junto, mas têm até 60s e NÃO bloqueiam o boot.
+        const vodStreamsPromise = fetchXtreamJsonTraced(
+          'streams-filmes',
+          `${baseApi}&action=get_vod_streams`,
+          60000
+        );
+
         const [
           liveCatsRes,
           vodCatsRes,
           seriesCatsRes,
           liveStreams,
-          vodStreams,
           seriesStreams
         ] = await Promise.all([
           fetchXtreamJsonTraced('categorias-tv', `${baseApi}&action=get_live_categories`),
           fetchXtreamJsonTraced('categorias-filmes', `${baseApi}&action=get_vod_categories`),
           fetchXtreamJsonTraced('categorias-series', `${baseApi}&action=get_series_categories`),
           fetchXtreamJsonTraced('streams-tv', `${baseApi}&action=get_live_streams`),
-          fetchXtreamJsonTraced('streams-filmes', `${baseApi}&action=get_vod_streams`),
           fetchXtreamJsonTraced('streams-series', `${baseApi}&action=get_series`)
         ]);
 
         const liveCatMap = Object.fromEntries(liveCatsRes.map(c => [c.category_id, c.category_name]));
         const vodCatMap = Object.fromEntries(vodCatsRes.map(c => [c.category_id, c.category_name]));
         const seriesCatMap = Object.fromEntries(seriesCatsRes.map(c => [c.category_id, c.category_name]));
+
+        void mergeXtreamMoviesInBackground({
+          promise: vodStreamsPromise,
+          loadId,
+          sourceUser,
+          cleanServer,
+          user,
+          pass,
+          vodCatMap
+        });
 
         const parsedItems = [];
 
@@ -2948,21 +3052,6 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
             logo: item.stream_icon || '',
             url: `${cleanServer}/live/${user}/${pass}/${item.stream_id}.m3u8`,
             type: 'live',
-            isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
-          });
-        });
-
-        vodStreams.forEach(item => {
-          const groupName = vodCatMap[item.category_id] || 'Filmes';
-          const ext = item.container_extension || 'mp4';
-          parsedItems.push({
-            id: parsedItems.length,
-            stream_id: item.stream_id,
-            name: item.name,
-            group: groupName,
-            logo: item.stream_icon || '',
-            url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
-            type: 'movies',
             isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
           });
         });
@@ -2990,7 +3079,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         mergeSharedVodsIntoPlayer();
         window.LuxDevkit?.success('IPTV', 'catalogo-pronto', 'Catálogo Xtream disponível', null, {
           live: liveStreams.length,
-          movies: vodStreams.length,
+          movies: 'background',
           series: seriesStreams.length,
           total: parsedItems.length,
           visibleForProfile: allMediaItems.length
@@ -3280,6 +3369,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     });
 
     function setSection(section) {
+      const sectionTraceStarted = performance.now();
+      window.LuxDevkit?.running('SECTION', section, 'Abrindo seção...');
       if (currentSection !== section) animateDashboardEntry();
       currentSection = section;
       
@@ -3376,6 +3467,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
         renderCategories();
         filterMedia();
+        if (section === 'movies') renderMoviesLoadingState();
       }
 
       ['home', 'live', 'movies', 'series', 'games', 'reading'].forEach(sec => {
@@ -3413,6 +3505,19 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         updateNavIndicator();
         lucide.createIcons();
       }
+
+      let sectionItems = null;
+      try {
+        if (section === 'live') sectionItems = allMediaItems.filter(item => item.type === 'live').length;
+        else if (section === 'movies') sectionItems = allMediaItems.filter(item => item.type === 'movies').length;
+        else if (section === 'series') sectionItems = allMediaItems.filter(item => item.type === 'series').length;
+        else if (section === 'games') sectionItems = Array.isArray(gamesCatalog) ? gamesCatalog.length : null;
+      } catch (_) {}
+
+      window.LuxDevkit?.success('SECTION', section, 'Seção pronta', Math.round(performance.now() - sectionTraceStarted), {
+        items: sectionItems,
+        moviesState: section === 'movies' ? xtreamMoviesState.status : undefined
+      });
     }
 
     function updateLayoutForScreen() {
@@ -4118,6 +4223,12 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       if (!query) return;
 
+      const searchStarted = performance.now();
+      window.LuxDevkit?.running('SEARCH', 'consulta', 'Executando busca...', null, {
+        query,
+        fromSection: currentSection
+      });
+
       addRecentSearch(query);
 
       if (currentSection === 'home' || currentSection === 'reading') {
@@ -4132,6 +4243,14 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       if (currentSection === 'games') renderGamesCatalog();
       else filterMedia();
       closeSearchModal();
+
+      window.LuxDevkit?.success('SEARCH', 'consulta', 'Busca aplicada', Math.round(performance.now() - searchStarted), {
+        query,
+        section: currentSection,
+        results: currentSection === 'games'
+          ? null
+          : (Array.isArray(currentFilteredItems) ? currentFilteredItems.length : null)
+      });
     }
 
     function handleSearchKey(event) {
