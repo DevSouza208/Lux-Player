@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-hybrid-rom-storage1';
+  const VERSION = '20260918-hybrid-rom-storage2-retention';
   const DB_NAME = 'lux-game-hybrid-rom-cache';
   const DB_VERSION = 1;
   const ROM_STORE = 'roms';
@@ -9,6 +9,8 @@
   const DIRECTORY_KEY = 'rom-directory';
   const LARGE_ROM_THRESHOLD = 100 * 1024 * 1024;
   const MAX_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+  const RETENTION_PREFIX = 'lux-play:rom-retention:v1:';
+  const LEGACY_MODE_PREFIX = 'lux-play:rom-mode:v3:';
   const INSTALL_ATTEMPTS = 240;
   const MODAL_ID = 'luxRomDirectoryPicker';
 
@@ -143,7 +145,7 @@
           <div class="lux-rom-dir-icon">📁</div>
           <h3 id="luxRomDirTitle">Escolha onde guardar jogos grandes</h3>
           <p>Jogos acima de 100 MB precisam ser salvos como arquivos no seu dispositivo. Escolha uma pasta para o Lux Play usar.</p>
-          <div class="lux-rom-dir-note">O Lux criará automaticamente <strong>Lux Play/ROMs</strong> dentro da pasta escolhida. Jogos que ficarem 7 dias sem uso serão removidos automaticamente. Saves, favoritos e progresso não são apagados.</div>
+          <div class="lux-rom-dir-note">O Lux criará automaticamente <strong>Lux Play/ROMs</strong> dentro da pasta escolhida. No modo <strong>Nuvem</strong>, jogos sem uso por 7 dias podem ser removidos; no modo <strong>Local</strong>, o arquivo permanece até você limpar manualmente. Saves, favoritos e progresso não são apagados.</div>
           <div class="lux-rom-dir-actions">
             <button type="button" class="lux-rom-dir-cancel">Agora não</button>
             <button type="button" class="lux-rom-dir-pick">${canRequestExisting ? 'Autorizar pasta' : 'Escolher pasta'}</button>
@@ -346,6 +348,31 @@
     return String(game?.id || source.path || source.url || game?.name || '').slice(0, 700);
   }
 
+  function retentionPreferenceByKey(key) {
+    if (!key) return null;
+    try {
+      const current = localStorage.getItem(RETENTION_PREFIX + encodeURIComponent(key));
+      if (current === 'permanent' || current === 'temporary') return current;
+      const legacy = localStorage.getItem(LEGACY_MODE_PREFIX + encodeURIComponent(key));
+      if (legacy === 'permanent' || legacy === 'temporary') return legacy;
+    } catch (_) {}
+    return null;
+  }
+
+  function retentionPreference(game, resolveSource) {
+    return retentionPreferenceByKey(recordKey(game, resolveSource));
+  }
+
+  function saveRetentionPreference(game, resolveSource, retention) {
+    const key = recordKey(game, resolveSource);
+    if (!key) return;
+    try { localStorage.setItem(RETENTION_PREFIX + encodeURIComponent(key), retention); } catch (_) {}
+  }
+
+  function effectiveRecordRetention(record) {
+    return retentionPreferenceByKey(record?.key) || (record?.retention === 'permanent' ? 'permanent' : 'temporary');
+  }
+
   async function removeNewRecord(record, prompt = false) {
     if (!record?.key) return true;
     if (record.storage === 'directory') {
@@ -361,6 +388,14 @@
     const records = await readAllRecords().catch(() => []);
     let removed = 0;
     for (const record of records) {
+      const retention = effectiveRecordRetention(record);
+      if (retention === 'permanent') {
+        if (record.retention !== 'permanent') {
+          record.retention = 'permanent';
+          await putRecord(record).catch(() => {});
+        }
+        continue;
+      }
       const lastUse = Number(record?.lastUsedAt || record?.savedAt || 0);
       if (!lastUse || now - lastUse >= MAX_IDLE_MS) {
         const deleted = await removeNewRecord(record, false);
@@ -382,7 +417,13 @@
       return null;
     }
 
-    if (Date.now() - Number(record.lastUsedAt || record.savedAt || 0) >= MAX_IDLE_MS) {
+    const retention = retentionPreference(game, resolveSource) || (record.retention === 'permanent' ? 'permanent' : 'temporary');
+    if (record.retention !== retention) {
+      record.retention = retention;
+      await putRecord(record).catch(() => {});
+    }
+
+    if (retention !== 'permanent' && Date.now() - Number(record.lastUsedAt || record.savedAt || 0) >= MAX_IDLE_MS) {
       await removeNewRecord(record, false);
       return null;
     }
@@ -435,7 +476,8 @@
             lastUsedAt: record.lastUsedAt,
             source: record.source || 'r2',
             path: record.r2Path || '',
-            storage: record.storage
+            storage: record.storage,
+            retention: effectiveRecordRetention(record)
           };
         }
       }
@@ -452,7 +494,8 @@
           lastUsedAt: record.lastUsedAt,
           source: record.source || 'r2',
           path: record.r2Path || '',
-          storage: record.storage
+          storage: record.storage,
+          retention: effectiveRecordRetention(record)
         };
       }
       return original.status ? original.status(game) : null;
@@ -463,6 +506,7 @@
       if (!source?.url) throw new Error('Este jogo não possui uma ROM disponível.');
       await cleanupNewRecords().catch(() => {});
 
+      const wantedRetention = retentionPreference(game, resolveSource) || 'temporary';
       const ownExisting = await validNewRecord(game, resolveSource, true, true).catch(() => null);
       if (ownExisting) {
         onProgress(1);
@@ -472,12 +516,13 @@
           lastUsedAt: ownExisting.lastUsedAt,
           source: ownExisting.source || source.source,
           path: ownExisting.r2Path || source.path,
-          storage: ownExisting.storage
+          storage: ownExisting.storage,
+          retention: effectiveRecordRetention(ownExisting)
         };
       }
 
       const legacyExisting = original.status ? await original.status(game).catch(() => null) : null;
-      if (legacyExisting) {
+      if (legacyExisting && wantedRetention !== 'permanent') {
         onProgress(1);
         return legacyExisting;
       }
@@ -508,12 +553,13 @@
           size: saved.size,
           savedAt: now,
           lastUsedAt: now,
+          retention: wantedRetention,
           name: game.name || game.title || 'Lux Play ROM',
           console: game.console || ''
         };
         await putRecord(record);
         onProgress(1);
-        return { size: record.size, savedAt: now, lastUsedAt: now, source: record.source, path: record.r2Path, storage: 'directory' };
+        return { size: record.size, savedAt: now, lastUsedAt: now, source: record.source, path: record.r2Path, storage: 'directory', retention: wantedRetention };
       }
 
       if (large && !supportsDirectoryPicker() && original.download) {
@@ -531,6 +577,7 @@
         size: saved.size,
         savedAt: now,
         lastUsedAt: now,
+        retention: wantedRetention,
         name: game.name || game.title || 'Lux Play ROM',
         console: game.console || ''
       };
@@ -555,12 +602,13 @@
           size: fileSaved.size,
           savedAt: now,
           lastUsedAt: now,
+          retention: wantedRetention,
           name: game.name || game.title || 'Lux Play ROM',
           console: game.console || ''
         };
         await putRecord(fileRecord);
         onProgress(1);
-        return { size: fileRecord.size, savedAt: now, lastUsedAt: now, source: fileRecord.source, path: fileRecord.r2Path, storage: 'directory' };
+        return { size: fileRecord.size, savedAt: now, lastUsedAt: now, source: fileRecord.source, path: fileRecord.r2Path, storage: 'directory', retention: wantedRetention };
       }
 
       const verified = await validNewRecord(game, resolveSource, false, false);
@@ -569,7 +617,28 @@
         throw new Error('A ROM terminou de baixar, mas o navegador não confirmou o armazenamento local.');
       }
       onProgress(1);
-      return { size: verified.size, savedAt: verified.savedAt, lastUsedAt: verified.lastUsedAt, source: verified.source, path: verified.r2Path, storage: verified.storage };
+      return { size: verified.size, savedAt: verified.savedAt, lastUsedAt: verified.lastUsedAt, source: verified.source, path: verified.r2Path, storage: verified.storage, retention: effectiveRecordRetention(verified) };
+    };
+
+    cache.setRetention = async function (game, mode) {
+      const retention = mode === 'permanent' ? 'permanent' : 'temporary';
+      saveRetentionPreference(game, resolveSource, retention);
+      const key = recordKey(game, resolveSource);
+      const record = key ? await readRecord(key).catch(() => null) : null;
+      if (record) {
+        record.retention = retention;
+        record.lastUsedAt = Date.now();
+        await putRecord(record);
+      }
+      return retention;
+    };
+
+    cache.getRetention = async function (game) {
+      const preferred = retentionPreference(game, resolveSource);
+      if (preferred) return preferred;
+      const key = recordKey(game, resolveSource);
+      const record = key ? await readRecord(key).catch(() => null) : null;
+      return record?.retention === 'permanent' ? 'permanent' : 'temporary';
     };
 
     cache.remove = async function (game) {
@@ -590,6 +659,7 @@
 
     cache.chooseLargeRomFolder = () => ensureDirectoryHandle(true);
     cache.largeRomThreshold = LARGE_ROM_THRESHOLD;
+    cache.maxIdleMs = MAX_IDLE_MS;
     cache.hybridStorageVersion = VERSION;
     cache.__luxHybridStoragePatched = true;
 
@@ -609,6 +679,7 @@
           console: record.console,
           size: Number(record.size) || record.blob?.size || 0,
           storage: record.storage,
+          retention: effectiveRecordRetention(record),
           savedAt: record.savedAt,
           lastUsedAt: record.lastUsedAt
         }))
@@ -618,7 +689,7 @@
     cleanupNewRecords().catch(() => {});
     window.addEventListener('focus', () => cleanupNewRecords().catch(() => {}));
     document.addEventListener('visibilitychange', () => { if (!document.hidden) cleanupNewRecords().catch(() => {}); });
-    console.info('[Lux ROM Storage] Armazenamento híbrido ativo: Blob < 100 MB, pasta escolhida >= 100 MB.');
+    console.info('[Lux ROM Storage] Armazenamento híbrido ativo: Blob < 100 MB, pasta escolhida >= 100 MB; Nuvem = 7 dias, Local = permanente.');
     return true;
   }
 
