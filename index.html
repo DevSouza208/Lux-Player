@@ -46,6 +46,14 @@
           <input id="authPass" type="password" placeholder="••••••••" class="w-full mt-1 bg-[#1a122c] border border-purple-900/50 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-purple-500 transition-all">
         </div>
 
+        <label class="flex items-center justify-between gap-3 text-xs text-purple-200/80 cursor-pointer select-none">
+          <span class="flex items-center gap-2">
+            <input id="authRemember" type="checkbox" class="w-4 h-4 accent-purple-600 cursor-pointer">
+            <span>Manter conectado</span>
+          </span>
+          <span class="text-[10px] text-purple-400/60">neste dispositivo</span>
+        </label>
+
         <button id="loginBtn" onclick="handleLogin()" class="w-full mt-2 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-purple-900/40 flex items-center justify-center gap-2">
           <span>Entrar</span>
         </button>
@@ -995,8 +1003,8 @@
       <footer class="reader-footer"><button id="readerPrev" type="button" aria-label="Página anterior">← Anterior</button><div class="reader-location"><span id="readerPosition">Preparando…</span><progress id="readerProgress" max="1" value="0" aria-label="Progresso da obra"></progress></div><form id="readerPageForm"><label for="readerPage">Página</label><input id="readerPage" type="number" min="1" value="1" aria-label="Ir para página"><button type="submit">Ir</button></form><button id="readerNext" type="button" aria-label="Próxima página">Próxima →</button></footer>
     </div>
   </dialog>
-  <script src="js/ui-motion.js"></script>
-  <script src="js/script.js?v=20260912-source-order1"></script>
+  <script src="js/ui-motion.js?v=20260917-auth12"></script>
+  <script src="js/script.js?v=20260917-auth12"></script>
   <script src="js/profiles.js"></script>
   <script src="js/avatar-gallery.js"></script>
   <script src="js/game-save-store.js"></script>

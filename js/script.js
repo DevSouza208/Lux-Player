@@ -377,10 +377,16 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       loadAdminR2Config();
     }
 
-    function unlockAdminR2Config() {
+    async function unlockAdminR2Config() {
       const input = document.getElementById('adminR2Password');
-      const valid = currentUser?.role === 'admin' && !!input.value && input.value === currentUser.pass;
+      const password = input.value;
       input.value = '';
+      let valid = false;
+      try {
+        valid = currentUser?.role === 'admin' && !!password && await verifyCurrentAccountPassword(password);
+      } catch (error) {
+        console.warn('[LUX-AUTH-012] Falha ao confirmar senha administrativa:', error);
+      }
       if (!valid) {
         document.getElementById('adminR2UnlockStatus').textContent = 'Senha incorreta. Use a mesma senha do login de administrador.';
         input.focus();
@@ -748,14 +754,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       setupVodPlayerControls();
       loadAdminR2Config();
       switchAdminTab(activeAdminTab);
-      const savedUser = localStorage.getItem('lux_auth_user');
-      const savedPass = localStorage.getItem('lux_auth_pass');
-      
-      if (savedUser && savedPass) {
-        document.getElementById('authEmail').value = savedUser;
-        document.getElementById('authPass').value = savedPass;
-        handleLogin();
-      }
+      clearLegacyAuthStorage();
+      const rememberedUser = localStorage.getItem(AUTH_USER_KEY) || '';
+      if (rememberedUser) document.getElementById('authEmail').value = rememberedUser;
+      restoreAuthSession();
     });
 
     function getItemKey(item) {
@@ -1444,15 +1446,118 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       }
     }
 
-    async function fetchUsersFromSupabase() {
-      const { data, error } = await supabaseClient
-        .from('usuarios')
-        .select('*');
-      
+    // ============================================================
+    // [LUX-AUTH-012] AUTENTICAÇÃO ÚNICA — EDGE FUNCTION auth-login
+    // ============================================================
+    const AUTH_USER_KEY = 'lux_auth_user';
+    const AUTH_TOKEN_KEY = 'lux_auth_token';
+    const AUTH_REMEMBER_KEY = 'lux_auth_remember';
+    const AUTH_SESSION_USER_KEY = 'lux_auth_session_user_v2';
+    const AUTH_SESSION_TOKEN_KEY = 'lux_auth_session_token_v2';
+
+    function isLuxSessionToken(value) {
+      return /^luxsess_[A-Za-z0-9_-]{40,200}$/.test(String(value || ''));
+    }
+
+    function clearLegacyAuthStorage() {
+      const localKeys = ['lux_auth_pass', 'lux_remember_login', 'lux_remember_user', 'lux_remember_pass'];
+      const sessionKeys = ['lux_auth_session_user', 'lux_auth_session_pass'];
+      try { localKeys.forEach(key => localStorage.removeItem(key)); } catch (_) {}
+      try { sessionKeys.forEach(key => sessionStorage.removeItem(key)); } catch (_) {}
+    }
+
+    function getStoredAuthSession() {
+      try {
+        const localUser = String(localStorage.getItem(AUTH_USER_KEY) || '').trim();
+        const localToken = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+        if (localUser && isLuxSessionToken(localToken) && localStorage.getItem(AUTH_REMEMBER_KEY) === '1') {
+          return { username: localUser, credential: localToken, persistent: true };
+        }
+        const sessionUser = String(sessionStorage.getItem(AUTH_SESSION_USER_KEY) || '').trim();
+        const sessionToken = sessionStorage.getItem(AUTH_SESSION_TOKEN_KEY) || '';
+        if (sessionUser && isLuxSessionToken(sessionToken)) {
+          return { username: sessionUser, credential: sessionToken, persistent: false };
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    function storeAuthSession(username, credential, persistent) {
+      if (!username || !isLuxSessionToken(credential)) return;
+      clearLegacyAuthStorage();
+      try {
+        localStorage.setItem(AUTH_USER_KEY, username);
+        sessionStorage.setItem(AUTH_SESSION_USER_KEY, username);
+        sessionStorage.setItem(AUTH_SESSION_TOKEN_KEY, credential);
+        if (persistent) {
+          localStorage.setItem(AUTH_TOKEN_KEY, credential);
+          localStorage.setItem(AUTH_REMEMBER_KEY, '1');
+        } else {
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          localStorage.removeItem(AUTH_REMEMBER_KEY);
+        }
+      } catch (_) {}
+    }
+
+    function clearAuthSession({ keepUser = false } = {}) {
+      clearLegacyAuthStorage();
+      try {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(AUTH_REMEMBER_KEY);
+        sessionStorage.removeItem(AUTH_SESSION_USER_KEY);
+        sessionStorage.removeItem(AUTH_SESSION_TOKEN_KEY);
+        if (!keepUser) localStorage.removeItem(AUTH_USER_KEY);
+      } catch (_) {}
+    }
+
+    async function authenticateLuxAccount(username, credential, remember = false) {
+      const { data, error } = await supabaseClient.functions.invoke('auth-login', {
+        body: { action: 'login', username, credential, remember: remember === true }
+      });
       if (error) {
-        throw new Error(error.message);
+        let message = 'auth_backend_request_failed';
+        try { message = (await error.context.json()).error || message; } catch (_) {}
+        throw new Error(message);
       }
-      return data || [];
+      if (data?.error) throw new Error(data.error);
+      return data || { ok: false, reason: 'invalid_response' };
+    }
+
+    async function revokeLuxSession(username, credential) {
+      if (!username || !isLuxSessionToken(credential)) return;
+      try {
+        await supabaseClient.functions.invoke('auth-login', {
+          body: { action: 'logout', username, credential }
+        });
+      } catch (_) {}
+    }
+
+    async function verifyCurrentAccountPassword(password) {
+      if (!currentUser?.user || !password) return false;
+      const result = await authenticateLuxAccount(currentUser.user, password, false);
+      if (!result?.ok || !isLuxSessionToken(result.sessionCredential)) return false;
+      revokeLuxSession(currentUser.user, result.sessionCredential);
+      return true;
+    }
+
+    function mapAuthenticatedAccount(row, credential) {
+      const cargo = String(row?.cargo || 'user').trim().toLowerCase();
+      return {
+        name: row?.nome || '',
+        user: row?.usuario || '',
+        pass: credential,
+        m3uUrl: row?.lista_m3u || '',
+        m3uHttpsUrl: row?.lista_m3u_https || '',
+        dueDate: row?.vencimento || '',
+        userXc: row?.userxc || '',
+        senhaXc: row?.senhaxc || '',
+        urlXc: row?.urlxc || '',
+        adultPin: row?.['senha18+'] || '',
+        categoryMap: row?.categorias_compartilhadas && typeof row.categorias_compartilhadas === 'object'
+          ? row.categorias_compartilhadas
+          : {},
+        role: cargo === 'admin' ? 'admin' : 'user'
+      };
     }
 
     function parseSupabaseUsers(rows) {
@@ -1471,21 +1576,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         const categoryMap = row.categorias_compartilhadas && typeof row.categorias_compartilhadas === 'object'
           ? row.categorias_compartilhadas
           : {};
-
         const isAdmin = cargo.trim().toLowerCase() === 'admin';
-
         return {
-          name: nome,
-          user: usuario,
-          pass: senha,
-          m3uUrl: lista,
-          m3uHttpsUrl: listaHttps,
-          dueDate: vencimento,
-          userXc: userXc,
-          senhaXc: senhaXc,
-          urlXc: urlXc,
-          adultPin: senhaAdulto,
-          categoryMap,
+          name: nome, user: usuario, pass: senha, m3uUrl: lista, m3uHttpsUrl: listaHttps,
+          dueDate: vencimento, userXc, senhaXc, urlXc, adultPin: senhaAdulto, categoryMap,
           role: isAdmin ? 'admin' : 'user'
         };
       });
@@ -1524,7 +1618,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     async function handleLogin() {
       const userInput = document.getElementById('authEmail').value.trim();
-      const passInput = document.getElementById('authPass').value.trim();
+      const passInput = document.getElementById('authPass').value;
+      const remember = Boolean(document.getElementById('authRemember')?.checked);
       const statusText = document.getElementById('authStatusText');
       const loginBtn = document.getElementById('loginBtn');
 
@@ -1534,42 +1629,79 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         return;
       }
 
-      statusText.innerText = 'Verificando dados no Supabase...';
+      statusText.innerText = 'Entrando na sua conta...';
       statusText.className = 'text-xs text-center text-purple-400 font-medium';
       loginBtn.disabled = true;
 
-      let loginStage = 'database';
+      let loginStage = 'auth';
       try {
-        const rows = await fetchUsersFromSupabase();
-        loginStage = 'profiles';
-        const users = parseSupabaseUsers(rows);
-        const account = users.find(u => u.user.toLowerCase() === userInput.toLowerCase() && u.pass === passInput);
-
-        if (account) {
-          if (account.dueDate && isExpired(account.dueDate)) {
-            statusText.innerText = `Acesso vencido em ${account.dueDate}.`;
-            statusText.className = 'text-xs text-center text-rose-400 font-medium';
-            loginBtn.disabled = false;
-            return;
-          }
-          
-          currentUser = account;
-          isAdultUnlocked = false;
-          statusText.innerText = '';
-          
-          localStorage.setItem('lux_auth_user', userInput);
-          localStorage.setItem('lux_auth_pass', passInput);
-          
-          await openProfilePicker(true);
-        } else {
+        const result = await authenticateLuxAccount(userInput, passInput, remember);
+        if (result?.ok === false && result?.reason === 'expired') {
+          statusText.innerText = result.dueDate ? `Acesso vencido em ${result.dueDate}.` : 'Acesso vencido.';
+          statusText.className = 'text-xs text-center text-rose-400 font-medium';
+          return;
+        }
+        if (!result?.ok || !result?.account || !isLuxSessionToken(result.sessionCredential)) {
           statusText.innerText = 'Usuário ou senha incorretos.';
           statusText.className = 'text-xs text-center text-rose-400 font-medium';
+          return;
         }
+
+        const account = mapAuthenticatedAccount(result.account, result.sessionCredential);
+        if (!account.user) throw new Error('auth_backend_invalid_account');
+        currentUser = account;
+        isAdultUnlocked = false;
+        storeAuthSession(account.user, result.sessionCredential, Boolean(result.persistent));
+        document.getElementById('authEmail').value = account.user;
+        document.getElementById('authPass').value = '';
+        document.getElementById('authRemember').checked = Boolean(result.persistent);
+        statusText.innerText = '';
+
+        loginStage = 'profiles';
+        await openProfilePicker(true);
       } catch (err) {
-        statusText.innerText = loginStage === 'database' ? 'Não foi possível conectar ao Supabase. Tente novamente.' : 'Não foi possível abrir os perfis. Recarregue o aplicativo.';
+        console.error('[LUX-AUTH-012] Falha no login:', err);
+        statusText.innerText = loginStage === 'profiles'
+          ? 'Login confirmado, mas não foi possível abrir os perfis.'
+          : 'Não foi possível entrar agora. Tente novamente.';
         statusText.className = 'text-xs text-center text-rose-400 font-medium';
       } finally {
         loginBtn.disabled = false;
+      }
+    }
+
+    async function restoreAuthSession() {
+      const stored = getStoredAuthSession();
+      const statusText = document.getElementById('authStatusText');
+      const remember = document.getElementById('authRemember');
+      if (!stored) return false;
+
+      if (remember) remember.checked = stored.persistent;
+      statusText.innerText = 'Restaurando sua sessão...';
+      statusText.className = 'text-xs text-center text-purple-400 font-medium';
+
+      try {
+        const result = await authenticateLuxAccount(stored.username, stored.credential, stored.persistent);
+        if (!result?.ok || !result?.account || !isLuxSessionToken(result.sessionCredential)) {
+          clearAuthSession({ keepUser: true });
+          statusText.innerText = 'Sua sessão expirou. Digite sua senha para entrar.';
+          statusText.className = 'text-xs text-center text-purple-300 font-medium';
+          return false;
+        }
+        currentUser = mapAuthenticatedAccount(result.account, result.sessionCredential);
+        isAdultUnlocked = false;
+        storeAuthSession(currentUser.user, result.sessionCredential, Boolean(result.persistent));
+        document.getElementById('authEmail').value = currentUser.user;
+        document.getElementById('authPass').value = '';
+        if (remember) remember.checked = Boolean(result.persistent);
+        statusText.innerText = '';
+        await openProfilePicker(true);
+        return true;
+      } catch (error) {
+        console.warn('[LUX-AUTH-012] Não foi possível restaurar a sessão:', error);
+        statusText.innerText = 'Não foi possível restaurar a sessão. Digite sua senha para entrar.';
+        statusText.className = 'text-xs text-center text-purple-300 font-medium';
+        return false;
       }
     }
 
@@ -1585,6 +1717,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function logout() {
+      const sessionUser = currentUser?.user || '';
+      const sessionCredential = currentUser?.pass || '';
+      if (isLuxSessionToken(sessionCredential)) revokeLuxSession(sessionUser, sessionCredential);
       window.LuxReadingAdmin?.stop();
       window.LuxReader?.close();
       transitionScreen(document.getElementById('profilePicker'), false);
@@ -1601,10 +1736,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       allMediaItems = [];
       isAdultUnlocked = false;
       
-      localStorage.removeItem('lux_auth_user');
-      localStorage.removeItem('lux_auth_pass');
+      clearAuthSession({ keepUser: false });
       document.getElementById('authEmail').value = '';
       document.getElementById('authPass').value = '';
+      const remember = document.getElementById('authRemember');
+      if (remember) remember.checked = false;
       
       const auth = document.getElementById('authScreen');
       auth.classList.remove('hidden');
@@ -1673,13 +1809,15 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       if (!currentUser) return;
       showSplashScreen();
       try {
-        const rows = await fetchUsersFromSupabase();
-        const users = parseSupabaseUsers(rows);
-        const updated = users.find(u => u.user.toLowerCase() === currentUser.user.toLowerCase());
-        if (updated) {
-          currentUser = {...updated,accountRole:updated.role,profile:currentUser.profile,role:currentUser.profile?.is_child?'user':updated.role};
-          await loadMediaSourcesInPriority();
+        const result = await authenticateLuxAccount(currentUser.user, currentUser.pass, false);
+        if (!result?.ok || !result?.account || !isLuxSessionToken(result.sessionCredential)) {
+          throw new Error('Sua sessão expirou. Entre novamente.');
         }
+        const updated = mapAuthenticatedAccount(result.account, result.sessionCredential);
+        const activeProfile = currentUser.profile;
+        currentUser = {...updated,accountRole:updated.role,profile:activeProfile,role:activeProfile?.is_child?'user':updated.role};
+        storeAuthSession(currentUser.user, result.sessionCredential, Boolean(result.persistent));
+        await loadMediaSourcesInPriority();
         await loadSharedVodCatalog();
         setSection(currentSection);
       } catch (e) { alert(e.message); }
@@ -1924,8 +2062,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         alert('Não foi possível salvar: ' + error.message);
       } else {
         if (editing && currentUser?.user === editing && data) {
-          currentUser = { ...currentUser, ...parseSupabaseUsers([data])[0] };
-          if (localStorage.getItem('lux_auth_user')) localStorage.setItem('lux_auth_pass', currentUser.pass);
+          const authCredential = currentUser.pass;
+          currentUser = { ...currentUser, ...parseSupabaseUsers([data])[0], pass: authCredential };
           document.getElementById('userExpiryBadge').textContent = currentUser.dueDate ? `Val: ${currentUser.dueDate}` : 'Val: Ilimitada';
         }
         alert(editing ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!');

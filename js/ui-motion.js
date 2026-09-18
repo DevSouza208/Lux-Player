@@ -26,7 +26,6 @@
     './css/reader.css',
     './js/ui-motion.js',
     './js/friendly-ui.js',
-    './js/auto-login-resilience.js',
     './js/section-transition-loader.js',
     './js/script.js',
     './js/synced-catalog.js',
@@ -180,8 +179,7 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260915-v163-friendly-ui-25');
-  loadSync('lux-auto-login-resilience', 'js/auto-login-resilience.js?v=20260915-auto-login-resilience1');
+  loadSync('lux-friendly-ui', 'js/friendly-ui.js?v=20260917-auth12');
 })();
 
 (() => {
