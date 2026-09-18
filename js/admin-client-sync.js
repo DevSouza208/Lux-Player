@@ -142,3 +142,102 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
 })();
+
+(() => {
+  'use strict';
+
+  const VERSION = '20260918-games-actions-layout1';
+  if (window.__luxGamesActionsLayoutVersion === VERSION) return;
+  window.__luxGamesActionsLayoutVersion = VERSION;
+
+  const MOBILE_QUERY = '(max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse)';
+  const mobileMedia = window.matchMedia(MOBILE_QUERY);
+  let observer = null;
+  let scheduled = false;
+
+  const onclickText = element => String(element?.getAttribute?.('onclick') || '');
+
+  function findButton(root, matcher) {
+    return [...(root?.querySelectorAll?.('button') || [])].find(button => matcher(onclickText(button), button)) || null;
+  }
+
+  function decorateFavorite(button) {
+    if (!button) return;
+    button.dataset.luxGamesFavoriteAction = '1';
+    button.classList.add('w-full', 'sm:w-auto', 'justify-center', 'min-h-[42px]', 'rounded-xl', 'px-3', 'py-2');
+  }
+
+  function applyLayout() {
+    const games = document.getElementById('gamesSection');
+    const actions = games?.querySelector('.games-catalog-actions');
+    const menu = actions?.querySelector('.games-filter-menu');
+    if (!games || !actions || !menu) return false;
+
+    const panel = menu.querySelector('.games-filter-panel');
+    const openRom = findButton(actions, onclick => onclick.includes("externalRomInput"));
+    const favorite = findButton(games, onclick => onclick.includes("setGamesFilter('favorites')"));
+    const review = findButton(games, onclick => onclick.includes('reviewUnapprovedGames'));
+    const gamepad = document.getElementById('luxGamepadSetupBtn');
+    const mobile = mobileMedia.matches;
+
+    if (favorite) {
+      decorateFavorite(favorite);
+      if (openRom && favorite.nextElementSibling !== openRom) actions.insertBefore(favorite, openRom);
+      else if (!openRom && favorite.parentElement !== actions) actions.insertBefore(favorite, menu);
+      favorite.hidden = false;
+    }
+
+    if (review) {
+      review.dataset.luxGamesDesktopAction = '1';
+      review.classList.add('rounded-xl', 'px-3', 'py-2', 'min-h-[42px]');
+      review.hidden = mobile;
+      if (!mobile && review.parentElement !== actions) actions.insertBefore(review, menu);
+    }
+
+    if (gamepad) {
+      gamepad.dataset.luxGamesDesktopAction = '1';
+      gamepad.classList.add('rounded-xl', 'px-3', 'py-2', 'min-h-[42px]');
+      gamepad.hidden = mobile;
+      if (!mobile && gamepad.parentElement !== actions) actions.insertBefore(gamepad, menu);
+    }
+
+    // Filtros ficam apenas com os filtros reais. Caso algum render antigo reinsira
+    // as ações administrativas no painel, elas são retiradas novamente no desktop
+    // e simplesmente ocultadas no celular.
+    if (panel) {
+      if (review && !mobile && review.parentElement === panel) actions.insertBefore(review, menu);
+      if (gamepad && !mobile && gamepad.parentElement === panel) actions.insertBefore(gamepad, menu);
+    }
+
+    return true;
+  }
+
+  function scheduleLayout() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      applyLayout();
+    });
+  }
+
+  function start() {
+    applyLayout();
+
+    const games = document.getElementById('gamesSection');
+    if (games && !observer) {
+      observer = new MutationObserver(scheduleLayout);
+      observer.observe(games, { childList: true, subtree: true });
+    }
+
+    mobileMedia.addEventListener?.('change', scheduleLayout);
+    window.addEventListener('resize', scheduleLayout, { passive: true });
+
+    // O Lux Gamepad é carregado logo depois deste módulo. Essas tentativas cobrem
+    // a primeira injeção sem depender do tempo exato da rede/cache.
+    [100, 300, 700, 1400, 2500].forEach(delay => setTimeout(scheduleLayout, delay));
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+  else start();
+})();
