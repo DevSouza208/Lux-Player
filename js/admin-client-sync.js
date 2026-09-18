@@ -146,7 +146,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-games-actions-layout1';
+  const VERSION = '20260918-games-actions-layout2';
   if (window.__luxGamesActionsLayoutVersion === VERSION) return;
   window.__luxGamesActionsLayoutVersion = VERSION;
 
@@ -161,49 +161,115 @@
     return [...(root?.querySelectorAll?.('button') || [])].find(button => matcher(onclickText(button), button)) || null;
   }
 
-  function decorateFavorite(button) {
-    if (!button) return;
-    button.dataset.luxGamesFavoriteAction = '1';
-    button.classList.add('w-full', 'sm:w-auto', 'justify-center', 'min-h-[42px]', 'rounded-xl', 'px-3', 'py-2');
+  function ensureStyles() {
+    if (document.getElementById('luxGamesActionsPolish')) return;
+    const style = document.createElement('style');
+    style.id = 'luxGamesActionsPolish';
+    style.textContent = `
+      #gamesSection .games-catalog-actions {
+        align-items: center !important;
+        gap: 10px !important;
+      }
+      #gamesSection .games-catalog-actions [data-lux-games-action] {
+        box-sizing: border-box !important;
+        height: 50px !important;
+        min-height: 50px !important;
+        padding: 0 18px !important;
+        border-radius: 14px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        margin: 0 !important;
+        font-size: 14px !important;
+        font-weight: 800 !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
+        vertical-align: middle !important;
+      }
+      #gamesSection .games-catalog-actions [data-lux-games-action] svg {
+        width: 19px !important;
+        height: 19px !important;
+        flex: 0 0 auto !important;
+      }
+      #gamesSection .games-catalog-actions .games-filter-menu {
+        margin: 0 !important;
+      }
+      #gamesSection .games-catalog-actions .games-filter-menu > summary[data-lux-games-action] {
+        list-style: none !important;
+        cursor: pointer !important;
+      }
+      #gamesSection .games-catalog-actions .games-filter-menu > summary[data-lux-games-action]::-webkit-details-marker {
+        display: none !important;
+      }
+      #gamesSection .games-catalog-actions [data-lux-games-action][hidden] {
+        display: none !important;
+      }
+      @media (max-width: 767px), (orientation: landscape) and (max-width: 1280px) and (max-height: 600px) and (pointer: coarse) {
+        #gamesSection .games-catalog-actions {
+          gap: 8px !important;
+        }
+        #gamesSection .games-catalog-actions [data-lux-games-action] {
+          height: 44px !important;
+          min-height: 44px !important;
+          padding: 0 14px !important;
+          border-radius: 12px !important;
+          font-size: 12px !important;
+          gap: 7px !important;
+        }
+        #gamesSection .games-catalog-actions [data-lux-games-action] svg {
+          width: 17px !important;
+          height: 17px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function markAction(element, kind) {
+    if (!element) return;
+    element.dataset.luxGamesAction = kind;
   }
 
   function applyLayout() {
+    ensureStyles();
+
     const games = document.getElementById('gamesSection');
     const actions = games?.querySelector('.games-catalog-actions');
     const menu = actions?.querySelector('.games-filter-menu');
     if (!games || !actions || !menu) return false;
 
     const panel = menu.querySelector('.games-filter-panel');
-    const openRom = findButton(actions, onclick => onclick.includes("externalRomInput"));
+    const filterSummary = menu.querySelector('summary');
+    const openRom = findButton(actions, onclick => onclick.includes('externalRomInput'));
     const favorite = findButton(games, onclick => onclick.includes("setGamesFilter('favorites')"));
     const review = findButton(games, onclick => onclick.includes('reviewUnapprovedGames'));
     const gamepad = document.getElementById('luxGamepadSetupBtn');
     const mobile = mobileMedia.matches;
 
+    markAction(favorite, 'favorite');
+    markAction(openRom, 'open-rom');
+    markAction(review, 'review');
+    markAction(gamepad, 'gamepad');
+    markAction(filterSummary, 'filters');
+
     if (favorite) {
-      decorateFavorite(favorite);
+      favorite.classList.add('w-full', 'sm:w-auto', 'justify-center');
       if (openRom && favorite.nextElementSibling !== openRom) actions.insertBefore(favorite, openRom);
       else if (!openRom && favorite.parentElement !== actions) actions.insertBefore(favorite, menu);
       favorite.hidden = false;
     }
 
     if (review) {
-      review.dataset.luxGamesDesktopAction = '1';
-      review.classList.add('rounded-xl', 'px-3', 'py-2', 'min-h-[42px]');
       review.hidden = mobile;
       if (!mobile && review.parentElement !== actions) actions.insertBefore(review, menu);
     }
 
     if (gamepad) {
-      gamepad.dataset.luxGamesDesktopAction = '1';
-      gamepad.classList.add('rounded-xl', 'px-3', 'py-2', 'min-h-[42px]');
       gamepad.hidden = mobile;
       if (!mobile && gamepad.parentElement !== actions) actions.insertBefore(gamepad, menu);
     }
 
-    // Filtros ficam apenas com os filtros reais. Caso algum render antigo reinsira
-    // as ações administrativas no painel, elas são retiradas novamente no desktop
-    // e simplesmente ocultadas no celular.
     if (panel) {
       if (review && !mobile && review.parentElement === panel) actions.insertBefore(review, menu);
       if (gamepad && !mobile && gamepad.parentElement === panel) actions.insertBefore(gamepad, menu);
@@ -233,8 +299,6 @@
     mobileMedia.addEventListener?.('change', scheduleLayout);
     window.addEventListener('resize', scheduleLayout, { passive: true });
 
-    // O Lux Gamepad é carregado logo depois deste módulo. Essas tentativas cobrem
-    // a primeira injeção sem depender do tempo exato da rede/cache.
     [100, 300, 700, 1400, 2500].forEach(delay => setTimeout(scheduleLayout, delay));
   }
 
