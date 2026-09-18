@@ -104,18 +104,18 @@ function removeLocalProfileSaves(user) {
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-hybrid-storage]')) {
   const romStorageScript = document.createElement('script');
-  romStorageScript.src = 'js/game-rom-hybrid-storage.js?v=20260916-hybrid-rom-storage1';
+  romStorageScript.src = 'js/game-rom-hybrid-storage.js?v=20260918-hybrid-rom-storage2-retention';
   romStorageScript.async = true;
   romStorageScript.dataset.luxRomHybridStorage = '1';
   document.head.appendChild(romStorageScript);
 }
 
-if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-storage-mode]')) {
-  const romStorageModeScript = document.createElement('script');
-  romStorageModeScript.src = 'js/game-rom-storage-mode.js?v=20260917-rom-storage-mode3-local-first';
-  romStorageModeScript.async = true;
-  romStorageModeScript.dataset.luxRomStorageMode = '1';
-  document.head.appendChild(romStorageModeScript);
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-strict-local-runtime]')) {
+  const strictLocalRuntimeScript = document.createElement('script');
+  strictLocalRuntimeScript.src = 'js/game-strict-local-runtime.js?v=20260918-strict-local-runtime1';
+  strictLocalRuntimeScript.async = true;
+  strictLocalRuntimeScript.dataset.luxStrictLocalRuntime = '1';
+  document.head.appendChild(strictLocalRuntimeScript);
 }
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-playback-file]')) {
