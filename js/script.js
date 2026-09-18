@@ -284,7 +284,6 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       if (tab === 'games') { if (!coreStatusDraft) renderAdminCoreStatusPanel(); syncCoreStatusesFromCloud(); }
       if (tab === 'books') { renderAdminBooksList(); window.LuxReadingAdmin?.refresh(); }
-      if (tab === 'vods') renderAdminVodList();
       if (tab === 'avatars') loadAvatarGallery(true);
     }
 
@@ -372,6 +371,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
     function lockAdminR2Config() {
       adminR2UnlockedUser = null;
+      if (!MANUAL_VOD_ENABLED) return;
       document.getElementById('adminR2Fields').disabled = true;
       document.getElementById('adminR2Fields').hidden = false;
       document.getElementById('adminR2ConfigContent').inert = true;
@@ -427,6 +427,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function loadAdminR2Config() {
+      if (!MANUAL_VOD_ENABLED) return;
       const config = getJsonStorage('lux_r2_config', { domain: 'https://pub-e7c51b64f286481c8772a8f345759fd9.r2.dev', bucket: 'luxvod', prefix: 'vods/' });
       document.getElementById('adminR2Domain').value = 'https://pub-e7c51b64f286481c8772a8f345759fd9.r2.dev';
       document.getElementById('adminR2Bucket').value = 'luxvod';
@@ -455,10 +456,14 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       return getJsonStorage('lux_admin_books_catalog', []);
     }
 
+    // [LUX-PRIMARY-SOURCE-12] VOD manual/R2 está aposentado temporariamente.
+    // Mantemos o código legado abaixo apenas para rollback até a limpeza definitiva.
+    const MANUAL_VOD_ENABLED = false;
     let sharedVodCatalog = [];
     let vodCatalogSyncBusy = false;
 
     function getPendingVodCatalog() {
+      if (!MANUAL_VOD_ENABLED) return [];
       return getJsonStorage('lux_admin_vod_catalog', []);
     }
 
@@ -467,6 +472,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function requestVodCatalog(action, payload = {}) {
+      if (!MANUAL_VOD_ENABLED) throw new Error('VOD manual está desativado temporariamente.');
       const user = currentUser;
       if (!user) throw new Error('Entre na sua conta para acessar o catálogo.');
       const { data, error } = await supabaseClient.functions.invoke('vod-catalog', {
@@ -482,6 +488,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     function mergeSharedVodsIntoPlayer() {
+      if (!MANUAL_VOD_ENABLED) {
+        sharedVodCatalog = [];
+        allMediaItems = allMediaItems.filter(item => item.source !== 'r2');
+        return;
+      }
       allMediaItems = [...allMediaItems.filter(item => item.source !== 'r2'), ...sharedVodCatalog.map(vod => ({
         id: 'r2_' + (vod.objectKey || vod.url), name: vod.title, group: vod.category || 'VOD R2',
         logo: vod.poster || '', url: vod.url, type: 'movies', source: 'r2',
@@ -490,6 +501,11 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function loadSharedVodCatalog() {
+      if (!MANUAL_VOD_ENABLED) {
+        sharedVodCatalog = [];
+        try { localStorage.removeItem('lux_admin_vod_catalog'); } catch (_) {}
+        return [];
+      }
       const vods = [];
       let page;
       do {
@@ -504,6 +520,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function publishPendingVodCatalog() {
+      if (!MANUAL_VOD_ENABLED) {
+        try { localStorage.removeItem('lux_admin_vod_catalog'); } catch (_) {}
+        return [];
+      }
       if (currentUser?.role !== 'admin') throw new Error('Entre com uma conta de administrador.');
       if (vodCatalogSyncBusy) throw new Error('Aguarde a publicação em andamento e tente novamente.');
       vodCatalogSyncBusy = true;
@@ -759,6 +779,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     window.addEventListener('DOMContentLoaded', () => {
       setupAppUpdateNotifications();
       setupVodPlayerControls();
+      try { localStorage.removeItem('lux_admin_vod_catalog'); } catch (_) {}
       loadAdminR2Config();
       switchAdminTab(activeAdminTab);
       clearLegacyAuthStorage();
@@ -1919,16 +1940,9 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         statusMsg.innerText = '[1.3] Nenhuma lista principal configurada. Jogos e Leitura continuam disponíveis.';
       }
 
-      try {
-        await luxBootTraceRun(
-          'vod-compartilhado',
-          'Carregando vídeos adicionados manualmente...',
-          () => loadSharedVodCatalog(),
-          { nonBlocking: true }
-        );
-      } catch (error) {
-        console.warn('[Lux Boot 1.3] VOD compartilhado falhou, boot continua.', error);
-      }
+      sharedVodCatalog = [];
+      try { localStorage.removeItem('lux_admin_vod_catalog'); } catch (_) {}
+      window.LuxDevkit?.info('BOOT', 'vod-manual-desativado', 'VOD manual/R2 fora do boot nesta etapa.');
 
       await luxBootTraceRun(
         'progresso-cloud',
@@ -1987,7 +2001,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         currentUser = {...updated,accountRole:updated.role,profile:activeProfile,role:activeProfile?.is_child?'user':updated.role};
         storeAuthSession(currentUser.user, result.sessionCredential, Boolean(result.persistent));
         await loadMediaSourcesInPriority();
-        await loadSharedVodCatalog();
+        sharedVodCatalog = [];
         setSection(currentSection);
       } catch (e) { alert(e.message); }
       hideSplashScreen();

@@ -405,7 +405,7 @@
         <button data-admin-tab="games" onclick="switchAdminTab('games')" class="admin-tab-btn bg-[#180f29] text-purple-200 hover:bg-[#23153b] px-3 py-2 rounded-xl text-[11px] font-bold">Jogos</button>
         <button data-admin-tab="books" onclick="switchAdminTab('books')" class="admin-tab-btn bg-[#180f29] text-purple-200 hover:bg-[#23153b] px-3 py-2 rounded-xl text-[11px] font-bold">Livros</button>
         <button data-admin-tab="avatars" onclick="switchAdminTab('avatars')" class="admin-tab-btn bg-[#180f29] text-purple-200 px-3 py-2 rounded-xl text-[11px] font-bold">Fotos de perfil</button>
-        <button data-admin-tab="vods" onclick="switchAdminTab('vods')" class="admin-tab-btn bg-[#180f29] text-purple-200 hover:bg-[#23153b] px-3 py-2 rounded-xl text-[11px] font-bold">VODs / R2</button>
+        <button data-admin-tab="vods" onclick="switchAdminTab('vods')" class="admin-tab-btn bg-[#180f29] text-purple-200 hover:bg-[#23153b] px-3 py-2 rounded-xl text-[11px] font-bold">Categorias IPTV</button>
       </div>
 
       <div id="adminTabAvatars" class="admin-tab-panel hidden overflow-y-auto space-y-4">
@@ -553,78 +553,12 @@
 
       <div id="adminTabVods" class="admin-tab-panel hidden overflow-y-auto pr-1">
         <div class="bg-[#180f29] border border-purple-900/40 rounded-2xl p-4 space-y-4">
-          <div class="relative rounded-2xl">
-          <div id="adminR2ConfigContent" inert style="filter: blur(6px); pointer-events: none; user-select: none;" class="space-y-4 min-h-[260px]">
-          <div class="flex items-center justify-between">
-            <h4 class="text-xs font-bold uppercase text-purple-300">Configuração do R2 / VOD</h4>
-            <button id="adminR2Save" disabled onclick="adminSaveR2Config()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-[11px] font-bold">Salvar configuração</button>
-          </div>
-          <button id="adminR2Lock" type="button" onclick="lockAdminR2Config()" class="hidden text-xs text-purple-300">Bloquear configurações</button>
-          <fieldset id="adminR2Fields" disabled class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div class="md:col-span-2">
-              <label class="text-[11px] text-purple-300 font-medium">URL pública do bucket / domínio</label>
-              <input id="adminR2Domain" type="text" readonly placeholder="https://media.seudominio.com" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
-                <p class="mt-1 text-[10px] text-purple-400">É o endereço base de acesso aos arquivos do R2. O app usa esse domínio para formar os links públicos dos vídeos.</p>
-            </div>
-            <div>
-              <label class="text-[11px] text-purple-300 font-medium">Nome do bucket</label>
-              <input id="adminR2Bucket" type="text" value="luxvod" readonly class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
-            </div>
-            <div>
-              <label class="text-[11px] text-purple-300 font-medium">Prefixo / pasta</label>
-              <input id="adminR2Prefix" type="text" placeholder="vods/" class="w-full mt-1 bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
-            </div>
-          </fieldset>
-          </div>
-          <form id="adminR2UnlockForm" onsubmit="event.preventDefault(); unlockAdminR2Config()" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-2xl bg-[#120c1f]/50 p-4 text-center">
-            <label for="adminR2Password" class="text-xs text-purple-300">Configurações bloqueadas — use sua senha de login</label>
-            <input id="adminR2Password" type="password" autocomplete="current-password" required placeholder="Senha de login" class="w-full max-w-xs bg-[#120c1f] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white">
-            <button type="submit" class="bg-purple-600 text-white px-3 py-2 rounded-xl text-xs font-bold">Desbloquear</button>
-            <p id="adminR2UnlockStatus" role="status" class="text-xs text-rose-300"></p>
-          </form>
-          </div>
-
-          <div class="rounded-2xl border border-purple-900/40 bg-[#120c1f] p-3">
-            <h5 class="text-[11px] font-bold uppercase text-purple-300 mb-3">Adicionar VOD ao catálogo</h5>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label class="text-[11px] text-purple-300 font-medium">Título</label>
-                <input id="adminVodTitle" type="text" placeholder="Nome da VOD" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
-              </div>
-              <div>
-                <label class="text-[11px] text-purple-300 font-medium">Categoria</label>
-                <input id="adminVodCategory" type="text" list="adminVodCategories" onfocus="renderAdminVodCategories()" placeholder="Escolha uma categoria ou digite uma nova" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
-                <datalist id="adminVodCategories"></datalist>
-                <p class="mt-1 text-[10px] text-purple-400">Digite para buscar categorias existentes ou criar uma nova.</p>
-              </div>
-              <div class="md:col-span-2">
-                <label class="text-[11px] text-purple-300 font-medium">Arquivo da VOD</label>
-                <input id="adminVodFile" type="file" accept="video/*,.mp4,.mkv,.webm" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-purple-200 file:mr-3 file:border-0 file:rounded-lg file:bg-purple-600 file:px-3 file:py-1 file:text-xs file:font-bold file:text-white hover:file:bg-purple-500">
-              </div>
-              <div class="md:col-span-2">
-                <label class="text-[11px] text-purple-300 font-medium">URL pública do vídeo</label>
-                <input id="adminVodUrl" type="url" placeholder="https://.../arquivo.mp4" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
-                <p class="mt-1 text-[10px] text-purple-400">É o link direto usado pelo player para reproduzir o vídeo. Ao enviar para o R2, ele é preenchido automaticamente. Para adicionar sem enviar, cole aqui o link de um vídeo já hospedado.</p>
-              </div>
-              <div class="md:col-span-2">
-                <label class="text-[11px] text-purple-300 font-medium">URL da capa / poster</label>
-                <input id="adminVodPoster" type="url" placeholder="https://.../poster.jpg" class="w-full mt-1 bg-[#180f29] border border-purple-900/50 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500">
-              </div>
-            </div>
-            <p id="adminVodUploadStatus" class="mt-3 text-[11px] text-purple-400 min-h-[18px]"></p>
-            <div class="mt-3 flex gap-2">
-              <button id="adminVodUploadButton" onclick="adminUploadVodToR2()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Enviar para o R2 e adicionar ao catálogo</button>
-              <button onclick="adminAddVodCatalogEntry()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Adicionar ao catálogo sem enviar ao R2</button>
-              <button onclick="adminSyncR2CatalogToPlayer()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all">Publicar pendentes e atualizar</button>
-              <button id="adminCategorySyncButton" onclick="adminSendCategoriesToUsers()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all disabled:opacity-50">Enviar categorias para usuários</button>
-            </div>
-            <p id="adminCategorySyncStatus" class="mt-3 min-h-[18px] text-[11px] text-purple-300" role="status"></p>
-          </div>
-
           <div>
-            <h5 class="text-[11px] font-bold uppercase text-purple-300 mb-2">Catálogo compartilhado de VODs</h5>
-            <div id="adminR2VodList" class="space-y-2"></div>
+            <h4 class="text-xs font-bold uppercase text-purple-300">Categorias IPTV</h4>
+            <p class="mt-1 text-[11px] text-purple-400">VOD manual/R2 está desativado temporariamente e será refeito depois. O envio de categorias do IPTV continua disponível.</p>
           </div>
+          <button id="adminCategorySyncButton" onclick="adminSendCategoriesToUsers()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all disabled:opacity-50">Enviar categorias para usuários</button>
+          <p id="adminCategorySyncStatus" class="min-h-[18px] text-[11px] text-purple-300" role="status"></p>
         </div>
       </div>
     </div>
@@ -1005,7 +939,7 @@
   </dialog>
   <script src="js/devkit-logger.js?v=20260917-devkit133"></script>
   <script src="js/ui-motion.js?v=20260917-primary-source12"></script>
-  <script src="js/script.js?v=20260917-primary-source12"></script>
+  <script src="js/script.js?v=20260917-primary-source12b"></script>
   <script src="js/profiles.js?v=20260917-boot13"></script>
   <script src="js/avatar-gallery.js"></script>
   <script src="js/game-save-store.js"></script>
