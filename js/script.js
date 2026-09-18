@@ -2063,6 +2063,14 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         syncCloudProgress('post-boot').catch?.(() => {});
       }, 250);
 
+      setTimeout(() => {
+        if (!currentUser?.profile || currentSection !== 'home') return;
+        window.LuxDevkit?.running('HOME', 'hero', 'Carregando destaque após o boot...');
+        Promise.resolve(loadTmdbHeroBanner())
+          .then(() => window.LuxDevkit?.success('HOME', 'hero', 'Destaque processado'))
+          .catch(error => window.LuxDevkit?.warn('HOME', 'hero', error?.message || 'Destaque indisponível'));
+      }, 700);
+
       // Ícones e notificações são pós-boot: não seguram mais a abertura visual.
       try {
         const iconsStarted = performance.now();
@@ -3483,11 +3491,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         }
       };
 
-      window.LuxDevkit?.running('HOME', 'hero', 'Solicitando destaque...');
-      Promise.resolve(loadTmdbHeroBanner())
-        .then(() => window.LuxDevkit?.success('HOME', 'hero', 'Destaque processado'))
-        .catch(error => window.LuxDevkit?.warn('HOME', 'hero', error?.message || 'Destaque indisponível'));
-
+      // O hero é carregado somente após o boot/splash. Nunca bloqueia a entrada.
       traceSync('continuar-assistindo', () => renderHomeResume());
       traceSync('jogos-do-dia', () => renderHomeJogos());
       traceSync('lancamentos-2026', () => renderHomeLancamentos2026());
@@ -3504,56 +3508,79 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const contentWrap = document.getElementById('heroContentWrap');
       const posterEl = document.getElementById('heroPosterImage');
 
+      const normalizeTitle = (str) => {
+        if (!str) return '';
+        return str.toLowerCase()
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/\(.*?\)/g, '')
+          .replace(/\[.*?\]/g, '')
+          .replace(/\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\b/g, '')
+          .replace(/[^a-z0-9]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+
       try {
+        const fetchStarted = performance.now();
+        window.LuxDevkit?.running('HOME', 'hero-fetch', 'Consultando TMDB...');
         const res = await fetch('https://api.themoviedb.org/3/trending/all/week?api_key=' + encodeURIComponent(TMDB_API_KEY) + '&language=pt-BR');
         const data = await res.json();
+        window.LuxDevkit?.success('HOME', 'hero-fetch', 'TMDB respondeu', Math.round(performance.now() - fetchStarted), {
+          results: Array.isArray(data?.results) ? data.results.length : 0
+        });
+
         if(currentUser!==bannerUser)return;
         const tmdbResults = (data.results || []).filter(profileAllowsMedia);
 
-        const normalizeTitle = (str) => {
-          if (!str) return '';
-          return str.toLowerCase()
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
-            .replace(/\(.*?\)/g, '') 
-            .replace(/\[.*?\]/g, '') 
-            .replace(/\b(dublado|legendado|dual|4k|fhd|uhd|hd|sd|h265|hevc|pt-br)\b/g, '') 
-            .replace(/[^a-z0-9]/g, ' ') 
-            .replace(/\s+/g, ' ') 
-            .trim();
-        };
+        const indexStarted = performance.now();
+        window.LuxDevkit?.running('HOME', 'hero-index', 'Indexando títulos locais...');
 
+        const titleEntries = [];
+        const exactTitleMap = new Map();
+
+        for (const item of allMediaItems) {
+          if (item.type === 'live') continue;
+          const normalized = normalizeTitle(item.name);
+          if (!normalized) continue;
+          const entry = { item, normalized };
+          titleEntries.push(entry);
+          if (!exactTitleMap.has(normalized)) exactTitleMap.set(normalized, item);
+        }
+
+        window.LuxDevkit?.success('HOME', 'hero-index', 'Índice de títulos pronto', Math.round(performance.now() - indexStarted), {
+          items: titleEntries.length,
+          exactKeys: exactTitleMap.size
+        });
+
+        const matchStarted = performance.now();
+        window.LuxDevkit?.running('HOME', 'hero-match', 'Cruzando tendências com o catálogo...');
         const matchedTrends = [];
+        const usedIds = new Set();
 
         for (const tmdb of tmdbResults) {
           const tmdbTitle = normalizeTitle(tmdb.title || tmdb.name);
           if (!tmdbTitle) continue;
 
-          const candidates = allMediaItems
-            .filter(item => item.type !== 'live')
-            .map(item => {
-              const localTitle = normalizeTitle(item.name);
-              let score = 0;
+          let found = exactTitleMap.get(tmdbTitle) || null;
 
-              if (localTitle === tmdbTitle) {
-                score = 100;
-              } else if (localTitle.startsWith(tmdbTitle + ' ')) {
-                score = 80;
-              }
-
-              return { item, score };
-            })
-            .filter(result => result.score > 0)
-            .sort((a, b) => b.score - a.score);
-
-          const found = candidates.length > 0 ? candidates[0].item : null;
-
-          if (found) {
-            if (!matchedTrends.find(m => m.id === found.id)) {
-              matchedTrends.push({ ...found, tmdb });
-            }
+          if (!found) {
+            const prefix = tmdbTitle + ' ';
+            const entry = titleEntries.find(candidate => candidate.normalized.startsWith(prefix));
+            found = entry?.item || null;
           }
-          if (matchedTrends.length >= 5) break; 
+
+          if (found && !usedIds.has(found.id)) {
+            usedIds.add(found.id);
+            matchedTrends.push({ ...found, tmdb });
+          }
+
+          if (matchedTrends.length >= 5) break;
         }
+
+        window.LuxDevkit?.success('HOME', 'hero-match', 'Tendências cruzadas', Math.round(performance.now() - matchStarted), {
+          trends: tmdbResults.length,
+          matched: matchedTrends.length
+        });
 
         if (matchedTrends.length > 0) {
           let currentIndex = 0;
