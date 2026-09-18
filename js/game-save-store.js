@@ -128,7 +128,7 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-rom-cleanup]')) {
   const romCleanupScript = document.createElement('script');
-  romCleanupScript.src = 'js/game-rom-cleanup.js?v=20260917-rom-cleanup1';
+  romCleanupScript.src = 'js/game-rom-cleanup.js?v=20260918-rom-cleanup2-retention';
   romCleanupScript.async = true;
   romCleanupScript.dataset.luxRomCleanup = '1';
   document.head.appendChild(romCleanupScript);
