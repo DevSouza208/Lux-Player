@@ -146,7 +146,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-games-actions-layout3';
+  const VERSION = '20260918-games-actions-layout4';
   if (window.__luxGamesActionsLayoutVersion === VERSION) return;
   window.__luxGamesActionsLayoutVersion = VERSION;
 
@@ -168,28 +168,28 @@
     style.textContent = `
       #gamesSection .games-catalog-actions {
         align-items: center !important;
-        gap: 8px !important;
+        gap: 7px !important;
       }
       #gamesSection .games-catalog-actions [data-lux-games-action] {
         box-sizing: border-box !important;
-        height: 42px !important;
-        min-height: 42px !important;
-        padding: 0 14px !important;
-        border-radius: 12px !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        padding: 0 12px !important;
+        border-radius: 10px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
-        gap: 7px !important;
+        gap: 6px !important;
         margin: 0 !important;
-        font-size: 12px !important;
+        font-size: 11px !important;
         font-weight: 800 !important;
         line-height: 1 !important;
         white-space: nowrap !important;
         vertical-align: middle !important;
       }
       #gamesSection .games-catalog-actions [data-lux-games-action] svg {
-        width: 16px !important;
-        height: 16px !important;
+        width: 14px !important;
+        height: 14px !important;
         flex: 0 0 auto !important;
       }
       #gamesSection .games-catalog-actions .games-filter-menu {
@@ -210,16 +210,61 @@
           gap: 6px !important;
         }
         #gamesSection .games-catalog-actions [data-lux-games-action] {
-          height: 38px !important;
-          min-height: 38px !important;
-          padding: 0 11px !important;
-          border-radius: 10px !important;
-          font-size: 11px !important;
-          gap: 6px !important;
+          height: 34px !important;
+          min-height: 34px !important;
+          padding: 0 10px !important;
+          border-radius: 9px !important;
+          font-size: 10.5px !important;
+          gap: 5px !important;
         }
         #gamesSection .games-catalog-actions [data-lux-games-action] svg {
-          width: 15px !important;
-          height: 15px !important;
+          width: 14px !important;
+          height: 14px !important;
+        }
+
+        #gamesSection #gameCoreStatusPanel {
+          margin-bottom: 10px !important;
+          padding: 8px 10px !important;
+          border-radius: 14px !important;
+        }
+        #gamesSection #gameCoreStatusPanel > div:first-child {
+          min-height: 30px !important;
+          flex-wrap: nowrap !important;
+          gap: 8px !important;
+        }
+        #gamesSection #gameCoreStatusPanel > div:first-child > div {
+          min-width: 0 !important;
+        }
+        #gamesSection #gameCoreStatusPanel > div:first-child > div > p:first-child {
+          margin: 0 !important;
+          font-size: 10px !important;
+          line-height: 1 !important;
+          letter-spacing: .035em !important;
+        }
+        #gamesSection #gameCoreStatusPanel > div:first-child > div > p:nth-child(2) {
+          display: none !important;
+        }
+        #gamesSection #gameCoreStatusToggle {
+          width: 30px !important;
+          height: 30px !important;
+          min-width: 30px !important;
+          min-height: 30px !important;
+          padding: 0 !important;
+          border-radius: 9px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        #gamesSection #gameCoreStatusToggleLabel {
+          display: none !important;
+        }
+        #gamesSection #gameCoreStatusToggle .game-core-toggle-icon {
+          font-size: 15px !important;
+          line-height: 1 !important;
+          transform: translateY(-1px);
+        }
+        #gamesSection #gameCoreStatusContent {
+          margin-top: 8px !important;
         }
       }
     `;
