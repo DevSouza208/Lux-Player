@@ -1927,15 +1927,30 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       luxBootTraceStep('saves-pendentes', 'Verificando saves pendentes...');
       retryPendingGameSaves();
 
-      luxBootTraceStep('home-espera-final', 'Finalizando a abertura...');
-      await new Promise(resolve => setTimeout(resolve, 640));
-
+      luxBootTraceStep('home-espera-final', 'Dados críticos prontos. Liberando a Home...');
       luxBootTraceStep('home-render', 'Abrindo a Home...');
+      const homeOpenStarted = performance.now();
       setSection('home');
+      window.LuxDevkit?.success('HOME', 'set-section', 'Seção Home ativada', Math.round(performance.now() - homeOpenStarted));
+
       hideSplashScreen();
-      lucide.createIcons();
-      loadAndShowNotifications();
+      window.LuxDevkit?.success('HOME', 'splash', 'Splash liberado');
+
       luxBootTraceDone();
+
+      // Ícones e notificações são pós-boot: não seguram mais a abertura visual.
+      try {
+        const iconsStarted = performance.now();
+        lucide.createIcons();
+        window.LuxDevkit?.success('HOME', 'icones-pos-boot', 'Ícones atualizados', Math.round(performance.now() - iconsStarted));
+      } catch (error) {
+        window.LuxDevkit?.warn('HOME', 'icones-pos-boot', error?.message || 'Falha ao atualizar ícones');
+      }
+
+      Promise.resolve()
+        .then(() => loadAndShowNotifications())
+        .then(() => window.LuxDevkit?.success('HOME', 'notificacoes-pos-boot', 'Notificações verificadas'))
+        .catch(error => window.LuxDevkit?.warn('HOME', 'notificacoes-pos-boot', error?.message || 'Falha ao verificar notificações'));
     }
 
     function handleScroll(container) {
@@ -3163,8 +3178,15 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       const isMobile = window.innerWidth < 1024;
 
       if (section === 'home') {
+        const homeSectionStarted = performance.now();
+        window.LuxDevkit?.running('HOME', 'section-visible', 'Exibindo estrutura da Home...');
         if (homeSec) homeSec.classList.remove('hidden');
+        window.LuxDevkit?.success('HOME', 'section-visible', 'Estrutura da Home visível', Math.round(performance.now() - homeSectionStarted));
+
+        const dashboardStarted = performance.now();
+        window.LuxDevkit?.running('HOME', 'dashboard', 'Montando blocos da Home...');
         renderHomeDashboard();
+        window.LuxDevkit?.success('HOME', 'dashboard', 'Blocos iniciais disparados', Math.round(performance.now() - dashboardStarted));
       } else if (section === 'games') {
         if (gamesSec) gamesSec.classList.remove('hidden');
         if (typeof renderGamesCatalog === 'function') renderGamesCatalog();
@@ -3239,8 +3261,18 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         }
       });
 
-      updateNavIndicator();
-      lucide.createIcons();
+      if (section === 'home') {
+        const navStarted = performance.now();
+        updateNavIndicator();
+        window.LuxDevkit?.success('HOME', 'nav-indicator', 'Navegação atualizada', Math.round(performance.now() - navStarted));
+
+        const iconsStarted = performance.now();
+        lucide.createIcons();
+        window.LuxDevkit?.success('HOME', 'icones-section', 'Ícones da Home atualizados', Math.round(performance.now() - iconsStarted));
+      } else {
+        updateNavIndicator();
+        lucide.createIcons();
+      }
     }
 
     function updateLayoutForScreen() {
@@ -3297,10 +3329,27 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     }
 
     async function renderHomeDashboard() {
-      loadTmdbHeroBanner();
-      renderHomeResume();
-      renderHomeJogos();
-      renderHomeLancamentos2026();
+      const traceSync = (label, job) => {
+        const started = performance.now();
+        window.LuxDevkit?.running('HOME', label, 'Renderizando...');
+        try {
+          const result = job();
+          window.LuxDevkit?.success('HOME', label, 'Concluído', Math.round(performance.now() - started));
+          return result;
+        } catch (error) {
+          window.LuxDevkit?.error('HOME', label, error?.message || 'Falha ao renderizar');
+          throw error;
+        }
+      };
+
+      window.LuxDevkit?.running('HOME', 'hero', 'Solicitando destaque...');
+      Promise.resolve(loadTmdbHeroBanner())
+        .then(() => window.LuxDevkit?.success('HOME', 'hero', 'Destaque processado'))
+        .catch(error => window.LuxDevkit?.warn('HOME', 'hero', error?.message || 'Destaque indisponível'));
+
+      traceSync('continuar-assistindo', () => renderHomeResume());
+      traceSync('jogos-do-dia', () => renderHomeJogos());
+      traceSync('lancamentos-2026', () => renderHomeLancamentos2026());
     }
 
     let heroCarouselInterval = null;
