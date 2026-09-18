@@ -191,7 +191,7 @@ function animateDashboardEntry() {
   };
 
   // Etapa 1.2: antes do boot só carregamos o loader de troca entre seções.
-  loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
+  loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260918-section-fade1']);
 
   const postBootModules = [
     ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260918-home-featured-2'],
