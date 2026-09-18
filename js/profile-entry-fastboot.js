@@ -1,11 +1,11 @@
 (() => {
   'use strict';
 
-  // Profile entry must not bypass the primary media bootstrap. The IPTV catalog
-  // is part of startApp's state initialization; deferring it leaves sections
-  // alive with an empty allMediaItems array and makes tab changes look broken.
-  // Keep only non-critical enrichment jobs out of the profile critical path.
-  const VERSION = '20260917-profile-fastboot3';
+  // Profile entry must never start the media bootstrap before the canonical
+  // Cloudflare HTTPS snapshot has installed its loader. There is no fallback
+  // IPTV path: web, Electron and local builds all wait for the same source.
+  const VERSION = '20260918-profile-fastboot4-https-only';
+  const SNAPSHOT_SRC = 'js/iptv-https-snapshot.js?v=20260918-https-snapshot-clean1';
   if (window.__luxProfileEntryFastbootInstalled === VERSION) return;
   window.__luxProfileEntryFastbootInstalled = VERSION;
 
@@ -16,6 +16,53 @@
     'loadGamesCatalog',
     'loadReadingCatalog'
   ];
+
+  let snapshotReadyPromise = null;
+
+  const ensureHttpsSnapshotReady = () => {
+    if (window.LuxHttpsIptv?.install?.() && window.loadMediaSourcesInPriority?.__luxHttpsSnapshot) {
+      return Promise.resolve(window.LuxHttpsIptv);
+    }
+    if (snapshotReadyPromise) return snapshotReadyPromise;
+
+    snapshotReadyPromise = (async () => {
+      let script = document.querySelector('script[data-lux-https-snapshot]');
+      if (!script) {
+        script = document.createElement('script');
+        script.src = SNAPSHOT_SRC;
+        script.async = false;
+        script.dataset.luxHttpsSnapshot = '1';
+        document.head.appendChild(script);
+      }
+
+      window.LuxDevkit?.running?.('IPTV-HTTPS', 'boot-gate', 'Aguardando o leitor HTTPS obrigatório...');
+
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        const api = window.LuxHttpsIptv;
+        if (api?.install?.() && window.loadMediaSourcesInPriority?.__luxHttpsSnapshot) {
+          window.LuxDevkit?.success?.('IPTV-HTTPS', 'boot-gate', 'Leitor HTTPS confirmado antes do boot', 0, {
+            version: api.version || null,
+            source: 'cloudflare-snapshot-only'
+          });
+          return api;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      throw new Error('O snapshot IPTV HTTPS obrigatório não ficou disponível. O Lux não usará uma fonte alternativa.');
+    })().catch(error => {
+      snapshotReadyPromise = null;
+      window.LuxDevkit?.emit?.({
+        category: 'IPTV-HTTPS',
+        status: 'error',
+        label: 'boot-gate',
+        message: error?.message || 'Falha ao preparar o snapshot HTTPS.'
+      });
+      throw error;
+    });
+
+    return snapshotReadyPromise;
+  };
 
   const sameProfile = (left, right) => {
     if (!left || !right) return false;
@@ -51,9 +98,9 @@
     setTimeout(async () => {
       if (!activeProfileIs(profile)) return;
 
-      // Provider refresh may change URLs after the catalog already loaded. If it
-      // does, reload the primary media source once, without making profile entry
-      // depend on the provider request.
+      // Provider refresh may change account metadata, but IPTV itself remains
+      // locked to the global HTTPS snapshot. A metadata change only reloads
+      // that same canonical source.
       const providerJob = jobs.get('syncCurrentSubscriptionFromProvider');
       if (providerJob) {
         let before = '';
@@ -68,6 +115,7 @@
             currentUser?.urlXc || '', currentUser?.userXc || '', currentUser?.senhaXc || ''
           ]);
           if (before !== after && activeProfileIs(profile) && typeof window.loadMediaSourcesInPriority === 'function') {
+            await ensureHttpsSnapshotReady();
             await window.loadMediaSourcesInPriority();
           }
         } catch (error) {
@@ -89,7 +137,7 @@
   const install = () => {
     const original = window.activateAccountProfile;
     if (typeof original !== 'function') return false;
-    if (original.__luxProfileEntryFastbootWrapped) return true;
+    if (original.__luxProfileEntryFastbootWrapped === VERSION) return true;
 
     const wrapped = async function(profile) {
       const deferred = new Map();
@@ -109,8 +157,12 @@
       });
 
       try {
-        // Crucially, loadMediaSourcesInPriority is NOT stubbed. startApp must
-        // finish loading IPTV before the profile activation is considered done.
+        // Hard gate: there is no Xtream/M3U/HTTP fallback anymore. The profile
+        // cannot enter startApp until the HTTPS snapshot owns the media loader.
+        await ensureHttpsSnapshotReady();
+        if (!window.loadMediaSourcesInPriority?.__luxHttpsSnapshot) {
+          throw new Error('A fonte IPTV HTTPS obrigatória não assumiu o carregamento do Lux.');
+        }
         return await original.apply(this, arguments);
       } finally {
         restorers.reverse().forEach(restore => restore());
