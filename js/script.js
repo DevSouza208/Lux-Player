@@ -1911,6 +1911,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       console.info(`[Lux Boot 1.3] FIM — ${total}ms`);
       window.LuxDevkit?.success('BOOT', 'boot-completo', 'Home liberada', total);
       luxBootTracePersist({ totalMs: total, done: true });
+      window.__luxBootComplete = true;
+      try {
+        window.dispatchEvent(new CustomEvent('lux:boot-complete', { detail: { totalMs: total } }));
+      } catch (_) {}
     }
 
     window.luxBootTraceStart = luxBootTraceStart;
@@ -1925,27 +1929,14 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       transitionScreen(document.getElementById('authScreen'), false);
     }
 
-    async function hideSplashScreen() {
+    function hideSplashScreen() {
       const splash = document.getElementById('loadingSplash');
       const started = performance.now();
-      window.LuxDevkit?.running('HOME', 'splash-transition', 'Ocultando splash...');
+      window.LuxDevkit?.running('HOME', 'splash-transition', 'Ocultando splash imediatamente...');
 
       if (!splash) {
         window.LuxDevkit?.success('HOME', 'splash-transition', 'Splash não presente', 0);
         return;
-      }
-
-      let timedOut = false;
-      try {
-        await Promise.race([
-          Promise.resolve(transitionScreen(splash, false)),
-          new Promise(resolve => setTimeout(() => {
-            timedOut = true;
-            resolve();
-          }, 450))
-        ]);
-      } catch (error) {
-        console.warn('[Lux Boot] Transição do splash falhou; ocultando diretamente.', error);
       }
 
       try {
@@ -1954,15 +1945,15 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
 
       splash.classList.add('hidden');
       splash.classList.remove('screen-visible', 'screen-hidden-up', 'screen-hidden-down');
+      splash.setAttribute('aria-hidden', 'true');
       updateNavIndicator();
 
-      const duration = Math.round(performance.now() - started);
       window.LuxDevkit?.success(
         'HOME',
         'splash-transition',
-        timedOut ? 'Splash forçado após limite da animação' : 'Splash realmente oculto',
-        duration,
-        { forced: timedOut }
+        'Splash oculto sem aguardar animações',
+        Math.round(performance.now() - started),
+        { synchronous: true }
       );
     }
 
@@ -2053,8 +2044,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       setSection('home');
       window.LuxDevkit?.success('HOME', 'set-section', 'Seção Home ativada', Math.round(performance.now() - homeOpenStarted));
 
-      await hideSplashScreen();
-      window.LuxDevkit?.success('HOME', 'splash', 'Splash liberado e transição concluída');
+      hideSplashScreen();
+      window.LuxDevkit?.success('HOME', 'splash', 'Splash liberado');
 
       luxBootTraceDone();
 
@@ -3530,7 +3521,10 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         });
 
         if(currentUser!==bannerUser)return;
-        const tmdbResults = (data.results || []).filter(profileAllowsMedia);
+        const tmdbResults = (data.results || [])
+          .filter(item => ['movie', 'tv', undefined].includes(item?.media_type))
+          .filter(profileAllowsMedia)
+          .slice(0, 20);
 
         const indexStarted = performance.now();
         window.LuxDevkit?.running('HOME', 'hero-index', 'Indexando títulos locais...');

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260914-home-featured-1';
+  const VERSION = '20260918-home-featured-2';
   if (window.__luxHomeFeaturedVersion === VERSION) return;
   window.__luxHomeFeaturedVersion = VERSION;
 
@@ -63,33 +63,66 @@
 
   async function tmdbCards() {
     try {
+      const started = performance.now();
+      window.LuxDevkit?.running('HOME', 'hero-trends', 'Buscando 20 tendências do TMDB...');
+
       const response = await fetch('https://api.themoviedb.org/3/trending/all/week?api_key=' + encodeURIComponent(TMDB_API_KEY) + '&language=pt-BR');
       if (!response.ok) return [];
+
       const data = await response.json();
-      const trends = (data.results || []).filter(item => {
-        try { return typeof profileAllowsMedia !== 'function' || profileAllowsMedia(item); } catch (_) { return true; }
-      });
-      const media = localMedia();
+      const trends = (data.results || [])
+        .filter(item => item?.media_type === 'movie' || item?.media_type === 'tv' || !item?.media_type)
+        .filter(item => {
+          try { return typeof profileAllowsMedia !== 'function' || profileAllowsMedia(item); } catch (_) { return true; }
+        })
+        .slice(0, 20);
+
+      const media = localMedia().filter(item => item?.type !== 'live');
+      const exact = new Map();
+      const indexed = [];
+
+      for (const item of media) {
+        const title = normalizeTitle(item?.name);
+        if (!title) continue;
+        const row = { item, title };
+        indexed.push(row);
+        if (!exact.has(title)) exact.set(title, item);
+      }
+
       const matched = [];
+      const used = new Set();
+
       for (const tmdb of trends) {
         const target = normalizeTitle(tmdb.title || tmdb.name);
         if (!target) continue;
-        let best = null;
-        let score = 0;
-        for (const item of media) {
-          if (item?.type === 'live') continue;
-          const local = normalizeTitle(item?.name);
-          const candidateScore = local === target ? 100 : local.startsWith(target + ' ') ? 80 : 0;
-          if (candidateScore > score) { score = candidateScore; best = item; }
+
+        let found = exact.get(target) || null;
+
+        if (!found) {
+          const prefix = target + ' ';
+          const candidate = indexed.find(row => row.title.startsWith(prefix));
+          found = candidate?.item || null;
         }
-        if (best && !matched.some(entry => String(entry.item.id) === String(best.id))) {
-          matched.push({ source: 'tmdb', item: best, tmdb });
+
+        const key = found ? String(found.id ?? found.url ?? found.name) : '';
+        if (found && !used.has(key)) {
+          used.add(key);
+          matched.push({ source: 'tmdb', item: found, tmdb });
         }
+
         if (matched.length >= 5) break;
       }
+
+      window.LuxDevkit?.success('HOME', 'hero-trends', '20 tendências comparadas; primeiros matches selecionados', Math.round(performance.now() - started), {
+        trends: trends.length,
+        localItems: indexed.length,
+        matched: matched.length
+      });
+
       return matched;
     } catch (error) {
       console.warn('[Lux Home] TMDB indisponível:', error);
+      window.LuxDevkit?.warn('HOME', 'hero-trends', error?.message || 'TMDB indisponível');
       return [];
     }
   }

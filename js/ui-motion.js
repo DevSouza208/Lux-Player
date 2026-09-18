@@ -190,28 +190,40 @@ function animateDashboardEntry() {
     document.head.appendChild(script);
   };
 
-  // Etapa 1.2: script.js/Xtream volta a ser a fonte oficial do catálogo principal.
+  // Etapa 1.2: antes do boot só carregamos o loader de troca entre seções.
   loadModule(['lux-section-transition-loader', 'js/section-transition-loader.js?v=20260915-section-loader1']);
-  loadModule(['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags4']);
-  loadModule(['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5']);
 
-  const nonCritical = [
-    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
-    ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
-    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260915-n64-performance2'],
+  const postBootModules = [
+    ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260918-home-featured-2'],
+    ['lux-sport-banner-tags', 'js/sport-banner-tags.js?v=20260915-sport-banner-tags4'],
+    ['lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2'],
+    ['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5'],
     ['lux-reading-source-library', 'js/reading-source-library.js?v=20260916-source-reading8'],
     ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260917-primary-source12'],
-    ['lux-home-featured-banners', 'js/home-featured-banners.js?v=20260914-home-featured-1'],
-    ['lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2']
+    ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
+    ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
+    ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260915-n64-performance2']
   ];
 
-  const loadNonCritical = () => nonCritical.forEach(loadModule);
-  const schedule = () => {
-    if ('requestIdleCallback' in window) window.requestIdleCallback(loadNonCritical, { timeout: 1200 });
-    else setTimeout(loadNonCritical, 350);
+  let postBootScheduled = false;
+  const loadPostBootModules = () => {
+    if (postBootScheduled) return;
+    postBootScheduled = true;
+
+    const start = () => {
+      postBootModules.forEach((module, index) => {
+        setTimeout(() => loadModule(module), index * 180);
+      });
+    };
+
+    setTimeout(() => {
+      if ('requestIdleCallback' in window) window.requestIdleCallback(start, { timeout: 900 });
+      else start();
+    }, 300);
   };
-  if (document.readyState === 'complete') schedule();
-  else window.addEventListener('load', schedule, { once: true });
+
+  if (window.__luxBootComplete) loadPostBootModules();
+  else window.addEventListener('lux:boot-complete', loadPostBootModules, { once: true });
 })();
 
 (() => {
