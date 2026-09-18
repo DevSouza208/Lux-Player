@@ -2937,7 +2937,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
         const vodStreams = await promise;
         if (loadId !== xtreamLoadSequence || currentUser !== sourceUser) return;
 
-        if (!Array.isArray(vodStreams) || !0) {
+        if (!Array.isArray(vodStreams) || !vodStreams.length) {
           xtreamMoviesState = { status: 'error', count: 0, error: 'O provedor não retornou filmes dentro do limite de 60s.' };
           window.LuxDevkit?.warn('IPTV', 'filmes-background', xtreamMoviesState.error);
           if (currentSection === 'movies') {
