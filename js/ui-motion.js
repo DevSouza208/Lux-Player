@@ -2,7 +2,7 @@
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (!isStandalone) return;
 
-  const RESET_VERSION = '20260915-n64-performance2';
+  const RESET_VERSION = '20260918-home-rail-clear2';
   const RESET_KEY = 'lux-play:pwa-cache-reset-version';
   const currentUrl = new URL(window.location.href);
   const freshMarker = currentUrl.searchParams.get('__lux_pwa_fresh');
@@ -199,7 +199,7 @@ function animateDashboardEntry() {
     ['lux-home-content-rails', 'js/home-content-rails.js?v=20260915-home-content-rails-2'],
     ['lux-home-series-2026', 'js/home-series-2026.js?v=20260915-home-series-2026-5'],
     ['lux-reading-source-library', 'js/reading-source-library.js?v=20260916-source-reading8'],
-    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260917-primary-source12'],
+    ['lux-admin-client-sync', 'js/admin-client-sync.js?v=20260918-home-rail-clear2'],
     ['lux-gamepad-host', 'js/lux-gamepad-host.js?v=20260912-landscape2'],
     ['lux-remote-host', 'js/lux-remote-host.js?v=20260912-landscape2'],
     ['lux-emulator-speed', 'js/emulator-speed-fix.js?v=20260915-n64-performance2']
