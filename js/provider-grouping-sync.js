@@ -1,8 +1,9 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-provider-grouping-sync2-admin-global';
+  const VERSION = '20260918-provider-grouping-sync3-devkit';
   const WORKER_BASE = 'https://lux-playlist-sync.professorsouza-tech.workers.dev';
+  const DEV_CATEGORY = 'IPTV-GLOBAL';
 
   if (window.__luxProviderGroupingSync === VERSION) return;
   window.__luxProviderGroupingSync = VERSION;
@@ -12,6 +13,32 @@
   const isAdmin = () => String(currentUser?.accountRole || currentUser?.role || '').trim().toLowerCase() === 'admin';
   const button = () => document.getElementById('adminCategorySyncButton');
   const status = () => document.getElementById('adminCategorySyncStatus');
+
+  function devRunning(label, message, data = null) {
+    window.LuxDevkit?.running?.(DEV_CATEGORY, label, message, data);
+    return performance.now();
+  }
+
+  function devSuccess(label, message, startedAt, data = null) {
+    window.LuxDevkit?.success?.(
+      DEV_CATEGORY,
+      label,
+      message,
+      Math.round(performance.now() - startedAt),
+      data
+    );
+  }
+
+  function devError(label, error, startedAt = null, data = null) {
+    window.LuxDevkit?.emit?.({
+      category: DEV_CATEGORY,
+      status: 'error',
+      label,
+      message: error?.message || String(error || 'Falha desconhecida'),
+      durationMs: startedAt == null ? undefined : Math.round(performance.now() - startedAt),
+      data
+    });
+  }
 
   function setStatus(message, kind = 'normal') {
     const node = status();
@@ -67,6 +94,7 @@
     }
 
     const action = button();
+    const totalStarted = devRunning('publicar-agrupamento', 'Publicação global iniciada', { admin: username });
     busy = true;
     if (action) {
       action.disabled = true;
@@ -75,11 +103,17 @@
 
     try {
       setStatus('Baixando o catálogo oficial do fornecedor para o admin...');
+      const syncStarted = devRunning('sincronizar-admin', 'Baixando catálogo oficial do fornecedor...', { admin: username });
       const result = await syncAdminAccount();
+      devSuccess('sincronizar-admin', 'Catálogo do admin sincronizado', syncStarted, {
+        status: result?.status || 'success',
+        catalogVersion: result?.catalog?.version || null
+      });
 
       if (action) action.textContent = 'Aplicando agrupamento...';
       setStatus('Catálogo do admin atualizado. Aplicando o agrupamento oficial...');
 
+      const reloadStarted = devRunning('recarregar-catalogo', 'Recarregando catálogo HTTPS do admin...');
       if (typeof window.LuxSyncedCatalog?.reload === 'function') {
         await window.LuxSyncedCatalog.reload();
       } else if (typeof window.loadMediaSourcesInPriority === 'function') {
@@ -90,10 +124,20 @@
       if (!Array.isArray(allMediaItems) || !allMediaItems.length) {
         throw new Error('O catálogo do admin foi sincronizado, mas não há itens carregados para gerar o agrupamento.');
       }
+      devSuccess('recarregar-catalogo', 'Catálogo do admin aplicado no player', reloadStarted, {
+        items: allMediaItems.length
+      });
 
       if (action) action.textContent = 'Publicando para todos...';
       setStatus('Publicando o agrupamento do admin para todas as contas...');
+
+      const publishStarted = devRunning('enviar-agrupamento', 'Publicando mapa de categorias do admin...');
       await publishAdminGrouping();
+      const categoryCount = Object.keys(currentUser?.categoryMap || {}).length;
+      devSuccess('enviar-agrupamento', 'Agrupamento publicado para todas as contas', publishStarted, {
+        categories: categoryCount,
+        items: allMediaItems.length
+      });
 
       const partial = result?.status === 'partial';
       setStatus(
@@ -102,9 +146,15 @@
           : 'Agrupamento do admin publicado para todos. Os usuários receberão esse mapa no próximo carregamento.',
         partial ? 'warn' : 'ok'
       );
+      devSuccess('publicar-agrupamento', 'Publicação global concluída', totalStarted, {
+        status: partial ? 'partial' : 'success',
+        categories: categoryCount,
+        items: allMediaItems.length
+      });
     } catch (error) {
       console.warn('[Lux Provider Sync] Falha ao publicar agrupamento global do admin:', error);
       setStatus(error?.message || 'Não foi possível publicar o agrupamento do admin.', 'error');
+      devError('publicar-agrupamento', error, totalStarted);
     } finally {
       busy = false;
       if (action) {
