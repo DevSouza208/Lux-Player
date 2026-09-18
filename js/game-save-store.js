@@ -198,17 +198,17 @@ if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-
   document.head.appendChild(profileEntryFastbootScript);
 }
 
-if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-synced-catalog]')) {
-  const syncedCatalogScript = document.createElement('script');
-  syncedCatalogScript.src = 'js/synced-catalog.js?v=20260918-provider-grouping1';
-  syncedCatalogScript.async = false;
-  syncedCatalogScript.dataset.luxSyncedCatalog = '1';
-  document.head.appendChild(syncedCatalogScript);
+if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-https-snapshot]')) {
+  const iptvHttpsSnapshotScript = document.createElement('script');
+  iptvHttpsSnapshotScript.src = 'js/iptv-https-snapshot.js?v=20260918-https-snapshot-clean1';
+  iptvHttpsSnapshotScript.async = false;
+  iptvHttpsSnapshotScript.dataset.luxHttpsSnapshot = '1';
+  document.head.appendChild(iptvHttpsSnapshotScript);
 }
 
 if (typeof document !== 'undefined' && !document.querySelector('script[data-lux-provider-grouping-sync]')) {
   const providerGroupingSyncScript = document.createElement('script');
-  providerGroupingSyncScript.src = 'js/provider-grouping-sync.js?v=20260918-provider-grouping-sync2-admin-global';
+  providerGroupingSyncScript.src = 'js/provider-grouping-sync.js?v=20260918-provider-sync-https-only1';
   providerGroupingSyncScript.async = false;
   providerGroupingSyncScript.dataset.luxProviderGroupingSync = '1';
   document.head.appendChild(providerGroupingSyncScript);
