@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.3.2';
+  const VERSION = '1.3.3';
   const CHANNEL_NAME = 'lux-player-devkit-v1';
   const STORAGE_KEY = 'lux_devkit_events_v1';
   const SIGNAL_KEY = 'lux_devkit_signal_v1';

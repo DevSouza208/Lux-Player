@@ -254,9 +254,9 @@
       function performanceClass(ms) {
         const value = Number(ms);
         if (!Number.isFinite(value)) return '';
-        if (value >= 100) return 'perf-red';
-        if (value >= 60) return 'perf-orange';
-        if (value >= 30) return 'perf-yellow';
+        if (value >= 1500) return 'perf-red';
+        if (value >= 500) return 'perf-orange';
+        if (value >= 100) return 'perf-yellow';
         return 'perf-green';
       }
 
