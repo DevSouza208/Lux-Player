@@ -2,7 +2,7 @@
   'use strict';
 
   if (window.__luxRuntimeStabilityFixInstalled) return;
-  window.__luxRuntimeStabilityFixInstalled = '20260917-stability-perf15';
+  window.__luxRuntimeStabilityFixInstalled = '20260917-stability-perf16';
 
   const devRepairEvent = (status, label, message = '', durationMs = null, data = null) => {
     window.LuxDevkit?.emit({
@@ -122,6 +122,22 @@
 
   const repairSyncedPlaybackUrls = async () => {
     if (!window.__luxSyncedXtreamActive || typeof allMediaItems === 'undefined' || !Array.isArray(allMediaItems)) return;
+
+    if (window.__luxSyncedPlaybackResolvedDuringBuild) {
+      const stats = window.__luxSyncedXtreamStats || {};
+      window.__luxSyncedRawPlaylistItems = null;
+      devRepairEvent('success', 'resultado', 'URLs resolvidas durante a montagem; segunda passada ignorada', 0, {
+        repaired: Number(stats.playbackResolvedDuringBuild || 0),
+        directFallbacks: Number(stats.playbackDirectFallbacks || 0),
+        stillMissing: Number(stats.playbackMissing || 0)
+      });
+      console.info('[Lux Play] Playback Repair ignorado: URLs já resolvidas durante a montagem.', {
+        repaired: Number(stats.playbackResolvedDuringBuild || 0),
+        directFallbacks: Number(stats.playbackDirectFallbacks || 0),
+        stillMissing: Number(stats.playbackMissing || 0)
+      });
+      return { skipped: true };
+    }
 
     let rawItems;
     try {
