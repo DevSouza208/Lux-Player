@@ -31,3 +31,14 @@
  }
  root.LuxLanguage={detect:languageInfo,badge,flags:rules};
 })(window);
+
+// Extensão isolada do catálogo manual de filmes por URL.
+// Este arquivo já é carregado depois do núcleo principal, então funciona como ponto seguro de bootstrap sem reabrir o VOD/R2 legado.
+(() => {
+  if (document.querySelector('script[data-lux-vod-url-catalog]')) return;
+  const script = document.createElement('script');
+  script.src = 'js/vod-url-catalog.js?v=20260927-url1';
+  script.async = false;
+  script.setAttribute('data-lux-vod-url-catalog', '1');
+  document.head.appendChild(script);
+})();
