@@ -1,8 +1,8 @@
 (() => {
   'use strict';
 
-  const VERSION = '20261003-emulator-performance6-speed13';
-  const DEFAULT_SPEED_RATIO = 1.3;
+  const VERSION = '20261003-emulator-performance7-speed15';
+  const DEFAULT_SPEED_RATIO = 1.5;
   const INSTALL_ATTEMPTS = 240;
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isPhone = /iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent || '') ||
