@@ -1,7 +1,8 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260916-emulator-performance5';
+  const VERSION = '20261003-emulator-performance6-speed13';
+  const DEFAULT_SPEED_RATIO = 1.3;
   const INSTALL_ATTEMPTS = 240;
   const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isPhone = /iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent || '') ||
@@ -128,9 +129,9 @@
     const manager = emulator?.gameManager;
     if (!emulator || !manager) return false;
 
-    try { manager.toggleFastForward?.(0); } catch (_) {}
     try { manager.toggleSlowMotion?.(0); } catch (_) {}
-    try { manager.setFastForwardRatio?.(2); } catch (_) {}
+    try { manager.setFastForwardRatio?.(DEFAULT_SPEED_RATIO); } catch (_) {}
+    try { manager.toggleFastForward?.(1); } catch (_) {}
     try { manager.setSlowMotionRatio?.(2); } catch (_) {}
     try { emulator.isFastForward = false; } catch (_) {}
     try { emulator.isSlowMotion = false; } catch (_) {}
