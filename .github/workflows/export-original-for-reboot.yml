@@ -3,9 +3,11 @@ on:
   push:
     branches:
       - migration/export-original-for-reboot-2026-10-10
+    paths:
+      - .github/workflows/export-original-for-reboot.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   snapshot:
@@ -13,18 +15,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 81f2d35b12e32d18135e417a8ba126cf54005c91
-          persist-credentials: false
-      - name: Export exact Original Git tree
+          ref: migration/export-original-for-reboot-2026-10-10
+          fetch-depth: 0
+
+      - name: Export the frozen Original source into private text chunks
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "81f2d35b12e32d18135e417a8ba126cf54005c91"
-          git archive --format=tar HEAD | gzip -9 > "$RUNNER_TEMP/lux-original-snapshot.tar.gz"
-          echo "Exported exact commit: $(git rev-parse HEAD)"
-          tar tzf "$RUNNER_TEMP/lux-original-snapshot.tar.gz" | wc -l
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lux-original-exact-snapshot-20261010
-          path: ${{ runner.temp }}/lux-original-snapshot.tar.gz
-          retention-days: 2
-          if-no-files-found: error
+          original_sha="81f2d35b12e32d18135e417a8ba126cf54005c91"
+          git cat-file -e "$original_sha^{commit}"
+          mkdir -p .migration-payload
+          git archive --format=tar "$original_sha" | gzip -9 > "$RUNNER_TEMP/lux-original-snapshot.tar.gz"
+          sha256sum "$RUNNER_TEMP/lux-original-snapshot.tar.gz" > "$RUNNER_TEMP/archive.sha256"
+          base64 -w 0 "$RUNNER_TEMP/lux-original-snapshot.tar.gz" | split -b 400000 -d -a 3 - .migration-payload/part-
+          cp "$RUNNER_TEMP/archive.sha256" .migration-payload/archive.sha256.txt
+          echo "$original_sha" > .migration-payload/source-commit.txt
+          echo "Chunk count: $(find .migration-payload -name 'part-*' | wc -l)"
+          echo "Archive size: $(wc -c < "$RUNNER_TEMP/lux-original-snapshot.tar.gz") bytes"
+
+      - name: Preserve private text chunks for authorized connector import
+        run: |
+          set -euo pipefail
+          git config user.name "Lux Migration"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .migration-payload/
+          git commit -m "chore(migration): stage private frozen source bundle" || exit 0
+          git push origin HEAD:migration/export-original-for-reboot-2026-10-10
