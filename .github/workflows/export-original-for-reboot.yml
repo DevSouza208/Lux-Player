@@ -1,0 +1,30 @@
+name: Export frozen Lux Original for reboot
+on:
+  push:
+    branches:
+      - migration/export-original-for-reboot-2026-10-10
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 81f2d35b12e32d18135e417a8ba126cf54005c91
+          persist-credentials: false
+      - name: Export exact Original Git tree
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "81f2d35b12e32d18135e417a8ba126cf54005c91"
+          git archive --format=tar HEAD | gzip -9 > "$RUNNER_TEMP/lux-original-snapshot.tar.gz"
+          echo "Exported exact commit: $(git rev-parse HEAD)"
+          tar tzf "$RUNNER_TEMP/lux-original-snapshot.tar.gz" | wc -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lux-original-exact-snapshot-20261010
+          path: ${{ runner.temp }}/lux-original-snapshot.tar.gz
+          retention-days: 2
+          if-no-files-found: error
