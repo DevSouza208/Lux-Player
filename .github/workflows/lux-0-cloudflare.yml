@@ -1,0 +1,21 @@
+name: Lux 0 Cloudflare baseline
+on:
+  push:
+    branches: [lux-player-0]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check js/script.js
+          node --check js/profiles.js
+      - name: Test Cloudflare D1 and R2 API
+        run: node --test tests/cloudflare-baseline.test.cjs
