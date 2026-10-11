@@ -792,7 +792,8 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       clearLegacyAuthStorage();
       const rememberedUser = localStorage.getItem(AUTH_USER_KEY) || '';
       if (rememberedUser) document.getElementById('authEmail').value = rememberedUser;
-      restoreAuthSession();
+      if (window.LUX_CLOUDFLARE_GUEST) void startCloudflareGuestMode();
+      else restoreAuthSession();
     });
 
     function getItemKey(item) {
@@ -1717,6 +1718,99 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       return { isXc: false, url: source.value };
     }
 
+
+    // TEMPORARY LOCAL GUEST MODE FOR THE CLOUDFLARE REBUILD ONLY.
+    // No login, no remote identity, no admin rights, no private playlists sent to D1/R2.
+    // Keep the original player/playlist parsers intact while we migrate modules.
+    async function startCloudflareGuestMode() {
+      currentUser = {
+        user: 'lux-local-0',
+        name: 'Perfil local',
+        role: 'user',
+        accountRole: 'user',
+        pass: '',
+        m3uUrl: '',
+        m3uHttpsUrl: '',
+        urlXc: '',
+        userXc: '',
+        senhaXc: '',
+        dueDate: '',
+        profile: { slot: 1, name: 'Local', data_key: 'lux-local-v0', is_child: false, avatar_data: '' }
+      };
+      isAdultUnlocked = false;
+      const auth = document.getElementById('authScreen');
+      if (auth) auth.classList.add('hidden');
+      showSplashScreen();
+      try {
+        await startApp();
+      } catch (error) {
+        console.error('[Lux 0] Guest startup error:', error?.message || 'unknown');
+        hideSplashScreen();
+        document.getElementById('authScreen')?.classList.add('hidden');
+      } finally {
+        installCloudflareGuestPlaylistUI();
+      }
+    }
+
+    function installCloudflareGuestPlaylistUI() {
+      if (document.getElementById('luxGuestPlaylistOpen')) return;
+      const button = document.createElement('button');
+      button.id = 'luxGuestPlaylistOpen';
+      button.textContent = 'Lista M3U';
+      button.setAttribute('aria-label', 'Adicionar lista M3U local');
+      button.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10020;padding:12px 20px;border-radius:22px;background:#6d28d9;color:white;font-weight:700;box-shadow:0 6px 32px #100722aa;cursor:pointer';
+      document.body.append(button);
+
+      const dialog = document.createElement('dialog');
+      dialog.id = 'luxGuestPlaylistDialog';
+      dialog.setAttribute('aria-label', 'Configuração de lista M3U');
+      dialog.style.cssText = 'background:#170f28;color:white;border:1px solid #633c9e;border-radius:18px;padding:24px;width:min(94vw,470px);max-height:90vh;overflow:auto;box-shadow:0 20px 85px #000a';
+      dialog.innerHTML = '<h2 style="font-size:21px;font-weight:750;margin:0 0 12px">Lista M3U — Lux 0</h2>'
+        + '<p style="font-size:13px;line-height:1.6;color:#c4b5fd;margin-bottom:20px">Modo local sem login. Nada enviado ao D1 ou R2. O arquivo M3U funciona sem baixar de um servidor; a reprodução dos vídeos ainda depende do formato e das regras do navegador.</p>'
+        + '<label style="display:block;font-weight:650;margin:12px 0 8px" for="luxGuestFile">Arquivo .m3u / .m3u8</label>'
+        + '<input id="luxGuestFile" type="file" accept=".m3u,.m3u8,application/vnd.apple.mpegurl" style="display:block;width:100%;margin-bottom:16px">'
+        + '<label style="display:block;font-weight:650;margin:12px 0 8px" for="luxGuestUrl">Ou URL da playlist</label>'
+        + '<input id="luxGuestUrl" type="url" placeholder="https://servidor/lista.m3u" style="display:block;width:100%;padding:11px;color:#fff;background:#231738;border:1px solid #7154aa;border-radius:10px">'
+        + '<p style="font-size:12px;color:#b3a4d2;margin-top:9px">No navegador HTTPS, URLs HTTP podem ser bloqueadas. O Electron permite fluxos diferentes, que testaremos separadamente.</p>'
+        + '<p id="luxGuestStatus" role="status" aria-live="polite" style="font-size:13px;color:#fca5a5;min-height:16px;margin-top:14px"></p>'
+        + '<div style="display:flex;gap:12px;justify-content:flex-end;margin-top:18px">'
+        + '<button id="luxGuestCancel" style="padding:10px 15px;color:#d8b4fe;border:1px solid #63498a;border-radius:10px">Fechar</button>'
+        + '<button id="luxGuestApply" style="padding:10px 18px;color:white;background:#6d28d9;border-radius:10px;font-weight:700">Carregar</button></div>';
+      document.body.append(dialog);
+      const file = dialog.querySelector('#luxGuestFile');
+      const urlInput = dialog.querySelector('#luxGuestUrl');
+      const status = dialog.querySelector('#luxGuestStatus');
+      dialog.querySelector('#luxGuestCancel').addEventListener('click', () => dialog.close());
+      button.addEventListener('click', () => dialog.showModal());
+      dialog.querySelector('#luxGuestApply').addEventListener('click', async () => {
+        status.textContent = 'Carregando a lista...';
+        try {
+          if (file.files && file.files.length) {
+            const selected = file.files[0];
+            if (selected.size > 32 * 1024 * 1024) throw new Error('Nesta etapa, escolha um arquivo com até 32 MB.');
+            const text = await selected.text();
+            if (!text.replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) throw new Error('O arquivo não é uma lista M3U válida.');
+            const parsed = parseM3U(text);
+            if (!parsed.length) throw new Error('A lista não contém canais, filmes ou séries válidos.');
+            allMediaItems = groupM3uSeriesEpisodes(parsed).filter(profileAllowsMedia);
+            currentUser.m3uUrl = '';
+            setMediaSourceState('m3u-file','Arquivo local',allMediaItems.length);
+          } else {
+            const entered = new URL(urlInput.value.trim());
+            if (!['http:', 'https:'].includes(entered.protocol)) throw new Error('Use uma URL HTTP ou HTTPS.');
+            currentUser.m3uUrl = entered.toString();
+            const loaded = await loadMediaSourcesInPriority();
+            if (!loaded) throw new Error('Não foi possível carregar a URL. Pode ser bloqueio HTTP, CORS ou fonte indisponível.');
+          }
+          status.textContent = '';
+          dialog.close();
+          setSection('home');
+        } catch (error) {
+          status.textContent = error?.message || 'Erro ao carregar a lista.';
+        }
+      });
+    }
+
     async function handleLogin() {
       const userInput = document.getElementById('authEmail').value.trim();
       const passInput = document.getElementById('authPass').value;
@@ -2001,7 +2095,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
     async function startApp() {
       luxBootTraceStart(`perfil:${currentUser?.profile?.name || currentUser?.name || 'desconhecido'}`);
       luxBootTraceStep('startApp:init', 'Preparando o ambiente do perfil...');
-      window.LuxReaderCloud?.flush();
+      if (!window.LUX_CLOUDFLARE_GUEST) window.LuxReaderCloud?.flush();
       restoreAccountProgress();
       sharedVodCatalog = [];
       allMediaItems = [];
@@ -2043,7 +2137,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       window.LuxDevkit?.info('BOOT', 'progresso-local', 'Favoritos e progresso locais prontos; nuvem será sincronizada após abrir a Home.');
 
       luxBootTraceStep('saves-pendentes', 'Verificando saves pendentes...');
-      retryPendingGameSaves();
+      if (!window.LUX_CLOUDFLARE_GUEST) retryPendingGameSaves();
 
       luxBootTraceStep('home-espera-final', 'Dados críticos prontos. Liberando a Home...');
       luxBootTraceStep('home-render', 'Abrindo a Home...');
@@ -2057,7 +2151,7 @@ const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
       luxBootTraceDone();
 
       setTimeout(() => {
-        if (!currentUser?.profile) return;
+        if (!currentUser?.profile || window.LUX_CLOUDFLARE_GUEST) return;
         syncCloudProgress('post-boot').catch?.(() => {});
       }, 250);
 
