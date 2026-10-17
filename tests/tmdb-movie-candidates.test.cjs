@@ -17,7 +17,7 @@ test('public TMDB candidate endpoint rejects non-GET and invalid batches', async
   await handler({ method: 'POST', query: {} }, denied);
   assert.equal(denied.statusCode, 405);
   const invalid = response();
-  await handler({ method: 'GET', query: { batch: 999, round: 0 } }, invalid);
+  await handler({ method: 'GET', query: { kind: 'movies', batch: 999, round: 0 } }, invalid);
   assert.equal(invalid.statusCode, 400);
 });
 
@@ -40,11 +40,11 @@ test('response is privacy-safe and combines genre IDs without catalog credential
   };
   try {
     const res = response();
-    await handler({ method: 'GET', query: { batch: '0', round: '0' } }, res);
+    await handler({ method: 'GET', query: { kind: 'movies', batch: '0', round: '0' } }, res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.payload.complete, true);
-    assert.equal(res.payload.pagesFetched, 12);
-    assert.equal(urls.length, 12);
+    assert.equal(res.payload.pagesFetched, 8);
+    assert.equal(urls.length, 8);
     assert.equal(res.payload.rows.length, 1);
     assert.deepEqual(res.payload.rows[0].genre_ids, [28, 18]);
     assert.equal(JSON.stringify(res.payload).includes('test-only-key'), false);
@@ -63,9 +63,41 @@ test('missing server-side TMDB key fails safely with no external request', async
   delete process.env.TMDB_API_KEY;
   try {
     const res = response();
-    await handler({ method: 'GET', query: { batch: 0, round: 0 } }, res);
+    await handler({ method: 'GET', query: { kind: 'movies', batch: 0, round: 0 } }, res);
     assert.equal(res.statusCode, 503);
   } finally {
     if (oldKey !== undefined) process.env.TMDB_API_KEY = oldKey;
+  }
+});
+
+test('series TMDB Discover resolves TV tags without leaking private source data', async () => {
+  const oldFetch = global.fetch;
+  const oldKey = process.env.TMDB_API_KEY;
+  process.env.TMDB_API_KEY = 'test-only-key';
+  const urls = [];
+  global.fetch = async url => {
+    urls.push(String(url));
+    return { ok: true, json: async () => ({
+      results: [
+        { id: 79, name: 'Série exemplo', original_name: 'Example Series',
+          first_air_date: '2024-05-01', genre_ids: [10759, 18], adult: false }
+      ]
+    }) };
+  };
+  try {
+    const res = response();
+    await handler({method:'GET',query:{kind:'series',batch:'0',round:'0'}},res);
+    assert.equal(res.statusCode,200);
+    assert.equal(res.payload.kind,'series');
+    assert.equal(res.payload.pagesFetched,8);
+    assert.ok(urls.every(url=>url.includes('/discover/tv?')));
+    assert.equal(res.payload.rows.length,1);
+    assert.equal(res.payload.rows[0].title,'Série exemplo');
+    assert.equal(res.payload.rows[0].original_title,'Example Series');
+    assert.equal(res.payload.rows[0].release_date,'2024-05-01');
+    assert.deepEqual(res.payload.rows[0].genre_ids,[10759,18]);
+  } finally {
+    global.fetch = oldFetch;
+    if(oldKey === undefined) delete process.env.TMDB_API_KEY; else process.env.TMDB_API_KEY = oldKey;
   }
 });
