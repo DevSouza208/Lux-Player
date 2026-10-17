@@ -76,3 +76,13 @@ test('single-group catalog still displays all genres and honest partial counts',
   assert.ok(!result.sections[2].keys.includes('FILMES'));
   assert.equal(result.counts.get(genres.genreKey(28)) || 0, 0);
 });
+
+test('adult titles are not exposed by general release-year collections', () => {
+  const restricted = movie('Restrito', 'Filmes | Lançamentos 2026', { isAdult: true });
+  const normal = movie('Aberto', 'Filmes | Lançamentos 2026');
+  const items = [restricted, normal];
+  const output = genres.navigation(items, ['Filmes | Lançamentos 2026']);
+  assert.equal(output.counts.get(genres.collectionKey('2026')), 1);
+  assert.equal(genres.matches(restricted, genres.collectionKey('2026')), false);
+  assert.equal(genres.matches(normal, genres.collectionKey('2026')), true);
+});
