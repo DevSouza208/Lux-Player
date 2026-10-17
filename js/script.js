@@ -7,77 +7,6 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     const tmdbMetadataPending = new Map();
     const tmdbRequestQueue = [];
     let tmdbActiveRequests = 0;
-    let smartGenreRefreshTimer = null;
-
-    function scheduleSmartGenreRefresh() {
-      if (!['movies', 'series'].includes(currentSection) || smartGenreRefreshTimer) return;
-      smartGenreRefreshTimer = setTimeout(() => {
-        smartGenreRefreshTimer = null;
-        if (!['movies', 'series'].includes(currentSection)) return;
-        renderCategories();
-        if (window.LuxSmartGenres?.isSmart(activeCategory)) filterMedia();
-      }, 1300);
-    }
-
-    function learnSmartMovieGenres(item, metadata) {
-      // Capas e sinopses podem usar TMDB sem reorganizar a categoria do provedor.
-    }
-
-    // Fast lane: discover and match popular TMDB candidates from a shared CDN.
-    // Long tail: a small, resumable batch of individual title lookups, so obscure
-    // films and series can still be classified without blocking playback.
-    const SMART_LONG_TAIL_BUDGET = 72;
-    let longTailRequests = { movies: 0, series: 0 };
-    let longTailRunning = false;
-    let longTailTimer = null;
-    async function enrichGenreLongTail() {
-      if (longTailRunning || !currentUser || !['movies','series'].includes(currentSection)) return;
-      const account = currentUser;
-      const kind = currentSection;
-      const genres = window.LuxSmartGenres;
-      const items = getSectionItems();
-      if (!genres || !items.length || longTailRequests[kind] >= SMART_LONG_TAIL_BUDGET) return;
-
-      const storageKey = 'lux_tmdb_long_tail_v1:' + kind + ':' + items.length + ':' +
-        String(items[0]?.id || '') + ':' + String(items[items.length - 1]?.id || '');
-      let cursor = 0;
-      try { cursor = Number(localStorage.getItem(storageKey)) || 0; } catch (_) {}
-      cursor = Math.max(0, Math.min(items.length, cursor));
-      longTailRunning = true;
-      try {
-        while (cursor < items.length && longTailRequests[kind] < SMART_LONG_TAIL_BUDGET) {
-          if (currentUser !== account || currentSection !== kind || document.hidden) break;
-          const item = items[cursor++];
-          if (item.isAdult || genres.genreIds(item).length || genres.hasMetadata(item)) continue;
-          longTailRequests[kind]++;
-          await fetchTmdbMetadata(item);
-          await new Promise(resolve => setTimeout(resolve, 1100));
-        }
-      } catch (e) {
-        console.warn('[Lux Genres] Enriquecimento gradual interrompido:', e);
-      } finally {
-        try { localStorage.setItem(storageKey, String(cursor)); } catch (_) {}
-        longTailRunning = false;
-        if (currentSection === kind) scheduleSmartGenreRefresh();
-      }
-    }
-    function queueGenreLongTail() {
-      if (longTailRunning || longTailTimer || !currentUser || document.hidden
-          || !['movies','series'].includes(currentSection)) return;
-      const kind = currentSection;
-      if (longTailRequests[kind] >= SMART_LONG_TAIL_BUDGET) return;
-      longTailTimer = setTimeout(() => {
-        longTailTimer = null;
-        if (currentSection === kind) void enrichGenreLongTail();
-      }, 2500);
-    }
-
-    function queueSmartMovieClassification() {
-      // Navegação do original usa somente as categorias do fornecedor.
-      // A busca normal por capas/sinopses TMDB permanece independente.
-      // Não dispare Discover nem classificação por título no cliente.
-    }
-
     function normalizeTmdbTitle(str = '') {
       return String(str)
         .toLowerCase()
@@ -132,11 +61,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       if (!normalizedTitle) return null;
 
       const cacheKey = mediaType + ':' + normalizedTitle;
-      if (tmdbMetadataCache.has(cacheKey)) {
-        const cachedMetadata = tmdbMetadataCache.get(cacheKey);
-        learnSmartMovieGenres(item, cachedMetadata);
-        return cachedMetadata;
-      }
+      if (tmdbMetadataCache.has(cacheKey)) return tmdbMetadataCache.get(cacheKey);
       if (tmdbMetadataPending.has(cacheKey)) return tmdbMetadataPending.get(cacheKey);
 
       const request = enqueueTmdbRequest(async () => {
@@ -156,12 +81,10 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
           posterUrl: result.poster_path ? TMDB_IMAGE_BASE_URL + 'w500' + result.poster_path : '',
           backdropUrl: result.backdrop_path ? TMDB_IMAGE_BASE_URL + 'original' + result.backdrop_path : '',
           releaseDate: result.release_date || result.first_air_date || '',
-          score: result.vote_average || 0,
-          genreIds: Array.isArray(result.genre_ids) ? result.genre_ids : []
+          score: result.vote_average || 0
         };
       }).then(metadata => {
         tmdbMetadataCache.set(cacheKey, metadata);
-        learnSmartMovieGenres(item, metadata);
         return metadata;
       }).catch(error => {
         console.warn('Falha ao buscar metadados no TMDB:', title, error);
@@ -3178,8 +3101,6 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
             type: 'movies',
             source: 'xtream',
-            providerGenreText: String(item.genre || item.genres || '').slice(0, 240),
-            providerGenreIds: Array.isArray(item.genre_ids) ? item.genre_ids : [],
             isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
           };
         }).map(applySharedCategoryToItem).filter(profileAllowsMedia);
@@ -3208,7 +3129,6 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         if (currentSection === 'movies') {
           renderCategories();
           filterMedia();
-          queueSmartMovieClassification();
         } else if (currentSection === 'home') {
           try { renderHomeLancamentos2026(); } catch (_) {}
           Promise.resolve(loadTmdbHeroBanner()).catch(() => {});
@@ -3312,8 +3232,6 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             logo: item.cover || '',
             type: 'series',
             source: 'xtream',
-            providerGenreText: String(item.genre || item.genres || '').slice(0, 240),
-            providerGenreIds: Array.isArray(item.genre_ids) ? item.genre_ids : [],
             isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
           };
         }).map(applySharedCategoryToItem).filter(profileAllowsMedia);
@@ -3342,7 +3260,6 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         if (currentSection === 'series') {
           renderCategories();
           filterMedia();
-          queueSmartMovieClassification();
         } else if (currentSection === 'home') {
           Promise.resolve(loadTmdbHeroBanner()).catch(() => {});
         }
@@ -3888,7 +3805,6 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
 
         renderCategories();
         filterMedia();
-        if (section === 'movies' || section === 'series') queueSmartMovieClassification();
         if (section === 'movies') {
           if (
             xtreamMoviesState.status === 'error' &&
