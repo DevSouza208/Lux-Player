@@ -73,9 +73,16 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     }
 
     function queueSmartMovieClassification() {
-      if (!['movies', 'series'].includes(currentSection) || !currentUser || !window.LuxGenreCandidateLoader) return;
+      if (!['movies', 'series'].includes(currentSection) || !currentUser) return;
       const account = currentUser;
       const kind = currentSection;
+      if (window.LuxGenreWorker?.configured()) {
+        void window.LuxGenreWorker.load(kind, () => {
+          if (currentSection === kind && currentUser === account) scheduleSmartGenreRefresh();
+        }).catch(error => console.warn('Índice compartilhado indisponível:', error.message));
+        if (account.role === 'admin') window.LuxGenreWorker.schedule(kind, getSectionItems(), account);
+      }
+      if (!window.LuxGenreCandidateLoader) return;
       void window.LuxGenreCandidateLoader.start(getSectionItems(), {
         kind,
         isActive: () => currentSection === kind && currentUser === account && !document.hidden,
@@ -3196,6 +3203,10 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
           reason
         };
         setMediaSourceState('xtream', 'Xtream Codes', allMediaItems.length);
+        // After provider catalogue refresh, administrators send titles/years only.
+        if (sourceUser?.role === 'admin') {
+          window.LuxGenreWorker?.schedule('movies', movieItems, sourceUser);
+        }
 
         window.LuxDevkit?.success('IPTV', 'filmes-background', 'Catálogo de filmes integrado', 0, {
           movies: movieItems.length,
@@ -3330,6 +3341,9 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
           reason
         };
         setMediaSourceState('xtream', 'Xtream Codes', allMediaItems.length);
+        if (sourceUser?.role === 'admin') {
+          window.LuxGenreWorker?.schedule('series', seriesItems, sourceUser);
+        }
 
         window.LuxDevkit?.success('IPTV', 'series-background', 'Catálogo de séries integrado', 0, {
           series: seriesItems.length,
@@ -3682,6 +3696,42 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         item.isAdult = isAdultContent(item.group, item.name);
       }
       return item;
+    }
+
+    // Manual, admin-only snapshot. Never send stream URLs or Xtream credentials.
+    async function adminSyncSharedGenres() {
+      const output = document.getElementById('adminGenreWorkerStatus');
+      const button = document.getElementById('adminGenreWorkerButton');
+      if (!output || !button) return;
+      if (currentUser?.role !== 'admin') { output.textContent = 'Acesso restrito.'; return; }
+      if (!window.LuxGenreWorker?.configured()) {
+        output.textContent = 'Primeiro conecte o Worker/D1 ao Lux. O catálogo atual continua funcionando.';
+        return;
+      }
+      const account = currentUser;
+      const items = allMediaItems.slice();
+      if (!items.some(item => item.type === 'movies' || item.type === 'series')) {
+        output.textContent = 'Carregue a lista antes de sincronizar.';
+        return;
+      }
+      button.disabled = true;
+      try {
+        for (const kind of ['movies', 'series']) {
+          if (!items.some(item => item.type === kind)) continue;
+          output.textContent = 'Enviando títulos de ' + (kind === 'movies' ? 'filmes' : 'séries') + '...';
+          await window.LuxGenreWorker.upload(kind, items, account, step => {
+            if (currentUser !== account) return;
+            output.textContent = (kind === 'movies' ? 'Filmes' : 'Séries') + ': ' + step.sent + '/' + step.total + ' títulos enviados ao índice.';
+          }, true);
+          if (currentUser !== account) return;
+        }
+        const summary = await window.LuxGenreWorker.status();
+        const matched = (summary.rows || []).filter(row => row.status === 'matched')
+          .reduce((sum, row) => sum + Number(row.total || 0), 0);
+        output.textContent = 'Sincronização enviada! ' + matched + ' títulos identificados no D1. O Worker continua automaticamente.';
+      } catch (error) {
+        output.textContent = 'Falha na sincronização: ' + (error?.message || 'tente novamente');
+      } finally { button.disabled = false; }
     }
 
     async function adminSendCategoriesToUsers() {
