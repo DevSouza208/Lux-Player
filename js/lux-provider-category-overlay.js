@@ -27,10 +27,11 @@
     return !name||names.includes(name);
   }
   function apply(items,data,isAdultContent,profileAllowsMedia){
-    if(!Array.isArray(items)||!data||typeof data!=='object')return {changed:0,assignedMovies:0,assignedSeries:0,adultRestricted:0};
-    let changed=0,assignedMovies=0,assignedSeries=0,adultRestricted=0;
+    if(!Array.isArray(items)||!data||typeof data!=='object')return {changed:0,assignedMovies:0,assignedSeries:0,assignedLive:0,adultRestricted:0};
+    let changed=0,assignedMovies=0,assignedSeries=0,assignedLive=0,adultRestricted=0;
     const moviesById=data.movieIds||{}, moviesByTitle=data.movieTitles||{};
     const seriesById=data.seriesIds||{},seriesByTitle=data.seriesTitles||{};
+    const liveById=data.liveIds||{},liveByTitle=data.liveTitles||{};
     for(const item of items){
       if(!item||(item.type!=='movies'&&item.type!=='series')||item.source==='xtream')continue;
       if(!generic(item.providerGroup||item.group,item.type))continue; // group-title real prevalece
