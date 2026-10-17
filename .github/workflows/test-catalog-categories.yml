@@ -27,6 +27,6 @@ jobs:
         run: |
           node --check js/script.js
           node --check js/lux-provider-category-overlay.js
-      - name: Validar 31.306 filmes, 6.049 séries, categorias e reprodução
+      - name: Validar 2.244 canais, 31.306 filmes, 6.049 séries e reprodução
         run: |
-          node --test tests/provider-native-categories.test.cjs tests/catalog-integrity-first.test.cjs tests/legacy-categories-generic-provider.test.cjs tests/xtream-native-categories-overlay.test.cjs
+          node --test tests/provider-native-categories.test.cjs tests/catalog-integrity-first.test.cjs tests/legacy-categories-generic-provider.test.cjs tests/xtream-native-categories-overlay.test.cjs tests/xtream-live-categories.test.cjs

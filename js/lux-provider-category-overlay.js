@@ -3,7 +3,7 @@
 (function(root){
   'use strict';
   const endpoint='https://cavgobgykpbiehqvqkws.supabase.co/functions/v1/lux-provider-categories';
-  const active=new Map();
+  const active=new WeakMap();
 
   function norm(raw){
     return String(raw||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
@@ -13,9 +13,18 @@
   }
   function streamId(url,kind){
     try {
-      const route=kind==='movies'?'movie':'series';
       const path=new URL(String(url||'')).pathname;
-      const match=path.match(new RegExp('/'+route+'/[^/]+/[^/]+/(\\d+)(?:\\.[^/]+)?$','i'));
+      if(kind==='live'){
+        const match=path.match(/\/(?:live\/)?[^/]+\/[^/]+\/(\d+)(?:\.[^/]+)?$/i);
+        return match?match[1]:'';
+      }
+      const route=kind==='movies'?'movie':'series';
+      const prefix='/'+route+'/';
+      const pos=path.toLowerCase().indexOf(prefix);
+      if(pos<0)return '';
+      const parts=path.slice(pos+prefix.length).split('/');
+      if(parts.length!==3)return '';
+      const match=parts[2].match(/^(\d+)(?:\.[^/]+)?$/);
       return match?match[1]:'';
     }catch{return ''}
   }
@@ -23,24 +32,32 @@
     const name=norm(group);
     const names=kind==='movies'
       ? ['filmes','filme','movies','movie','vod','geral','catalogo geral']
-      : ['series','serie','seriados','tv series','tv shows','geral'];
+      : kind==='series'
+        ? ['series','serie','seriados','tv series','tv shows','geral']
+        : ['canais','tv','live','ao vivo','geral','todos','todos os canais'];
     return !name||names.includes(name);
   }
   function apply(items,data,isAdultContent,profileAllowsMedia){
-    if(!Array.isArray(items)||!data||typeof data!=='object')return {changed:0,assignedMovies:0,assignedSeries:0,adultRestricted:0};
-    let changed=0,assignedMovies=0,assignedSeries=0,adultRestricted=0;
+    if(!Array.isArray(items)||!data||typeof data!=='object')return {changed:0,assignedMovies:0,assignedSeries:0,assignedLive:0,adultRestricted:0};
+    let changed=0,assignedMovies=0,assignedSeries=0,assignedLive=0,adultRestricted=0;
     const moviesById=data.movieIds||{}, moviesByTitle=data.movieTitles||{};
     const seriesById=data.seriesIds||{},seriesByTitle=data.seriesTitles||{};
+    const liveById=data.liveIds||{},liveByTitle=data.liveTitles||{};
     for(const item of items){
-      if(!item||(item.type!=='movies'&&item.type!=='series')||item.source==='xtream')continue;
-      if(!generic(item.providerGroup||item.group,item.type))continue; // group-title real prevalece
+      if(!item||!['live','movies','series'].includes(item.type)||item.source==='xtream')continue;
+      // The official Xtream Live category outranks broad M3U groups.
+      // Keep existing behavior for VOD and Series.
+      if(item.type!=='live'&&!generic(item.providerGroup||item.group,item.type))continue;
       let found='';
       if(item.type==='movies'){
         const id=streamId(item.url,'movies');
         found=String((id&&moviesById[id])||moviesByTitle[norm(item.name)]||'');
-      }else{
+      }else if(item.type==='series'){
         const id=String(item.series_id||'');
         found=String(seriesById[id]||seriesByTitle[norm(item.name)]||'');
+      }else{
+        const id=String(item.stream_id||streamId(item.url,'live')||'');
+        found=String((id&&liveById[id])||liveByTitle[norm(item.name)]||'');
       }
       if(!found||found.length>150||generic(found,item.type))continue;
       const wasAdult=Boolean(item.isAdult);
@@ -48,14 +65,15 @@
       item.providerCategoryFromXtream=true;
       item.isAdult=wasAdult||Boolean(isAdultContent(found,item.name));
       if(!wasAdult&&item.isAdult&&!profileAllowsMedia(item))adultRestricted++;
-      if(item.type==='movies')assignedMovies++;else assignedSeries++;
+      if(item.type==='movies')assignedMovies++;
+      else if(item.type==='series')assignedSeries++;
+      else assignedLive++;
     }
-    return {changed,assignedMovies,assignedSeries,adultRestricted};
+    return {changed,assignedMovies,assignedSeries,assignedLive,adultRestricted};
   }
   async function get(user){
     if(!user?.user||!user?.pass)throw Error('not_authenticated');
-    const k=user.user+'|'+String(user.pass).slice(0,8);
-    if(active.has(k))return active.get(k);
+    if(active.has(user))return active.get(user);
     const task=(async()=>{
       const timeout=AbortSignal.timeout(75000);
       const r=await root.fetch(endpoint,{
@@ -67,10 +85,10 @@
       });
       if(!r.ok)throw Error('category_http_'+r.status);
       const body=await r.json();
-      if(!body?.ok||body?.data?.version!==1)throw Error('category_data_unavailable');
+      if(!body?.ok||body?.data?.version<2)throw Error('category_data_unavailable');
       return body.data;
-    })().catch(err=>{active.delete(k);throw err});
-    active.set(k,task);
+    })().catch(err=>{active.delete(user);throw err});
+    active.set(user,task);
     return task;
   }
   root.LuxProviderCategoryOverlay={get,apply,generic,norm,streamId};

@@ -59,12 +59,12 @@ function groupOf(item,map){
   for(const id of ids){if(map[String(id)])return map[String(id)]}
   return '';
 }
-function buildIndex(catsMovies,catsSeries,movies,series){
-  const movieGroups=categoryMap(catsMovies),seriesGroups=categoryMap(catsSeries);
-  const movieIds={},movieTitles={},seriesIds={},seriesTitles={};
+function buildIndex(catsMovies,catsSeries,movies,series,catsLive=[],live=[]){
+  const movieGroups=categoryMap(catsMovies),seriesGroups=categoryMap(catsSeries),liveGroups=categoryMap(catsLive);
+  const movieIds={},movieTitles={},seriesIds={},seriesTitles={},liveIds={},liveTitles={};
   const AMBIGUOUS='__ambiguous__';
   const insertTitle=(map,key,val)=>{if(!key)return;if(map[key]&&map[key]!==val)map[key]=AMBIGUOUS;else if(!map[key])map[key]=val};
-  let movieMapped=0,seriesMapped=0;
+  let movieMapped=0,seriesMapped=0,liveMapped=0;
   for(const item of movies){
     const group=groupOf(item,movieGroups);
     if(!group)continue;
@@ -79,8 +79,19 @@ function buildIndex(catsMovies,catsSeries,movies,series){
     if(id!=null&&/^\d+$/.test(String(id))){seriesIds[String(id)]=group;seriesMapped++}
     insertTitle(seriesTitles,norm(item.name||item.title),group);
   }
-  for(const map of [movieTitles,seriesTitles])for(const [key,val] of Object.entries(map))if(val===AMBIGUOUS)delete map[key];
-  return {version:1,movieIds,movieTitles,seriesIds,seriesTitles,counts:{movieCategories:Object.keys(movieGroups).length,seriesCategories:Object.keys(seriesGroups).length,movieStreams:movies.length,seriesStreams:series.length,movieMapped,seriesMapped}};
+  for(const item of live){
+    const group=groupOf(item,liveGroups);
+    if(!group)continue;
+    const id=item.stream_id??item.id;
+    if(id!=null&&/^\d+$/.test(String(id))){liveIds[String(id)]=group;liveMapped++}
+    insertTitle(liveTitles,norm(item.name||item.title),group);
+  }
+  for(const map of [movieTitles,seriesTitles,liveTitles])for(const [key,val] of Object.entries(map))if(val===AMBIGUOUS)delete map[key];
+  return {version:2,movieIds,movieTitles,seriesIds,seriesTitles,liveIds,liveTitles,counts:{
+    movieCategories:Object.keys(movieGroups).length,seriesCategories:Object.keys(seriesGroups).length,
+    liveCategories:Object.keys(liveGroups).length,movieStreams:movies.length,seriesStreams:series.length,
+    liveStreams:live.length,movieMapped,seriesMapped,liveMapped
+  }};
 }
 async function upstream(src,action){
   const url=new URL(src.url+'/player_api.php');
@@ -94,7 +105,7 @@ async function upstream(src,action){
   return data;
 }
 async function cacheKey(src){
-  const raw=new TextEncoder().encode(src.url+'|'+src.user);
+  const raw=new TextEncoder().encode(src.url+'|'+src.user+'|'+src.pass);
   const buf=await crypto.subtle.digest('SHA-256',raw);
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
@@ -113,15 +124,19 @@ Deno.serve(async request=>{
     if(authError||!account?.usuario)return reply({error:'not_authenticated'},401,origin);
     const src=sourceFromUser(account),key=await cacheKey(src);
     const {data:cached}=await db.from('lux_provider_category_cache').select('data,refreshed_at').eq('source_key',key).maybeSingle();
-    if(cached?.data && Date.now()-Date.parse(cached.refreshed_at)<ttlMs)return reply({ok:true,source:'shared_cache',data:cached.data},200,origin);
+    if(cached?.data?.version>=2 && Date.now()-Date.parse(cached.refreshed_at)<ttlMs)return reply({ok:true,source:'shared_cache',data:cached.data},200,origin);
     try {
-      const [catsMovies,catsSeries,movies,series]=await Promise.all([
+      // Streams/categorias de TV são independentes: uma falha de um endpoint
+      // não descarta categorias já válidas dos outros tipos.
+      const [catsMovies,catsSeries,movies,series,catsLive,live]=await Promise.all([
         upstream(src,'get_vod_categories'),upstream(src,'get_series_categories'),
-        upstream(src,'get_vod_streams'),upstream(src,'get_series')
+        upstream(src,'get_vod_streams'),upstream(src,'get_series'),
+        upstream(src,'get_live_categories').catch(()=>[]),
+        upstream(src,'get_live_streams').catch(()=>[])
       ]);
-      const data=buildIndex(catsMovies,catsSeries,movies,series);
+      const data=buildIndex(catsMovies,catsSeries,movies,series,catsLive,live);
       // Never overwrite good stored categories with generic-only or failed replies.
-      if(!data.counts.movieMapped&&!data.counts.seriesMapped)throw Error('no_detailed_categories');
+      if(!data.counts.movieMapped&&!data.counts.seriesMapped&&!data.counts.liveMapped)throw Error('no_detailed_categories');
       const {error:saveError}=await db.from('lux_provider_category_cache').upsert({source_key:key,data,refreshed_at:new Date().toISOString()},{onConflict:'source_key'});
       if(saveError)throw Error('cache_write_failed');
       return reply({ok:true,source:'provider',data},200,origin);

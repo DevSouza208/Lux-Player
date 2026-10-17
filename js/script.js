@@ -3596,8 +3596,10 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             allMediaItems = allMediaItems.filter(profileAllowsMedia);
           }
           console.info('[Lux categorias Xtream]', {
+            liveCategories: metadata.counts?.liveCategories || 0,
             movieCategories: metadata.counts?.movieCategories || 0,
             seriesCategories: metadata.counts?.seriesCategories || 0,
+            liveMatched: report.assignedLive,
             moviesMatched: report.assignedMovies,
             seriesMatched: report.assignedSeries,
             itemsReorganized: report.changed
