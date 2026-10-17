@@ -171,9 +171,9 @@
       </div>
 
       <div class="flex items-center justify-between px-2 mb-2">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400">GÊNEROS</span>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-purple-400">CATEGORIAS</span>
         <div class="flex items-center gap-2">
-          <button onclick="toggleSortMode()" id="sortModeBtn" title="Organizar Gêneros" class="text-[10px] bg-purple-950 hover:bg-purple-900 text-purple-300 p-1.5 rounded-md transition-all flex items-center justify-center">
+          <button onclick="toggleSortMode()" id="sortModeBtn" title="Organizar categorias" class="text-[10px] bg-purple-950 hover:bg-purple-900 text-purple-300 p-1.5 rounded-md transition-all flex items-center justify-center">
             <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
           </button>
           <span id="mediaCountBadge" class="text-[10px] bg-purple-950 text-purple-300 px-2 py-0.5 rounded-full font-mono">0 itens</span>
@@ -182,7 +182,7 @@
       <div id="categoriesList" class="flex flex-col gap-1.5 overflow-y-auto pr-1"></div>
     </aside>
 
-    <div id="sidebarOpenTab" onclick="toggleSidebar()" title="Expandir Gêneros" class="hidden fixed left-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-[#2e1d47] hover:bg-[#a855f7] text-purple-200 hover:text-white rounded-r-lg z-30 cursor-pointer items-center justify-center transition-colors">
+    <div id="sidebarOpenTab" onclick="toggleSidebar()" title="Expandir categorias" class="hidden fixed left-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-[#2e1d47] hover:bg-[#a855f7] text-purple-200 hover:text-white rounded-r-lg z-30 cursor-pointer items-center justify-center transition-colors">
       <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
     </div>
 
@@ -287,7 +287,7 @@
         <div class="flex items-center gap-2 min-w-0">
           <button onclick="backToMobileCategories()" class="lg:hidden bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
             <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-            <span>Gêneros</span>
+            <span>Categorias</span>
           </button>
           <span id="liveCategoryTitle" class="text-xs font-semibold text-purple-300 truncate">Grade de Canais</span>
         </div>
@@ -331,7 +331,7 @@
         <div class="flex items-center gap-2 min-w-0">
           <button onclick="backToMobileCategories()" class="bg-purple-900/50 hover:bg-purple-600 text-purple-200 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0">
             <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-            <span>Gêneros</span>
+            <span>Categorias</span>
           </button>
           <span id="vodCategoryTitle" class="text-xs font-semibold text-purple-300 truncate">Catálogo</span>
         </div>
