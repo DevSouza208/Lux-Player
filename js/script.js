@@ -227,6 +227,17 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     let xtreamSeriesContext = null;
     let xtreamSeriesSectionRetryDone = false;
     let xtreamLoadSequence = 0;
+    // Keep the last complete Xtream movie/series snapshot while a refresh runs.
+    // An identity change (account, server or credentials) never inherits another source.
+    let loadedXtreamOwner = null;
+    let loadedXtreamIdentity = '';
+
+    function preserveXtreamSectionsWhileRefreshing(previous, owner, identity) {
+      if (owner !== loadedXtreamOwner || identity !== loadedXtreamIdentity) return [];
+      return previous.filter(item =>
+        (item.type === 'movies' || item.type === 'series') && item.source === 'xtream'
+      );
+    }
 
     function setMediaSourceState(kind, label, count = allMediaItems.length) {
       mediaSourceState = { available: true, kind, label, count: Number(count) || 0 };
@@ -3401,6 +3412,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
 
     async function loadFromXtreamApi(server, user, pass) {
       const cleanServer = server.replace(/\/+$/, '');
+      const sourceIdentity = cleanServer + '\u0000' + String(user) + '\u0000' + String(pass);
       const baseApi = `${cleanServer}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`;
 
       document.getElementById('splashStatusMessage').innerText = 'Baixando categorias e canais...';
@@ -3504,12 +3516,19 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         });
 
         if (!parsedItems.length) throw new Error('O Xtream não retornou canais, filmes ou séries.');
-        allMediaItems = parsedItems.map(applySharedCategoryToItem).filter(profileAllowsMedia);
+        const retained = preserveXtreamSectionsWhileRefreshing(allMediaItems, sourceUser, sourceIdentity);
+        const freshChannels = parsedItems.map(applySharedCategoryToItem).filter(profileAllowsMedia);
+        // New live channels are authoritative immediately. Prior films and series
+        // remain available only until their corresponding background fetch succeeds.
+        allMediaItems = [...freshChannels, ...retained]
+          .sort((a, b) => Number(Boolean(a.isAdult)) - Number(Boolean(b.isAdult)));
+        loadedXtreamOwner = sourceUser;
+        loadedXtreamIdentity = sourceIdentity;
         mergeSharedVodsIntoPlayer();
         window.LuxDevkit?.success('IPTV', 'catalogo-pronto', 'Catálogo Xtream disponível', null, {
           live: liveStreams.length,
-          movies: 'background',
-          series: 'background',
+          movies: retained.filter(item => item.type === 'movies').length || 'background',
+          series: retained.filter(item => item.type === 'series').length || 'background',
           total: parsedItems.length,
           visibleForProfile: allMediaItems.length
         });
@@ -3676,63 +3695,28 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     }
 
     function applySharedCategoryToItem(item) {
+      // The latest provider record is the source of truth for catalogue membership.
+      // A historical group is optional metadata and may be missing or outdated.
+      const providerGroup = String(item?.group || '').trim();
       const sharedGroup = getSharedCategoryForItem(item);
-      if (sharedGroup) {
-        item.group = sharedGroup;
-        item.isAdult = isAdultContent(item.group, item.name);
-      }
+      const fallback = item?.type === 'movies' ? 'Filmes' : item?.type === 'series' ? 'Séries' : 'Canais';
+      item.providerGroup = providerGroup || fallback;
+      item.sharedGroup = sharedGroup || '';
+      item.group = sharedGroup || providerGroup || fallback;
+      // Never let a stale non-adult group turn an adult record into a child-safe one.
+      item.isAdult = Boolean(item.isAdult || item.adult) ||
+        isAdultContent(item.providerGroup, item.name) ||
+        isAdultContent(item.group, item.name);
       return item;
     }
 
     async function adminSendCategoriesToUsers() {
-      if (currentUser?.role !== 'admin') return;
+      // This legacy control used to overwrite every customer's 39k-item map
+      // with the administrator's current groups (often just 'FILMES').
+      // Disabled until the central, versioned organizer is restored.
       const status = document.getElementById('adminCategorySyncStatus');
-      if (!allMediaItems.length) {
-        if (status) status.textContent = 'Carregue sua lista M3U/Xtream antes de enviar as categorias.';
-        return;
-      }
-
-      const categoryMap = {};
-      allMediaItems.forEach(item => {
-        const key = sharedCategoryKey(item);
-        const group = String(item?.group || '').trim();
-        if (item?.name && group && key.endsWith('|' + normalizeSharedCategoryTitle(item.name))) {
-          categoryMap[key] = group;
-        }
-      });
-
-      const entries = Object.entries(categoryMap);
-      if (!entries.length) {
-        if (status) status.textContent = 'Nenhum título com categoria foi encontrado na lista atual.';
-        return;
-      }
-
-      const button = document.getElementById('adminCategorySyncButton');
-      if (button) button.disabled = true;
-      if (status) status.textContent = 'Enviando categorias e agrupamentos para os usuários...';
-
-      try {
-        const { data: users, error: usersError } = await supabaseClient
-          .from('usuarios')
-          .select('usuario');
-
-        if (usersError) throw usersError;
-
-        for (const user of users || []) {
-          const { error } = await supabaseClient
-            .from('usuarios')
-            .update({ categorias_compartilhadas: categoryMap })
-            .eq('usuario', user.usuario);
-          if (error) throw error;
-        }
-
-        currentUser.categoryMap = categoryMap;
-        if (status) status.textContent = `${entries.length} títulos agrupados e enviados para ${(users || []).length} usuários.`;
-      } catch (error) {
-        if (status) status.textContent = 'Não foi possível enviar categorias: ' + (error.message || 'erro desconhecido');
-      } finally {
-        if (button) button.disabled = false;
-      }
+      if (status) status.textContent = 'A organização salva foi preservada. A publicação central será ativada após a sincronização segura do catálogo.';
+      return false;
     }
 
     function parseM3U(data) {
@@ -5032,6 +5016,16 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
 
     function filterMedia() {
       const currentList = getSectionItems();
+      // A category may disappear after a supplier refresh or a TMDB reindex.
+      // Never strand the viewer on a stale/empty filter while fresh content exists.
+      const fixedCategories = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
+      if (!activeSearchQuery && !fixedCategories.includes(activeCategory) &&
+          !currentList.some(item => window.LuxSmartGenres?.isSmart(activeCategory)
+            ? window.LuxSmartGenres.matches(item, activeCategory)
+            : item.group === activeCategory)) {
+        activeCategory = 'Todos';
+        renderCategories();
+      }
       const scoredResults = [];
 
       const normalizedQuery = normalizeSearchText(activeSearchQuery);
