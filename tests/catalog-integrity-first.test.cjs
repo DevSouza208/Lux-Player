@@ -120,7 +120,7 @@ test('Todos always shows every provider item regardless of stale or unknown cate
   const output = runFilter(list,'Todos');
   assert.equal(output.category,'Todos');
   assert.equal(output.items.length,3);
-  assert.deepEqual(output.items.map(i=>i.id),list.map(i=>i.id));
+  assert.deepEqual(Array.from(output.items, i=>i.id),list.map(i=>i.id));
 });
 
 test('a category removed in the new catalogue falls back to Todos', () => {
