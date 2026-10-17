@@ -2,9 +2,8 @@
 // Only public TMDB data is downloaded; private playlist URLs remain on-device.
 (function (root) {
   'use strict';
-  var BATCHES = 5;
   var ROUNDS = 3;
-  var TOTAL = BATCHES * ROUNDS;
+  var BATCHES_BY_KIND = { movies: 5, series: 4 };
   var TTL = 3 * 24 * 60 * 60 * 1000;
   var inFlight = false;
   var retryAfter = 0;
@@ -33,9 +32,13 @@
     if (inFlight || Date.now() < retryAfter || !root.LuxSmartGenres?.createCatalogIndex
         || !Array.isArray(items) || !items.length || !stillActive(ctx)) return false;
     const genres = root.LuxSmartGenres;
-    const cacheKey = 'lux_discover_index_v4:' + signature(items);
+    const kind = ctx.kind === 'series' ? 'series' : 'movies';
+    const BATCHES = BATCHES_BY_KIND[kind];
+    const TOTAL = BATCHES * ROUNDS;
+    const cacheKey = 'lux_discover_index_v5:' + kind + ':' + signature(items);
     const stored = storageRead(cacheKey);
-    const fresh = Number(stored.at) > 0 && Date.now() - Number(stored.at) < TTL;
+    const fresh = Number(stored.at) > 0 && Date.now() - Number(stored.at) < TTL
+      && Number(stored.cursor) >= 0;
     let cursor = fresh ? Math.max(0, Math.min(TOTAL, Number(stored.cursor) || 0)) : 0;
     if (cursor >= TOTAL) {
       status({ status: 'ready', processed: TOTAL, total: TOTAL });
@@ -56,13 +59,13 @@
         const deadline = root.setTimeout(() => controller.abort(), 16000);
         let payload;
         try {
-          const response = await root.fetch('/api/tmdb-movie-candidates?batch=' + batch + '&round=' + round, {
+          const response = await root.fetch('/api/tmdb-movie-candidates?kind=' + kind + '&batch=' + batch + '&round=' + round, {
             signal: controller.signal,
             credentials: 'omit'
           });
           if (!response.ok) throw new Error('TMDB candidate cache: HTTP ' + response.status);
           payload = await response.json();
-          if (payload?.version !== 1 || !Array.isArray(payload.rows)) throw new Error('Invalid candidate payload');
+          if (payload?.version !== 1 || payload?.kind !== kind || !Array.isArray(payload.rows)) throw new Error('Invalid candidate payload');
         } finally {
           root.clearTimeout(deadline);
         }
