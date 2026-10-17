@@ -7,6 +7,21 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     const tmdbMetadataPending = new Map();
     const tmdbRequestQueue = [];
     let tmdbActiveRequests = 0;
+    let smartGenreRefreshTimer = null;
+
+    function scheduleSmartGenreRefresh() {
+      if (currentSection !== 'movies' || smartGenreRefreshTimer) return;
+      smartGenreRefreshTimer = setTimeout(() => {
+        smartGenreRefreshTimer = null;
+        if (currentSection !== 'movies') return;
+        renderCategories();
+        if (window.LuxSmartGenres?.isSmart(activeCategory)) filterMedia();
+      }, 1300);
+    }
+
+    function learnSmartMovieGenres(item, metadata) {
+      if (window.LuxSmartGenres?.learn(item, metadata)) scheduleSmartGenreRefresh();
+    }
 
     function normalizeTmdbTitle(str = '') {
       return String(str)
@@ -62,7 +77,11 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       if (!normalizedTitle) return null;
 
       const cacheKey = mediaType + ':' + normalizedTitle;
-      if (tmdbMetadataCache.has(cacheKey)) return tmdbMetadataCache.get(cacheKey);
+      if (tmdbMetadataCache.has(cacheKey)) {
+        const cachedMetadata = tmdbMetadataCache.get(cacheKey);
+        learnSmartMovieGenres(item, cachedMetadata);
+        return cachedMetadata;
+      }
       if (tmdbMetadataPending.has(cacheKey)) return tmdbMetadataPending.get(cacheKey);
 
       const request = enqueueTmdbRequest(async () => {
@@ -82,10 +101,12 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
           posterUrl: result.poster_path ? TMDB_IMAGE_BASE_URL + 'w500' + result.poster_path : '',
           backdropUrl: result.backdrop_path ? TMDB_IMAGE_BASE_URL + 'original' + result.backdrop_path : '',
           releaseDate: result.release_date || result.first_air_date || '',
-          score: result.vote_average || 0
+          score: result.vote_average || 0,
+          genreIds: Array.isArray(result.genre_ids) ? result.genre_ids : []
         };
       }).then(metadata => {
         tmdbMetadataCache.set(cacheKey, metadata);
+        learnSmartMovieGenres(item, metadata);
         return metadata;
       }).catch(error => {
         console.warn('Falha ao buscar metadados no TMDB:', title, error);
@@ -4421,10 +4442,32 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         sortedCats.sort(sortCategoriesSmart);
       }
 
+      const smartGenres = currentSection === 'movies' ? window.LuxSmartGenres : null;
+      const rawCategoryCounts = new Map();
+      items.forEach(item => rawCategoryCounts.set(item.group, (rawCategoryCounts.get(item.group) || 0) + 1));
+      const smartNavigation = smartGenres && !isSortModeActive
+        ? smartGenres.navigation(items, sortedCats)
+        : null;
+      const categoryHeadings = new Map();
       const cats = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
       if (hasCliente) cats.push(hasCliente);
       if (hasGuiaJogos) cats.push(hasGuiaJogos);
-      cats.push(...sortedCats);
+      if (smartNavigation) {
+        smartNavigation.sections.forEach(section => {
+          if (!section.keys.length) return;
+          categoryHeadings.set(section.keys[0], section.title);
+          cats.push(...section.keys);
+        });
+      } else {
+        cats.push(...sortedCats);
+      }
+      const getCategoryCount = cat => {
+        if (cat === 'Todos') return items.length;
+        if (cat === 'Continuar Assistindo') return resumeCount;
+        if (cat === 'Minha Lista') return favCount;
+        return smartNavigation?.counts.get(cat) ?? rawCategoryCounts.get(cat) ?? 0;
+      };
+      const getCategoryLabel = cat => smartGenres ? smartGenres.label(cat) : cat;
 
       const resumeCount = items.filter(c => {
         return hasResumeEntry(c);
@@ -4442,6 +4485,13 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       desktopContainer.innerHTML = '';
 
       cats.forEach(cat => {
+        if (categoryHeadings.has(cat)) {
+          const heading = document.createElement('div');
+          heading.className = 'mt-4 mb-1 px-3 text-[10px] font-bold tracking-widest text-purple-400/70';
+          heading.textContent = categoryHeadings.get(cat);
+          desktopContainer.appendChild(heading);
+        }
+        const displayCat = getCategoryLabel(cat);
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
         const isClienteCat = hasCliente && cat === hasCliente;
@@ -4449,11 +4499,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         const isFavCat = cat === 'Minha Lista';
         const isFixedTop = isResumeCat || cat === 'Todos' || isClienteCat || isGuiaCat || isFavCat;
         
-        let count = 0;
-        if (cat === 'Todos') count = items.length;
-        else if (isResumeCat) count = resumeCount;
-        else if (isFavCat) count = favCount;
-        else count = items.filter(c => c.group === cat).length;
+        const count = getCategoryCount(cat);
 
         const btn = document.createElement('div');
         
@@ -4500,9 +4546,9 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         let badgeBg = isResumeCat ? 'text-amber-400/70 bg-[#26180c]' : (isFavCat ? 'text-rose-400/70 bg-[#260c14]' : (isClienteCat ? 'text-blue-400/70 bg-[#0c1a26]' : (isGuiaCat ? 'text-emerald-400/70 bg-[#0c2618]' : 'text-purple-400/50 bg-[#170e26]')));
 
         btn.innerHTML = `
-          <span class="truncate max-w-[180px] flex items-center gap-1.5" title="${cat}">
+          <span class="truncate max-w-[180px] flex items-center gap-1.5" title="${escapeGameHtml(cat)}">
             ${iconHtml}
-            ${cat}
+            ${escapeGameHtml(displayCat)}
           </span>
           <div class="flex items-center gap-1">
             <span class="text-[10px] ${badgeBg} px-1.5 py-0.5 rounded-md shrink-0">${count}</span>
@@ -4516,6 +4562,13 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       mobileGrid.innerHTML = '';
 
       cats.forEach(cat => {
+        if (categoryHeadings.has(cat)) {
+          const heading = document.createElement('div');
+          heading.className = 'col-span-2 mt-3 mb-0.5 text-[10px] font-bold tracking-widest text-purple-400/70';
+          heading.textContent = categoryHeadings.get(cat);
+          mobileGrid.appendChild(heading);
+        }
+        const displayCat = getCategoryLabel(cat);
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
         const isFavCat = cat === 'Minha Lista';
@@ -4523,11 +4576,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         const isGuiaCat = hasGuiaJogos && cat === hasGuiaJogos;
         const isSpecialAll = cat === 'Todos';
 
-        let count = 0;
-        if (isSpecialAll) count = items.length;
-        else if (isResumeCat) count = resumeCount;
-        else if (isFavCat) count = favCount;
-        else count = items.filter(c => c.group === cat).length;
+        const count = getCategoryCount(cat);
 
         const card = document.createElement('div');
         card.onclick = () => selectMobileCategory(cat);
@@ -4567,7 +4616,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             </span>
           </div>
           <div class="mt-2">
-            <h4 class="text-xs font-bold ${isResumeCat ? 'text-amber-200' : (isFavCat ? 'text-rose-200' : (isClienteCat ? 'text-blue-200' : (isGuiaCat ? 'text-emerald-200' : 'text-slate-100')))} line-clamp-2">${cat}</h4>
+            <h4 class="text-xs font-bold ${isResumeCat ? 'text-amber-200' : (isFavCat ? 'text-rose-200' : (isClienteCat ? 'text-blue-200' : (isGuiaCat ? 'text-emerald-200' : 'text-slate-100')))} line-clamp-2">${escapeGameHtml(displayCat)}</h4>
           </div>
         `;
         mobileGrid.appendChild(card);
@@ -4908,7 +4957,9 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
           } else if (activeCategory === 'Minha Lista') {
             matchesCat = isFavorite(c);
           } else {
-            matchesCat = c.group === activeCategory;
+            matchesCat = window.LuxSmartGenres?.isSmart(activeCategory)
+              ? window.LuxSmartGenres.matches(c, activeCategory)
+              : c.group === activeCategory;
           }
         }
 
@@ -4963,7 +5014,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             </span>
           `;
         } else {
-          headingEl.innerText = activeCategory;
+          headingEl.innerText = window.LuxSmartGenres?.label(activeCategory) || activeCategory;
         }
       }
 
