@@ -54,9 +54,11 @@
       item.providerCategoryFromXtream=true;
       item.isAdult=wasAdult||Boolean(isAdultContent(found,item.name));
       if(!wasAdult&&item.isAdult&&!profileAllowsMedia(item))adultRestricted++;
-      if(item.type==='movies')assignedMovies++;else assignedSeries++;
+      if(item.type==='movies')assignedMovies++;
+      else if(item.type==='series')assignedSeries++;
+      else assignedLive++;
     }
-    return {changed,assignedMovies,assignedSeries,adultRestricted};
+    return {changed,assignedMovies,assignedSeries,assignedLive,adultRestricted};
   }
   async function get(user){
     if(!user?.user||!user?.pass)throw Error('not_authenticated');
@@ -72,7 +74,7 @@
       });
       if(!r.ok)throw Error('category_http_'+r.status);
       const body=await r.json();
-      if(!body?.ok||body?.data?.version!==1)throw Error('category_data_unavailable');
+      if(!body?.ok||body?.data?.version<2)throw Error('category_data_unavailable');
       return body.data;
     })().catch(err=>{active.delete(user);throw err});
     active.set(user,task);
