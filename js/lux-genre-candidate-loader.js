@@ -66,6 +66,7 @@
           if (!response.ok) throw new Error('TMDB candidate cache: HTTP ' + response.status);
           payload = await response.json();
           if (payload?.version !== 1 || payload?.kind !== kind || !Array.isArray(payload.rows)) throw new Error('Invalid candidate payload');
+          if (payload.complete === false) throw new Error('TMDB candidate batch incomplete; retry later');
         } finally {
           root.clearTimeout(deadline);
         }
