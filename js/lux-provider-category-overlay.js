@@ -32,7 +32,9 @@
     const name=norm(group);
     const names=kind==='movies'
       ? ['filmes','filme','movies','movie','vod','geral','catalogo geral']
-      : ['series','serie','seriados','tv series','tv shows','geral'];
+      : kind==='series'
+        ? ['series','serie','seriados','tv series','tv shows','geral']
+        : ['canais','tv','live','ao vivo','geral','todos','todos os canais'];
     return !name||names.includes(name);
   }
   function apply(items,data,isAdultContent,profileAllowsMedia){
