@@ -1,0 +1,21 @@
+name = "lux-genre-index"
+main = "src/index.js"
+compatibility_date = "2026-10-16"
+workers_dev = true
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Uncomment and fill after creating the D1 database.
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "lux-genre-index"
+# database_id = "YOUR_D1_ID"
+
+[vars]
+ALLOWED_ORIGINS = "https://lux-player.vercel.app"
+SUPABASE_URL = "https://cavgobgykpbiehqvqkws.supabase.co"
+
+# Worker secrets (never commit values):
+# SUPABASE_SERVICE_ROLE_KEY
+# TMDB_API_KEY
