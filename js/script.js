@@ -5016,6 +5016,16 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
 
     function filterMedia() {
       const currentList = getSectionItems();
+      // A category may disappear after a supplier refresh or a TMDB reindex.
+      // Never strand the viewer on a stale/empty filter while fresh content exists.
+      const fixedCategories = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
+      if (!activeSearchQuery && !fixedCategories.includes(activeCategory) &&
+          !currentList.some(item => window.LuxSmartGenres?.isSmart(activeCategory)
+            ? window.LuxSmartGenres.matches(item, activeCategory)
+            : item.group === activeCategory)) {
+        activeCategory = 'Todos';
+        renderCategories();
+      }
       const scoredResults = [];
 
       const normalizedQuery = normalizeSearchText(activeSearchQuery);
