@@ -118,10 +118,11 @@ test('6,049 provider series produce precise groups on both interfaces', () => {
 test('TMDB can still provide art but no longer drives provider grouping or network-wide classification', () => {
   assert.doesNotMatch(html, /src="js\/lux-smart-genres\.js/);
   assert.doesNotMatch(html, /src="js\/lux-genre-candidate-loader\.js/);
-  const queue = part('    function queueSmartMovieClassification() {', '    function normalizeTmdbTitle');
-  assert.doesNotMatch(queue, /\.start\s*\(|fetch\s*\(/);
+  assert.doesNotMatch(source, /function queueSmartMovieClassification\s*\(/);
+  assert.doesNotMatch(source, /smartGenreRefreshTimer|scheduleSmartGenreRefresh|learnSmartMovieGenres/);
   assert.match(source, /async function fetchTmdbMetadata\s*\(/);
-  assert.match(source, /const smartGenres = null;/);
+  assert.match(source, /const rawCategoryCounts = new Map\(\);/);
+  assert.doesNotMatch(source, /const smartGenres = null;/);
   const filter = part('    function filterMedia() {', '    function updateScreenHeaderTitle() {');
   assert.match(filter, /matchesCat = c\.group === activeCategory/);
   assert.doesNotMatch(filter, /LuxSmartGenres\.matches/);
