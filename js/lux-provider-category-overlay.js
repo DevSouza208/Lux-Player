@@ -33,8 +33,10 @@
     const seriesById=data.seriesIds||{},seriesByTitle=data.seriesTitles||{};
     const liveById=data.liveIds||{},liveByTitle=data.liveTitles||{};
     for(const item of items){
-      if(!item||(item.type!=='movies'&&item.type!=='series')||item.source==='xtream')continue;
-      if(!generic(item.providerGroup||item.group,item.type))continue; // group-title real prevalece
+      if(!item||!['live','movies','series'].includes(item.type)||item.source==='xtream')continue;
+      // The official Xtream Live category outranks broad M3U groups.
+      // Keep existing behavior for VOD and Series.
+      if(item.type!=='live'&&!generic(item.providerGroup||item.group,item.type))continue;
       let found='';
       if(item.type==='movies'){
         const id=streamId(item.url,'movies');
