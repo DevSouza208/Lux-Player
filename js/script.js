@@ -23,55 +23,14 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       if (window.LuxSmartGenres?.learn(item, metadata)) scheduleSmartGenreRefresh();
     }
 
-    // The provider sometimes places all films in one generic category.
-    // Enrich a bounded sample per page load with no extra Supabase requests.
-    const SMART_MOVIE_TMDB_BUDGET = 72;
-    let smartMovieTmdbRequests = 0;
-    let smartMovieSweepRunning = false;
-    let smartMovieSweepTimer = null;
-
+    // Reuse a shared CDN index, not 72 per-film TMDB requests on every device.
     function queueSmartMovieClassification() {
-      if (currentSection !== 'movies' || !currentUser || !window.LuxSmartGenres
-          || smartMovieTmdbRequests >= SMART_MOVIE_TMDB_BUDGET
-          || smartMovieSweepRunning || smartMovieSweepTimer) return;
-      smartMovieSweepTimer = setTimeout(() => {
-        smartMovieSweepTimer = null;
-        void classifySmartMoviesInBackground();
-      }, 3000);
-    }
-
-    async function classifySmartMoviesInBackground() {
-      if (smartMovieSweepRunning || !currentUser || currentSection !== 'movies') return;
-      const genres = window.LuxSmartGenres;
+      if (currentSection !== 'movies' || !currentUser || !window.LuxGenreCandidateLoader) return;
       const account = currentUser;
-      const movies = getSectionItems();
-      if (!movies.length || !genres) return;
-
-      const cursorKey = 'lux_movie_genre_cursor_v2:' + encodeURIComponent(account.user);
-      let cursor = 0;
-      try { cursor = Number(localStorage.getItem(cursorKey)) || 0; } catch (_) {}
-      cursor = ((cursor % movies.length) + movies.length) % movies.length;
-      smartMovieSweepRunning = true;
-
-      try {
-        let visited = 0;
-        while (visited < movies.length && smartMovieTmdbRequests < SMART_MOVIE_TMDB_BUDGET) {
-          if (currentUser !== account || currentSection !== 'movies' || document.hidden) break;
-          const item = movies[cursor];
-          cursor = (cursor + 1) % movies.length;
-          visited++;
-          if (item.isAdult || genres.genreIds(item).length || genres.hasMetadata(item)) continue;
-          smartMovieTmdbRequests++;
-          await fetchTmdbMetadata(item);
-          await new Promise(resolve => setTimeout(resolve, 1100));
-        }
-      } catch (error) {
-        console.warn('Classificação TMDB interrompida:', error);
-      } finally {
-        try { localStorage.setItem(cursorKey, String(cursor)); } catch (_) {}
-        smartMovieSweepRunning = false;
-        if (currentSection === 'movies') scheduleSmartGenreRefresh();
-      }
+      void window.LuxGenreCandidateLoader.start(getSectionItems(), {
+        isActive: () => currentSection === 'movies' && currentUser === account && !document.hidden,
+        onUpdate: scheduleSmartGenreRefresh
+      });
     }
 
     function normalizeTmdbTitle(str = '') {
@@ -3163,6 +3122,8 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
             type: 'movies',
             source: 'xtream',
+            providerGenreText: String(item.genre || item.genres || '').slice(0, 240),
+            providerGenreIds: Array.isArray(item.genre_ids) ? item.genre_ids : [],
             isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
           };
         }).map(applySharedCategoryToItem).filter(profileAllowsMedia);
@@ -4544,6 +4505,18 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       const desktopContainer = document.getElementById('categoriesList');
       const previousCategoryScroll = desktopContainer.scrollTop;
       desktopContainer.innerHTML = '';
+
+      if (smartNavigation && smartGenres?.indexStatus) {
+        const state = smartGenres.indexStatus();
+        if (state.status === 'loading' || state.status === 'error') {
+          const info = document.createElement('div');
+          info.className = 'mx-2 mb-2 rounded-lg bg-purple-950/40 px-3 py-2 text-[10px] leading-relaxed text-purple-300/80';
+          info.textContent = state.status === 'loading'
+            ? 'Organizando gêneros pelo TMDB em segundo plano (' + state.processed + '/' + state.total + ').'
+            : 'Classificação temporariamente indisponível. Filmes acessíveis em Todos.';
+          desktopContainer.appendChild(info);
+        }
+      }
 
       cats.forEach(cat => {
         if (categoryHeadings.has(cat)) {
