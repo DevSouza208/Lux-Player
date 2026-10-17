@@ -290,6 +290,29 @@
     return identified;
   }
 
+  // Import only public, verified TMDB genre IDs from the shared Cloudflare D1
+  // index. Local provider items remain authoritative for membership/counts.
+  function mergeSharedIndex(kind, rows) {
+    if (kind !== 'movies' && kind !== 'series' || !Array.isArray(rows)) return 0;
+    var changed = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var key = String(row?.key || '');
+      if (!key || key.length > 230 || !key.includes('|')) continue;
+      var scoped = kind === 'series' ? 'tv|' + key : key;
+      var ids = canonicalGenreIds(row?.genre_ids, kind);
+      if (!ids.length) continue;
+      var previous = tmdbByTitle.get(scoped);
+      if (previous && ids.length === previous.ids.length &&
+          ids.every(function (n) { return previous.ids.includes(n); })) continue;
+      tmdbByTitle.set(scoped, { ids: ids, at: Date.now(), source: 'worker' });
+      changed++;
+    }
+    while (tmdbByTitle.size > CACHE_LIMIT) tmdbByTitle.delete(tmdbByTitle.keys().next().value);
+    if (changed) persistCache();
+    return changed;
+  }
+
   var indexState = { status: 'idle', processed: 0, total: 0, matched: 0 };
   function setIndexStatus(patch) {
     indexState = Object.assign({}, indexState, patch);
@@ -307,6 +330,7 @@
     canonicalGenreIds: canonicalGenreIds,
     createCatalogIndex: createCatalogIndex,
     ingestCandidates: ingestCandidates,
+    mergeSharedIndex: mergeSharedIndex,
     setIndexStatus: setIndexStatus,
     indexStatus: function () { return Object.assign({}, indexState); },
     genreKey: function (id) { return PREFIX + id; },
