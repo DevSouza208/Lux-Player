@@ -4366,7 +4366,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         btn.title = "Concluir Organização";
       } else {
         btn.className = "text-[10px] bg-purple-950 hover:bg-purple-900 text-purple-300 p-1.5 rounded-md transition-all flex items-center justify-center";
-        btn.title = "Organizar Gêneros";
+        btn.title = "Organizar categorias";
       }
     }
 
@@ -4536,7 +4536,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       document.getElementById('mobileMediaCountBadge').innerText = `${items.length} itens`;
 
       const sectionTitle = currentSection === 'live' ? 'Canais de TV' : (currentSection === 'movies' ? 'Filmes' : 'Séries');
-      document.getElementById('mobileCatSubtitle').innerText = `Escolha um gênero de ${sectionTitle}`;
+      document.getElementById('mobileCatSubtitle').innerText = `Escolha uma categoria de ${sectionTitle}`;
 
       const desktopContainer = document.getElementById('categoriesList');
       const previousCategoryScroll = desktopContainer.scrollTop;
