@@ -150,3 +150,44 @@ test('bulk TMDB candidate matching against 31,306 provider items respects real c
   assert.equal(result.unclassified, 29306);
   assert.equal(items.length, 31306);
 });
+
+test('TV series use the correct TMDB TV genre taxonomy, independently of films', () => {
+  const show = movie('Série Exemplo (2024)', 'SERIES', {type:'series'});
+  const film = movie('Série Exemplo (2024)', 'FILMES', {type:'movies'});
+  const index = genres.createCatalogIndex([show]);
+  assert.equal(genres.ingestCandidates(index, [
+    {name:'Série Exemplo',original_name:'Example Series',first_air_date:'2024-07-01',genre_ids:[10759,10765,18]}
+  ]),1);
+  assert.deepEqual(new Set(genres.genreIds(show)),new Set([28,12,878,14,18]));
+  assert.equal(genres.matches(show,genres.genreKey(878)),true);
+  assert.equal(genres.matches(film,genres.genreKey(878)),false);
+  const nav = genres.navigation([show], ['SERIES']);
+  assert.equal(nav.unclassified,0);
+  assert.ok(!nav.sections[2].keys.includes('SERIES'));
+});
+
+test('provider series genres and adult isolation work with no TMDB lookups', () => {
+  const a = movie('Amigos', 'SERIES', {type:'series',providerGenreText:'Comédia'});
+  const b = movie('Reality Popular', 'SERIES', {type:'series',providerGenreIds:[10764]});
+  const c = movie('Adulto', 'SERIES', {type:'series',providerGenreIds:[10764],isAdult:true});
+  const nav=genres.navigation([a,b,c],['SERIES']);
+  assert.equal(nav.counts.get(genres.genreKey(35)),1);
+  assert.equal(nav.counts.get(genres.genreKey(10764)),1);
+  assert.equal(genres.matches(c,genres.genreKey(10764)),false);
+  assert.equal(nav.unclassified,0);
+});
+
+test('TV series catalog scales to 13,000 titles with exact verified counts', () => {
+  const shows=Array.from({length:13000},(_,i)=>
+    movie('Seriado '+i+' (2022)','SERIES',{type:'series'}));
+  const index=genres.createCatalogIndex(shows);
+  const rows=Array.from({length:1000},(_,i)=>({
+    name:'Seriado '+i,first_air_date:'2022-01-01',genre_ids:i%2?[35]:[10759]
+  }));
+  assert.equal(genres.ingestCandidates(index,rows),1000);
+  const result=genres.navigation(shows,['SERIES']);
+  assert.equal(result.counts.get(genres.genreKey(35)),500);
+  assert.equal(result.counts.get(genres.genreKey(28)),500);
+  assert.equal(result.counts.get(genres.genreKey(12)),500);
+  assert.equal(result.unclassified,12000);
+});
