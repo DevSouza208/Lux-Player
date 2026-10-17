@@ -15,7 +15,75 @@
     try {
       const route=kind==='live'?'live':kind==='movies'?'movie':'series';
       const path=new URL(String(url||'')).pathname;
-      const match=path.match(new RegExp('/'+route+'/[^/]+/[^/]+/(\\d+)(?:\\.[^/]+)?$','i'));
+      const match=kind==='live'
+        ? path.match(/\/(?:live\/)?[^/]+\/[^/]+\/(\d+)(?:\.[^/]+)?$/i)
+        : path.match(new RegExp('/'+route+'/[^/]+/[^/]+/(\\d+)(?:\\.[^/]+)?
+    }catch{return ''}
+  }
+  function generic(group,kind){
+    const name=norm(group);
+    const names=kind==='movies'
+      ? ['filmes','filme','movies','movie','vod','geral','catalogo geral']
+      : ['series','serie','seriados','tv series','tv shows','geral'];
+    return !name||names.includes(name);
+  }
+  function apply(items,data,isAdultContent,profileAllowsMedia){
+    if(!Array.isArray(items)||!data||typeof data!=='object')return {changed:0,assignedMovies:0,assignedSeries:0,assignedLive:0,adultRestricted:0};
+    let changed=0,assignedMovies=0,assignedSeries=0,assignedLive=0,adultRestricted=0;
+    const moviesById=data.movieIds||{}, moviesByTitle=data.movieTitles||{};
+    const seriesById=data.seriesIds||{},seriesByTitle=data.seriesTitles||{};
+    const liveById=data.liveIds||{},liveByTitle=data.liveTitles||{};
+    for(const item of items){
+      if(!item||!['live','movies','series'].includes(item.type)||item.source==='xtream')continue;
+      // The official Xtream Live category outranks broad M3U groups.
+      // Keep existing behavior for VOD and Series.
+      if(item.type!=='live'&&!generic(item.providerGroup||item.group,item.type))continue;
+      let found='';
+      if(item.type==='movies'){
+        const id=streamId(item.url,'movies');
+        found=String((id&&moviesById[id])||moviesByTitle[norm(item.name)]||'');
+      }else if(item.type==='series'){
+        const id=String(item.series_id||'');
+        found=String(seriesById[id]||seriesByTitle[norm(item.name)]||'');
+      }else{
+        const id=String(item.stream_id||streamId(item.url,'live')||'');
+        found=String((id&&liveById[id])||liveByTitle[norm(item.name)]||'');
+      }
+      if(!found||found.length>150||generic(found,item.type))continue;
+      const wasAdult=Boolean(item.isAdult);
+      if(item.group!==found){item.group=found;changed++}
+      item.providerCategoryFromXtream=true;
+      item.isAdult=wasAdult||Boolean(isAdultContent(found,item.name));
+      if(!wasAdult&&item.isAdult&&!profileAllowsMedia(item))adultRestricted++;
+      if(item.type==='movies')assignedMovies++;
+      else if(item.type==='series')assignedSeries++;
+      else assignedLive++;
+    }
+    return {changed,assignedMovies,assignedSeries,assignedLive,adultRestricted};
+  }
+  async function get(user){
+    if(!user?.user||!user?.pass)throw Error('not_authenticated');
+    if(active.has(user))return active.get(user);
+    const task=(async()=>{
+      const timeout=AbortSignal.timeout(75000);
+      const r=await root.fetch(endpoint,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'omit',
+        signal:timeout,
+        body:JSON.stringify({username:user.user,credential:user.pass})
+      });
+      if(!r.ok)throw Error('category_http_'+r.status);
+      const body=await r.json();
+      if(!body?.ok||body?.data?.version<2)throw Error('category_data_unavailable');
+      return body.data;
+    })().catch(err=>{active.delete(user);throw err});
+    active.set(user,task);
+    return task;
+  }
+  root.LuxProviderCategoryOverlay={get,apply,generic,norm,streamId};
+})(typeof window!=='undefined'?window:globalThis);
+,'i'));
       return match?match[1]:'';
     }catch{return ''}
   }
