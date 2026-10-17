@@ -101,7 +101,7 @@ async function cacheKey(src){
 Deno.serve(async request=>{
   const origin=request.headers.get('Origin')||'';
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:headersFor(origin)});
-  if(request.method==='GET'&&new URL(request.url).pathname==='/lux-provider-categories/health')return reply({ok:true,service:'lux-provider-categories',version:1},200,origin);
+  if(request.method==='GET'&&new URL(request.url).pathname.endsWith('/lux-provider-categories/health'))return reply({ok:true,service:'lux-provider-categories',version:1},200,origin);
   if(request.method!=='POST')return reply({error:'method_not_allowed'},405,origin);
   if(origin&&!allow.has(origin))return reply({error:'origin_not_allowed'},403,origin);
   try{
