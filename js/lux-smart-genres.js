@@ -78,6 +78,7 @@
   function genreIds(item) {
     if (!item || item.isAdult || item.type !== 'movies') return [];
     var base = groupGenreIds(item.group);
+    if (!tmdbByTitle.size) return base;
     var key = titleKey(item);
     var extra = tmdbByTitle.get(key);
     if (!extra || !extra.ids.length) return base;
