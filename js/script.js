@@ -81,7 +81,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         isActive: () => currentSection === kind && currentUser === account && !document.hidden,
         onUpdate: () => {
           scheduleSmartGenreRefresh();
-          if (window.LuxSmartGenres?.indexStatus().status === 'ready') queueGenreLongTail();
+          if (['ready', 'error'].includes(window.LuxSmartGenres?.indexStatus().status)) queueGenreLongTail();
         }
       });
     }
