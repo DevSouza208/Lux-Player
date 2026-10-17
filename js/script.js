@@ -10,10 +10,10 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     let smartGenreRefreshTimer = null;
 
     function scheduleSmartGenreRefresh() {
-      if (currentSection !== 'movies' || smartGenreRefreshTimer) return;
+      if (!['movies', 'series'].includes(currentSection) || smartGenreRefreshTimer) return;
       smartGenreRefreshTimer = setTimeout(() => {
         smartGenreRefreshTimer = null;
-        if (currentSection !== 'movies') return;
+        if (!['movies', 'series'].includes(currentSection)) return;
         renderCategories();
         if (window.LuxSmartGenres?.isSmart(activeCategory)) filterMedia();
       }, 1300);
@@ -23,55 +23,67 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       if (window.LuxSmartGenres?.learn(item, metadata)) scheduleSmartGenreRefresh();
     }
 
-    // The provider sometimes places all films in one generic category.
-    // Enrich a bounded sample per page load with no extra Supabase requests.
-    const SMART_MOVIE_TMDB_BUDGET = 72;
-    let smartMovieTmdbRequests = 0;
-    let smartMovieSweepRunning = false;
-    let smartMovieSweepTimer = null;
-
-    function queueSmartMovieClassification() {
-      if (currentSection !== 'movies' || !currentUser || !window.LuxSmartGenres
-          || smartMovieTmdbRequests >= SMART_MOVIE_TMDB_BUDGET
-          || smartMovieSweepRunning || smartMovieSweepTimer) return;
-      smartMovieSweepTimer = setTimeout(() => {
-        smartMovieSweepTimer = null;
-        void classifySmartMoviesInBackground();
-      }, 3000);
-    }
-
-    async function classifySmartMoviesInBackground() {
-      if (smartMovieSweepRunning || !currentUser || currentSection !== 'movies') return;
-      const genres = window.LuxSmartGenres;
+    // Fast lane: discover and match popular TMDB candidates from a shared CDN.
+    // Long tail: a small, resumable batch of individual title lookups, so obscure
+    // films and series can still be classified without blocking playback.
+    const SMART_LONG_TAIL_BUDGET = 72;
+    let longTailRequests = { movies: 0, series: 0 };
+    let longTailRunning = false;
+    let longTailTimer = null;
+    async function enrichGenreLongTail() {
+      if (longTailRunning || !currentUser || !['movies','series'].includes(currentSection)) return;
       const account = currentUser;
-      const movies = getSectionItems();
-      if (!movies.length || !genres) return;
+      const kind = currentSection;
+      const genres = window.LuxSmartGenres;
+      const items = getSectionItems();
+      if (!genres || !items.length || longTailRequests[kind] >= SMART_LONG_TAIL_BUDGET) return;
 
-      const cursorKey = 'lux_movie_genre_cursor_v2:' + encodeURIComponent(account.user);
+      const storageKey = 'lux_tmdb_long_tail_v1:' + kind + ':' + items.length + ':' +
+        String(items[0]?.id || '') + ':' + String(items[items.length - 1]?.id || '');
       let cursor = 0;
-      try { cursor = Number(localStorage.getItem(cursorKey)) || 0; } catch (_) {}
-      cursor = ((cursor % movies.length) + movies.length) % movies.length;
-      smartMovieSweepRunning = true;
-
+      try { cursor = Number(localStorage.getItem(storageKey)) || 0; } catch (_) {}
+      cursor = Math.max(0, Math.min(items.length, cursor));
+      longTailRunning = true;
       try {
-        let visited = 0;
-        while (visited < movies.length && smartMovieTmdbRequests < SMART_MOVIE_TMDB_BUDGET) {
-          if (currentUser !== account || currentSection !== 'movies' || document.hidden) break;
-          const item = movies[cursor];
-          cursor = (cursor + 1) % movies.length;
-          visited++;
+        while (cursor < items.length && longTailRequests[kind] < SMART_LONG_TAIL_BUDGET) {
+          if (currentUser !== account || currentSection !== kind || document.hidden) break;
+          const item = items[cursor++];
           if (item.isAdult || genres.genreIds(item).length || genres.hasMetadata(item)) continue;
-          smartMovieTmdbRequests++;
+          longTailRequests[kind]++;
           await fetchTmdbMetadata(item);
           await new Promise(resolve => setTimeout(resolve, 1100));
         }
-      } catch (error) {
-        console.warn('Classificação TMDB interrompida:', error);
+      } catch (e) {
+        console.warn('[Lux Genres] Enriquecimento gradual interrompido:', e);
       } finally {
-        try { localStorage.setItem(cursorKey, String(cursor)); } catch (_) {}
-        smartMovieSweepRunning = false;
-        if (currentSection === 'movies') scheduleSmartGenreRefresh();
+        try { localStorage.setItem(storageKey, String(cursor)); } catch (_) {}
+        longTailRunning = false;
+        if (currentSection === kind) scheduleSmartGenreRefresh();
       }
+    }
+    function queueGenreLongTail() {
+      if (longTailRunning || longTailTimer || !currentUser || document.hidden
+          || !['movies','series'].includes(currentSection)) return;
+      const kind = currentSection;
+      if (longTailRequests[kind] >= SMART_LONG_TAIL_BUDGET) return;
+      longTailTimer = setTimeout(() => {
+        longTailTimer = null;
+        if (currentSection === kind) void enrichGenreLongTail();
+      }, 2500);
+    }
+
+    function queueSmartMovieClassification() {
+      if (!['movies', 'series'].includes(currentSection) || !currentUser || !window.LuxGenreCandidateLoader) return;
+      const account = currentUser;
+      const kind = currentSection;
+      void window.LuxGenreCandidateLoader.start(getSectionItems(), {
+        kind,
+        isActive: () => currentSection === kind && currentUser === account && !document.hidden,
+        onUpdate: () => {
+          scheduleSmartGenreRefresh();
+          if (['ready', 'error'].includes(window.LuxSmartGenres?.indexStatus().status)) queueGenreLongTail();
+        }
+      });
     }
 
     function normalizeTmdbTitle(str = '') {
@@ -3163,6 +3175,8 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             url: `${cleanServer}/movie/${user}/${pass}/${item.stream_id}.${ext}`,
             type: 'movies',
             source: 'xtream',
+            providerGenreText: String(item.genre || item.genres || '').slice(0, 240),
+            providerGenreIds: Array.isArray(item.genre_ids) ? item.genre_ids : [],
             isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
           };
         }).map(applySharedCategoryToItem).filter(profileAllowsMedia);
@@ -3295,6 +3309,8 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             logo: item.cover || '',
             type: 'series',
             source: 'xtream',
+            providerGenreText: String(item.genre || item.genres || '').slice(0, 240),
+            providerGenreIds: Array.isArray(item.genre_ids) ? item.genre_ids : [],
             isAdult: isAdultContent(groupName, item.name) || item.adult === true || String(item.is_adult || '') === '1'
           };
         }).map(applySharedCategoryToItem).filter(profileAllowsMedia);
@@ -3323,6 +3339,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         if (currentSection === 'series') {
           renderCategories();
           filterMedia();
+          queueSmartMovieClassification();
         } else if (currentSection === 'home') {
           Promise.resolve(loadTmdbHeroBanner()).catch(() => {});
         }
@@ -3879,7 +3896,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
 
         renderCategories();
         filterMedia();
-        if (section === 'movies') queueSmartMovieClassification();
+        if (section === 'movies' || section === 'series') queueSmartMovieClassification();
         if (section === 'movies') {
           if (
             xtreamMoviesState.status === 'error' &&
@@ -4495,7 +4512,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         sortedCats.sort(sortCategoriesSmart);
       }
 
-      const smartGenres = currentSection === 'movies' ? window.LuxSmartGenres : null;
+      const smartGenres = ['movies', 'series'].includes(currentSection) ? window.LuxSmartGenres : null;
       const rawCategoryCounts = new Map();
       items.forEach(item => rawCategoryCounts.set(item.group, (rawCategoryCounts.get(item.group) || 0) + 1));
       const smartNavigation = smartGenres && !isSortModeActive
@@ -4524,7 +4541,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       const getCategoryLabel = cat => smartGenres ? smartGenres.label(cat) : cat;
       const getCategoryCountLabel = cat => {
         const count = getCategoryCount(cat);
-        if (smartNavigation?.unclassified && smartGenres?.isGenre(cat)) return count ? count + '+' : '…';
+        if (smartNavigation?.unclassified && smartGenres?.isGenre(cat)) return count + '+';
         return String(count);
       };
 
@@ -4544,6 +4561,18 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       const desktopContainer = document.getElementById('categoriesList');
       const previousCategoryScroll = desktopContainer.scrollTop;
       desktopContainer.innerHTML = '';
+
+      if (smartNavigation && smartGenres?.indexStatus) {
+        const state = smartGenres.indexStatus();
+        if (state.status === 'loading' || state.status === 'error') {
+          const info = document.createElement('div');
+          info.className = 'mx-2 mb-2 rounded-lg bg-purple-950/40 px-3 py-2 text-[10px] leading-relaxed text-purple-300/80';
+          info.textContent = state.status === 'loading'
+            ? 'Organizando gêneros pelo TMDB em segundo plano (' + state.processed + '/' + state.total + ').'
+            : 'Classificação temporariamente indisponível. Filmes acessíveis em Todos.';
+          desktopContainer.appendChild(info);
+        }
+      }
 
       cats.forEach(cat => {
         if (categoryHeadings.has(cat)) {
