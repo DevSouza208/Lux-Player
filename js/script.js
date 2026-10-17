@@ -3577,6 +3577,39 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       const grouped = groupM3uSeriesEpisodes(parsed);
       allMediaItems = grouped.filter(profileAllowsMedia);
       mergeSharedVodsIntoPlayer();
+
+      // O mesmo fluxo HTTPS/M3U continua responsável por TODAS as URLs.
+      // Apenas grupos genéricos ('FILMES', 'SÉRIES') são enriquecidos com
+      // metadados oficiais get_vod_categories/get_series_categories do Xtream.
+      // Nenhum fetch do player, stream ID ou URL é substituído.
+      const owner = currentUser;
+      const snapshot = allMediaItems;
+      const isAccountPlaylist = owner && (url === String(owner.m3uUrl || '').trim()
+        || url === String(owner.m3uHttpsUrl || '').trim());
+      if (isAccountPlaylist && window.LuxProviderCategoryOverlay) {
+        void window.LuxProviderCategoryOverlay.get(owner).then(metadata => {
+          if (currentUser !== owner || allMediaItems !== snapshot) return;
+          const report = window.LuxProviderCategoryOverlay.apply(
+            allMediaItems, metadata, isAdultContent, profileAllowsMedia
+          );
+          if (report.adultRestricted) {
+            allMediaItems = allMediaItems.filter(profileAllowsMedia);
+          }
+          console.info('[Lux categorias Xtream]', {
+            movieCategories: metadata.counts?.movieCategories || 0,
+            seriesCategories: metadata.counts?.seriesCategories || 0,
+            moviesMatched: report.assignedMovies,
+            seriesMatched: report.assignedSeries,
+            itemsReorganized: report.changed
+          });
+          if (report.changed && ['live', 'movies', 'series'].includes(currentSection)) {
+            renderCategories();
+            filterMedia();
+          }
+        }).catch(() => {
+          console.info('[Lux categorias Xtream] API de metadados indisponível; M3U preservada.');
+        });
+      }
       return { count: parsed.length, groupedCount: grouped.length };
     }
 
@@ -3707,13 +3740,13 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       const fallback = item?.type === 'movies' ? 'Filmes' : item?.type === 'series' ? 'Séries' : 'Canais';
       item.providerGroup = providerGroup || fallback;
       item.sharedGroup = sharedGroup || '';
-      const useLegacyCategory = isGenericProviderCategory(item.providerGroup, item?.type)
-        && sharedGroup
-        && !isGenericProviderCategory(sharedGroup, item?.type);
-      item.group = useLegacyCategory ? sharedGroup : item.providerGroup;
+      // Organização histórica permanece apenas como referência. A lateral
+      // deve vir da categoria REAL do provedor (Xtream / group-title M3U).
+      item.group = item.providerGroup;
       // Uma classificação antiga nunca pode retirar a proteção de um título.
       item.isAdult = Boolean(item.isAdult || item.adult) ||
         isAdultContent(item.providerGroup, item.name) ||
+        isAdultContent(item.sharedGroup, item.name) ||
         isAdultContent(item.group, item.name);
       return item;
     }
@@ -3750,6 +3783,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
           temp.url = line;
           temp.id = items.length;
           temp.type = detectMediaType(temp.group, temp.name, temp.url);
+          temp.source = 'm3u';
           applySharedCategoryToItem(temp);
           items.push(temp);
           temp = null;

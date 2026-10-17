@@ -1,0 +1,32 @@
+name: Proteção do catálogo IPTV
+on:
+  pull_request:
+    paths:
+      - 'js/script.js'
+      - 'js/lux-provider-category-overlay.js'
+      - 'tests/**'
+      - 'supabase/functions/lux-provider-categories/**'
+      - '.github/workflows/test-catalog-categories.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/script.js'
+      - 'js/lux-provider-category-overlay.js'
+      - 'tests/**'
+      - '.github/workflows/test-catalog-categories.yml'
+jobs:
+  catalog-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar sintaxe JS
+        run: |
+          node --check js/script.js
+          node --check js/lux-provider-category-overlay.js
+      - name: Validar 31.306 filmes, 6.049 séries, categorias e reprodução
+        run: |
+          node --test tests/provider-native-categories.test.cjs tests/catalog-integrity-first.test.cjs tests/legacy-categories-generic-provider.test.cjs tests/xtream-native-categories-overlay.test.cjs
