@@ -27,7 +27,11 @@
     [10770, 'Cinema e TV', /\b(cinema tv|cinematv|telefilme|tv movie)\b/],
     [53, 'Suspense', /\b(suspense|thriller)\b/],
     [10752, 'Guerra', /\b(guerra|war)\b/],
-    [37, 'Faroeste', /\b(faroeste|western)\b/]
+    [37, 'Faroeste', /\b(faroeste|western)\b/],
+    [10764, 'Reality Shows', /\b(reality|reality show)\b/],
+    [10766, 'Novelas', /\b(novela|novelas|soap opera|soap)\b/],
+    [10762, 'Infantil', /\b(kids|infantil|criancas)\b/],
+    [10767, 'Talk Shows', /\b(talk show|entrevista|entrevistas)\b/]
   ];
   var LABELS = new Map(GENRES.map(function (g) { return [g[0], g[1]]; }));
   var groupCache = new Map();
@@ -82,21 +86,38 @@
       /(?:^|\W)18\+(?:$|\W)/.test(String(group || ''));
   }
 
+  function scopeKey(item) {
+    var key = titleKey(item);
+    return item.type === 'series' ? 'tv|' + key : key;
+  }
+
+  function canonicalGenreIds(ids, kind) {
+    var mapped = [];
+    for (var i = 0; i < (Array.isArray(ids) ? ids.length : 0); i++) {
+      var id = Number(ids[i]);
+      if (kind === 'series') {
+        if (id === 10759) mapped.push(28, 12);
+        else if (id === 10765) mapped.push(878, 14);
+        else if (id === 10768) mapped.push(10752);
+        else if (id === 10762) mapped.push(10762, 10751);
+        else if (LABELS.has(id)) mapped.push(id);
+      } else if (LABELS.has(id)) mapped.push(id);
+    }
+    return Array.from(new Set(mapped));
+  }
+
   function genreIds(item) {
-    if (!item || item.isAdult || item.type !== 'movies') return [];
+    if (!item || item.isAdult || (item.type !== 'movies' && item.type !== 'series')) return [];
     var base = groupGenreIds(item.group);
-    var own = Array.isArray(item.providerGenreIds)
-      ? item.providerGenreIds.map(Number).filter(function (id) { return LABELS.has(id); })
-      : [];
+    var own = canonicalGenreIds(item.providerGenreIds, item.type);
     if (item.providerGenreText) own = own.concat(groupGenreIds(item.providerGenreText));
-    if (!tmdbByTitle.size) return base.length || own.length ? Array.from(new Set(base.concat(own))) : [];
-    var extra = tmdbByTitle.get(titleKey(item));
-    if (!extra || !extra.ids.length) return base.length || own.length ? Array.from(new Set(base.concat(own))) : [];
-    return Array.from(new Set(base.concat(own, extra.ids)));
+    if (!tmdbByTitle.size) return Array.from(new Set(base.concat(own)));
+    var extra = tmdbByTitle.get(scopeKey(item));
+    return Array.from(new Set(base.concat(own, extra?.ids || [])));
   }
 
   function matches(item, key) {
-    if (!item || item.type !== 'movies') return false;
+    if (!item || (item.type !== 'movies' && item.type !== 'series')) return false;
     if (key === UNCLASSIFIED) return !item.isAdult && genreIds(item).length === 0;
     if (key.indexOf(PREFIX) === 0) {
       var genre = Number(key.slice(PREFIX.length));
@@ -193,7 +214,7 @@
   }
 
   function learn(item, metadata) {
-    if (!item || item.isAdult || item.type !== 'movies' || !metadata) return false;
+    if (!item || item.isAdult || (item.type !== 'movies' && item.type !== 'series') || !metadata) return false;
     var key = titleKey(item);
     var actual = normalize(String(metadata.title || '').replace(/\((?:19|20)\d{2}\)/g, ' '));
     var wanted = key.split('|')[0];
@@ -201,13 +222,13 @@
     var receivedYear = String(metadata.releaseDate || '').slice(0, 4);
     // Refuse fuzzy or year-mismatched TMDB hits. Never assign genres to an uncertain title.
     if (!key || !actual || actual !== wanted || (expectedYear && receivedYear && expectedYear !== receivedYear)) return false;
-    var ids = (Array.isArray(metadata.genreIds) ? metadata.genreIds : [])
-      .map(Number).filter(function (id) { return LABELS.has(id); });
+    var ids = canonicalGenreIds(metadata.genreIds, item.type);
     if (!ids.length) return false;
-    var old = tmdbByTitle.get(key);
+    var scoped = scopeKey(item);
+    var old = tmdbByTitle.get(scoped);
     if (old && ids.length === old.ids.length && ids.every(function (id) { return old.ids.includes(id); })) return false;
-    tmdbByTitle.delete(key);
-    tmdbByTitle.set(key, { ids: ids, at: Date.now() });
+    tmdbByTitle.delete(scoped);
+    tmdbByTitle.set(scoped, { ids: ids, at: Date.now(), source: 'detail' });
     if (tmdbByTitle.size > CACHE_LIMIT) tmdbByTitle.delete(tmdbByTitle.keys().next().value);
     persistCache();
     return true;
@@ -220,16 +241,17 @@
     var valid = 0;
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
-      if (!item || item.type !== 'movies' || item.isAdult) continue;
+      if (!item || (item.type !== 'movies' && item.type !== 'series') || item.isAdult) continue;
       var key = titleKey(item);
       var name = key.split('|')[0];
       if (!name || (name.length < 4 && !key.split('|')[1])) continue;
       var bucket = byTitle.get(name);
       if (!bucket) { bucket = []; byTitle.set(name, bucket); }
-      bucket.push({ item: item, key: key, year: key.split('|')[1] });
+      bucket.push({ item: item, key: scopeKey(item), year: key.split('|')[1] });
       valid++;
     }
-    return { byTitle: byTitle, valid: valid, total: items.length };
+    return { byTitle: byTitle, valid: valid, total: items.length,
+      kind: items.find(function (item) { return item?.type === 'movies' || item?.type === 'series'; })?.type || 'movies' };
   }
 
   function ingestCandidates(index, candidates) {
@@ -238,11 +260,10 @@
     for (var i = 0; i < candidates.length; i++) {
       var row = candidates[i];
       if (!row || row.adult) continue;
-      var ids = (Array.isArray(row.genre_ids) ? row.genre_ids : []).map(Number)
-        .filter(function (id) { return LABELS.has(id); });
+      var ids = canonicalGenreIds(row.genre_ids, index.kind);
       if (!ids.length) continue;
-      var candidateYear = String(row.release_date || '').slice(0, 4);
-      var names = new Set([normalize(row.title), normalize(row.original_title)].filter(Boolean));
+      var candidateYear = String(row.release_date || row.first_air_date || '').slice(0, 4);
+      var names = new Set([normalize(row.title), normalize(row.original_title), normalize(row.name), normalize(row.original_name)].filter(Boolean));
       var matchedKeys = new Set();
       for (const name of names) {
         var bucket = index.byTitle.get(name);
@@ -280,9 +301,10 @@
     matches: matches,
     label: label,
     learn: learn,
-    hasMetadata: function (item) { return tmdbByTitle.has(titleKey(item)); },
+    hasMetadata: function (item) { return tmdbByTitle.has(scopeKey(item)); },
     isGenre: function (key) { return typeof key === 'string' && key.indexOf(PREFIX) === 0 && key !== UNCLASSIFIED; },
     genreIds: genreIds,
+    canonicalGenreIds: canonicalGenreIds,
     createCatalogIndex: createCatalogIndex,
     ingestCandidates: ingestCandidates,
     setIndexStatus: setIndexStatus,
