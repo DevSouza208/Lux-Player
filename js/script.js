@@ -3686,18 +3686,32 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       return String(map[sharedCategoryKey(item)] || '').trim();
     }
 
+    function isGenericProviderCategory(group, type) {
+      const normalized = normalizeSharedCategoryTitle(group);
+      const defaults = type === 'movies'
+        ? ['filmes', 'filme', 'movies', 'movie', 'vod', 'catalogo geral', 'todos os filmes', 'geral']
+        : type === 'series'
+          ? ['series', 'serie', 'tv shows', 'tv series', 'seriados', 'todas as series', 'geral']
+          : ['canais', 'tv', 'live', 'ao vivo', 'geral'];
+      return !normalized || defaults.includes(normalized);
+    }
+
     function applySharedCategoryToItem(item) {
-      // The latest provider record is the source of truth for catalogue membership.
-      // A historical group is optional metadata and may be missing or outdated.
+      // A lista atual do fornecedor é sempre a origem dos títulos e URLs.
+      // Se o provedor trouxer uma categoria ESPECÍFICA, ela prevalece.
+      // Quando ele retornar somente FILMES / SÉRIES / CANAIS, aproveitamos
+      // o agrupamento histórico para os títulos reconhecidos, sem filtrar
+      // nem excluir os títulos novos que não estão na organização antiga.
       const providerGroup = String(item?.group || '').trim();
       const sharedGroup = getSharedCategoryForItem(item);
       const fallback = item?.type === 'movies' ? 'Filmes' : item?.type === 'series' ? 'Séries' : 'Canais';
       item.providerGroup = providerGroup || fallback;
-      // Mantém a organização histórica apenas como referência, sem sobrescrever
-      // a categoria atual do fornecedor ou esconder novos títulos.
       item.sharedGroup = sharedGroup || '';
-      item.group = item.providerGroup;
-      // Never let a stale non-adult group turn an adult record into a child-safe one.
+      const useLegacyCategory = isGenericProviderCategory(item.providerGroup, item?.type)
+        && sharedGroup
+        && !isGenericProviderCategory(sharedGroup, item?.type);
+      item.group = useLegacyCategory ? sharedGroup : item.providerGroup;
+      // Uma classificação antiga nunca pode retirar a proteção de um título.
       item.isAdult = Boolean(item.isAdult || item.adult) ||
         isAdultContent(item.providerGroup, item.name) ||
         isAdultContent(item.group, item.name);
