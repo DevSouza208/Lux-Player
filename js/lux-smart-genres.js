@@ -88,19 +88,19 @@
 
   function matches(item, key) {
     if (!item || item.type !== 'movies') return false;
+    if (key === UNCLASSIFIED) return !item.isAdult && genreIds(item).length === 0;
     if (key.indexOf(PREFIX) === 0) {
       var genre = Number(key.slice(PREFIX.length));
       return !item.isAdult && genreIds(item).includes(genre);
     }
     if (key.indexOf(COLLECTION) === 0) return collectionYear(item.group) === key.slice(COLLECTION.length);
-    if (key === UNCLASSIFIED) return !item.isAdult && genreIds(item).length === 0;
     return item.group === key;
   }
 
   function label(key) {
+    if (key === UNCLASSIFIED) return 'Sem gênero identificado';
     if (key.indexOf(PREFIX) === 0) return LABELS.get(Number(key.slice(PREFIX.length))) || 'Gênero';
     if (key.indexOf(COLLECTION) === 0) return 'Lançamentos ' + key.slice(COLLECTION.length);
-    if (key === UNCLASSIFIED) return 'Sem gênero identificado';
     if (isAdultGroup(key)) return key;
     var cleaned = String(key || '').replace(/^\s*(?:filmes?|movies?)\s*[|»:-]\s*/i, '')
       .replace(/\s*[⚡⭐★]\s*(?:plus|pll|premium|vip)?\s*$/i, '').trim();
