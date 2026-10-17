@@ -53,6 +53,13 @@ test('2244 original channels keep URLs while official categories replace broad M
  assert.equal(channels[0].providerGroup,'CANAIS COMPLETO(SD,HD,FHD,4K)');
 });
 
+test('standard Xtream M3U paths with and without /live resolve the same channel ID',()=>{
+ const api=overlay();
+ assert.equal(api.streamId('http://provider/live/user/pass/123.ts','live'),'123');
+ assert.equal(api.streamId('http://provider/user/pass/123.ts','live'),'123');
+ assert.equal(api.streamId('http://provider/user/pass/123','live'),'123');
+});
+
 test('TV name fallback works when M3U uses non-Xtream URL and match is exact',()=>{
  const api=overlay();
  const channel={type:'live',name:'TV Brasil HD',group:'CANAIS COMPLETO',
