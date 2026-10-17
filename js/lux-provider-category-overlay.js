@@ -41,9 +41,12 @@
       if(item.type==='movies'){
         const id=streamId(item.url,'movies');
         found=String((id&&moviesById[id])||moviesByTitle[norm(item.name)]||'');
-      }else{
+      }else if(item.type==='series'){
         const id=String(item.series_id||'');
         found=String(seriesById[id]||seriesByTitle[norm(item.name)]||'');
+      }else{
+        const id=String(item.stream_id||streamId(item.url,'live')||'');
+        found=String((id&&liveById[id])||liveByTitle[norm(item.name)]||'');
       }
       if(!found||found.length>150||generic(found,item.type))continue;
       const wasAdult=Boolean(item.isAdult);
