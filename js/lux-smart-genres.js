@@ -6,7 +6,7 @@
   var COLLECTION = '__lux_collection_';
   var UNCLASSIFIED = '__lux_genre_unclassified__';
   var CACHE_KEY = 'lux_smart_genres_v1';
-  var CACHE_LIMIT = 1500;
+  var CACHE_LIMIT = 32000;
   var CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
   var GENRES = [
     [28, 'Ação', /\b(acao|action)\b/],
@@ -93,7 +93,7 @@
       var genre = Number(key.slice(PREFIX.length));
       return !item.isAdult && genreIds(item).includes(genre);
     }
-    if (key.indexOf(COLLECTION) === 0) return collectionYear(item.group) === key.slice(COLLECTION.length);
+    if (key.indexOf(COLLECTION) === 0) return !item.isAdult && collectionYear(item.group) === key.slice(COLLECTION.length);
     return item.group === key;
   }
 
@@ -119,7 +119,7 @@
       rawCounts.set(group, (rawCounts.get(group) || 0) + 1);
       if (item.isAdult) adultGroups.add(group);
       var year = collectionYear(group);
-      if (year) {
+      if (year && !item.isAdult) {
         var yearKey = COLLECTION + year;
         counts.set(yearKey, (counts.get(yearKey) || 0) + 1);
       }
@@ -179,7 +179,7 @@
           return [entry[0], entry[1].ids, entry[1].at];
         })));
       } catch (_) { /* Quota/storage failures must not affect playback. */ }
-    }, 1500);
+    }, 6000);
   }
 
   function learn(item, metadata) {
