@@ -23,6 +23,57 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       if (window.LuxSmartGenres?.learn(item, metadata)) scheduleSmartGenreRefresh();
     }
 
+    // The provider sometimes places all films in one generic category.
+    // Enrich a bounded sample per page load with no extra Supabase requests.
+    const SMART_MOVIE_TMDB_BUDGET = 72;
+    let smartMovieTmdbRequests = 0;
+    let smartMovieSweepRunning = false;
+    let smartMovieSweepTimer = null;
+
+    function queueSmartMovieClassification() {
+      if (currentSection !== 'movies' || !currentUser || !window.LuxSmartGenres
+          || smartMovieTmdbRequests >= SMART_MOVIE_TMDB_BUDGET
+          || smartMovieSweepRunning || smartMovieSweepTimer) return;
+      smartMovieSweepTimer = setTimeout(() => {
+        smartMovieSweepTimer = null;
+        void classifySmartMoviesInBackground();
+      }, 3000);
+    }
+
+    async function classifySmartMoviesInBackground() {
+      if (smartMovieSweepRunning || !currentUser || currentSection !== 'movies') return;
+      const genres = window.LuxSmartGenres;
+      const account = currentUser;
+      const movies = getSectionItems();
+      if (!movies.length || !genres) return;
+
+      const cursorKey = 'lux_movie_genre_cursor_v2:' + encodeURIComponent(account.user);
+      let cursor = 0;
+      try { cursor = Number(localStorage.getItem(cursorKey)) || 0; } catch (_) {}
+      cursor = ((cursor % movies.length) + movies.length) % movies.length;
+      smartMovieSweepRunning = true;
+
+      try {
+        let visited = 0;
+        while (visited < movies.length && smartMovieTmdbRequests < SMART_MOVIE_TMDB_BUDGET) {
+          if (currentUser !== account || currentSection !== 'movies' || document.hidden) break;
+          const item = movies[cursor];
+          cursor = (cursor + 1) % movies.length;
+          visited++;
+          if (item.isAdult || genres.genreIds(item).length || genres.hasMetadata(item)) continue;
+          smartMovieTmdbRequests++;
+          await fetchTmdbMetadata(item);
+          await new Promise(resolve => setTimeout(resolve, 1100));
+        }
+      } catch (error) {
+        console.warn('Classificação TMDB interrompida:', error);
+      } finally {
+        try { localStorage.setItem(cursorKey, String(cursor)); } catch (_) {}
+        smartMovieSweepRunning = false;
+        if (currentSection === 'movies') scheduleSmartGenreRefresh();
+      }
+    }
+
     function normalizeTmdbTitle(str = '') {
       return String(str)
         .toLowerCase()
@@ -3140,6 +3191,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         if (currentSection === 'movies') {
           renderCategories();
           filterMedia();
+          queueSmartMovieClassification();
         } else if (currentSection === 'home') {
           try { renderHomeLancamentos2026(); } catch (_) {}
           Promise.resolve(loadTmdbHeroBanner()).catch(() => {});
@@ -3827,6 +3879,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
 
         renderCategories();
         filterMedia();
+        if (section === 'movies') queueSmartMovieClassification();
         if (section === 'movies') {
           if (
             xtreamMoviesState.status === 'error' &&
@@ -4455,7 +4508,8 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       if (smartNavigation) {
         smartNavigation.sections.forEach(section => {
           if (!section.keys.length) return;
-          categoryHeadings.set(section.keys[0], section.title);
+          categoryHeadings.set(section.keys[0], section.title === 'GÊNEROS' && smartNavigation.unclassified
+            ? 'GÊNEROS · CONTAGENS PARCIAIS' : section.title);
           cats.push(...section.keys);
         });
       } else {
@@ -4468,6 +4522,11 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         return smartNavigation?.counts.get(cat) ?? rawCategoryCounts.get(cat) ?? 0;
       };
       const getCategoryLabel = cat => smartGenres ? smartGenres.label(cat) : cat;
+      const getCategoryCountLabel = cat => {
+        const count = getCategoryCount(cat);
+        if (smartNavigation?.unclassified && smartGenres?.isGenre(cat)) return count ? count + '+' : '…';
+        return String(count);
+      };
 
       const resumeCount = items.filter(c => {
         return hasResumeEntry(c);
@@ -4553,7 +4612,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             ${escapeGameHtml(displayCat)}
           </span>
           <div class="flex items-center gap-1">
-            <span class="text-[10px] ${badgeBg} px-1.5 py-0.5 rounded-md shrink-0">${count}</span>
+            <span class="text-[10px] ${badgeBg} px-1.5 py-0.5 rounded-md shrink-0">${getCategoryCountLabel(cat)}</span>
             ${sortButtonsHtml}
           </div>
         `;
@@ -4616,7 +4675,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
               <i data-lucide="${iconName}" class="w-4 h-4 ${isFavCat ? 'fill-rose-400' : ''}"></i>
             </div>
             <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md ${badgeColor}">
-              ${count}
+              ${getCategoryCountLabel(cat)}
             </span>
           </div>
           <div class="mt-2">
