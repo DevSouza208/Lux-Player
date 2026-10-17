@@ -14,7 +14,7 @@ const PUBLIC_BUCKETS = {
 };
 
 const MAX_SAVE_BYTES = 6 * 1024 * 1024;
-const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
+const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
 const GAME_CATALOG_KEY = 'games-catalog.json';
 const GAME_CATALOG_PAGE_SIZE = 1000;
 

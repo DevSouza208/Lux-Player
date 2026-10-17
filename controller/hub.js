@@ -4,8 +4,8 @@
   if (window.__luxControllerHubInstalled) return;
   window.__luxControllerHubInstalled = true;
 
-  const SUPABASE_URL='https://fvcvshppvxihhttwyyvr.supabase.co';
-  const SUPABASE_PUBLISHABLE_KEY='sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
+const SUPABASE_URL='https://cavgobgykpbiehqvqkws.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY='sb_publishable_YO_wRK9qbyDe61gaUQe62w_edoL8g9i';
   const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
   const REMOTE_DEVICE_KEY='lux-remote-device-id';
   const REMOTE_PENDING_KEY='lux-remote-pending-room';

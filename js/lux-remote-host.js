@@ -4,8 +4,8 @@
   if (window.__luxRemoteHostInstalled) return;
   window.__luxRemoteHostInstalled = true;
 
-  const SUPABASE_URL='https://fvcvshppvxihhttwyyvr.supabase.co';
-  const SUPABASE_PUBLISHABLE_KEY='sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
+const SUPABASE_URL='https://cavgobgykpbiehqvqkws.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY='sb_publishable_YO_wRK9qbyDe61gaUQe62w_edoL8g9i';
   const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
   const CONTROLLER_ORIGIN=location.protocol==='file:'?'https://lux-player.vercel.app':location.origin;
   const state={code:null,signalClient:null,signalChannel:null,signalTopic:null,peer:null,status:'waiting',deviceName:'',focused:null,liveIndex:-1};

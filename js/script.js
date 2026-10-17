@@ -1,5 +1,5 @@
-const SUPABASE_URL = 'https://fvcvshppvxihhttwyyvr.supabase.co';
-    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_G22WZFcnYGNNkbUbygE5jA_FBBSXNrm';
+const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_YO_wRK9qbyDe61gaUQe62w_edoL8g9i';
 
     const TMDB_API_KEY = '3fd2be6f0c70a2a598f084ddfb75487c';
     const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';

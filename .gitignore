@@ -5,3 +5,7 @@ release/
 !.env.example
 supabase/.temp/
 supabase/.branches/
+backups/
+*.backup
+*.dump
+*.pgdump

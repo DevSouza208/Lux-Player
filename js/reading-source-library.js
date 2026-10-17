@@ -5,7 +5,7 @@
  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const CACHE_TTL=7*24*60*60*1000;
- const DOWNLOAD_ENDPOINT='https://fvcvshppvxihhttwyyvr.supabase.co/functions/v1/reading-source-library';
+const DOWNLOAD_ENDPOINT='https://cavgobgykpbiehqvqkws.supabase.co/functions/v1/reading-source-library';
  async function api(payload,timeoutMs=30000){if(!window.LuxReaderCloud?.request)throw new Error('Entre novamente no Lux.');return window.LuxReaderCloud.request('reading-source-library',payload,undefined,{timeoutMs});}
  function authPayload(payload){try{return{...payload,username:currentUser.user,password:currentUser.pass,profileSlot:currentUser.profile?.slot||1,profileKey:currentUser.profile?.data_key||''};}catch{throw new Error('Entre novamente no Lux.');}}
  async function downloadBlob(externalId,timeoutMs=120000){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{const response=await fetch(DOWNLOAD_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(authPayload({action:'download',externalId})),signal:controller.signal});if(!response.ok){let message='Não foi possível baixar este arquivo.';try{const data=await response.json();message=data?.error||message;}catch{}throw new Error(message);}const blob=await response.blob();if(!blob.size)throw new Error('O arquivo recebido está vazio.');return blob;}catch(error){if(error?.name==='AbortError')throw new Error('O download demorou demais. Tente novamente.');throw error;}finally{clearTimeout(timer);}}
