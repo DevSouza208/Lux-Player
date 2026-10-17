@@ -6,7 +6,7 @@
   var COLLECTION = '__lux_collection_';
   var UNCLASSIFIED = '__lux_genre_unclassified__';
   var CACHE_KEY = 'lux_smart_genres_v1';
-  var CACHE_LIMIT = 32000;
+  var CACHE_LIMIT = 52000;
   var CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
   var GENRES = [
     [28, 'Ação', /\b(acao|action)\b/],
@@ -169,7 +169,7 @@
     var other = orderedRawGroups.filter(function (group) {
       if (adultGroups.has(group) || isAdultGroup(group)) return true;
       return !collectionYear(group) && groupGenreIds(group).length === 0
-        && !/^(filmes?|movies?|catalogo geral)$/i.test(cleanGroup(group));
+        && !/^(filmes?|movies?|series?|catalogo geral)$/i.test(cleanGroup(group));
     });
     rawCounts.forEach(function (count, group) { counts.set(group, count); });
     counts.set(UNCLASSIFIED, unclassified);
