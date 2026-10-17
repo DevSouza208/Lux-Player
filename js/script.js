@@ -20,7 +20,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     }
 
     function learnSmartMovieGenres(item, metadata) {
-      if (window.LuxSmartGenres?.learn(item, metadata)) scheduleSmartGenreRefresh();
+      // Capas e sinopses podem usar TMDB sem reorganizar a categoria do provedor.
     }
 
     // Fast lane: discover and match popular TMDB candidates from a shared CDN.
@@ -73,17 +73,9 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
     }
 
     function queueSmartMovieClassification() {
-      if (!['movies', 'series'].includes(currentSection) || !currentUser || !window.LuxGenreCandidateLoader) return;
-      const account = currentUser;
-      const kind = currentSection;
-      void window.LuxGenreCandidateLoader.start(getSectionItems(), {
-        kind,
-        isActive: () => currentSection === kind && currentUser === account && !document.hidden,
-        onUpdate: () => {
-          scheduleSmartGenreRefresh();
-          if (['ready', 'error'].includes(window.LuxSmartGenres?.indexStatus().status)) queueGenreLongTail();
-        }
-      });
+      // Navegação do original usa somente as categorias do fornecedor.
+      // A busca normal por capas/sinopses TMDB permanece independente.
+      // Não dispare Discover nem classificação por título no cliente.
     }
 
     function normalizeTmdbTitle(str = '') {
@@ -3701,8 +3693,10 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       const sharedGroup = getSharedCategoryForItem(item);
       const fallback = item?.type === 'movies' ? 'Filmes' : item?.type === 'series' ? 'Séries' : 'Canais';
       item.providerGroup = providerGroup || fallback;
+      // Mantém a organização histórica apenas como referência, sem sobrescrever
+      // a categoria atual do fornecedor ou esconder novos títulos.
       item.sharedGroup = sharedGroup || '';
-      item.group = sharedGroup || providerGroup || fallback;
+      item.group = item.providerGroup;
       // Never let a stale non-adult group turn an adult record into a child-safe one.
       item.isAdult = Boolean(item.isAdult || item.adult) ||
         isAdultContent(item.providerGroup, item.name) ||
@@ -4496,7 +4490,9 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         sortedCats.sort(sortCategoriesSmart);
       }
 
-      const smartGenres = ['movies', 'series'].includes(currentSection) ? window.LuxSmartGenres : null;
+      // Sempre renderizar grupos reais retornados por get_vod_categories,
+      // get_series_categories e group-title da M3U. Sem TMDB ou mapa antigo.
+      const smartGenres = null;
       const rawCategoryCounts = new Map();
       items.forEach(item => rawCategoryCounts.set(item.group, (rawCategoryCounts.get(item.group) || 0) + 1));
       const smartNavigation = smartGenres && !isSortModeActive
@@ -5020,9 +5016,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       // Never strand the viewer on a stale/empty filter while fresh content exists.
       const fixedCategories = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
       if (!activeSearchQuery && !fixedCategories.includes(activeCategory) &&
-          !currentList.some(item => window.LuxSmartGenres?.isSmart(activeCategory)
-            ? window.LuxSmartGenres.matches(item, activeCategory)
-            : item.group === activeCategory)) {
+          !currentList.some(item => item.group === activeCategory)) {
         activeCategory = 'Todos';
         renderCategories();
       }
@@ -5043,9 +5037,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
           } else if (activeCategory === 'Minha Lista') {
             matchesCat = isFavorite(c);
           } else {
-            matchesCat = window.LuxSmartGenres?.isSmart(activeCategory)
-              ? window.LuxSmartGenres.matches(c, activeCategory)
-              : c.group === activeCategory;
+            matchesCat = c.group === activeCategory;
           }
         }
 
@@ -5100,7 +5092,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
             </span>
           `;
         } else {
-          headingEl.innerText = window.LuxSmartGenres?.label(activeCategory) || activeCategory;
+          headingEl.innerText = activeCategory;
         }
       }
 
