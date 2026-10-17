@@ -43,9 +43,15 @@
   function titleKey(item) {
     if (itemKeys.has(item)) return itemKeys.get(item);
     var raw = String(item.name || '');
-    var year = (raw.match(/\b(?:19|20)\d{2}\b/) || [])[0] || '';
-    var title = normalize(raw.replace(/\((?:19|20)\d{2}\)/g, ' ')
-      .replace(/\b(2160p|1080p|720p|4k|uhd|fhd|dublado|legendado|dual audio|hevc|h265)\b/gi, ' '));
+    var fromBrackets = raw.match(/[([ ]((?:19|20)\d{2})[)\] ]/);
+    var fromSuffix = raw.match(/[\s|_-]((?:19|20)\d{2})(?:\s|$)/);
+    var year = String(item.year || fromBrackets?.[1] || fromSuffix?.[1] || '');
+    if (!/^(19|20)\d{2}$/.test(year)) year = '';
+    var cleaned = raw.replace(/\((?:19|20)\d{2}\)/g, ' ')
+      .replace(/\[(?:19|20)\d{2}\]/g, ' ')
+      .replace(/\b(2160p|1080p|720p|4k|uhd|fhd|dublado|legendado|dual audio|hevc|h265|bluray|web dl|brrip)\b/gi, ' ');
+    if (year) cleaned = cleaned.replace(new RegExp('(?:\\s|[|_-])' + year + '(?:\\s|$)', 'g'), ' ');
+    var title = normalize(cleaned.replace(/\[[^\]]+\]/g, ' '));
     var key = title ? title + '|' + year : '';
     itemKeys.set(item, key);
     return key;
@@ -79,11 +85,14 @@
   function genreIds(item) {
     if (!item || item.isAdult || item.type !== 'movies') return [];
     var base = groupGenreIds(item.group);
-    if (!tmdbByTitle.size) return base;
-    var key = titleKey(item);
-    var extra = tmdbByTitle.get(key);
-    if (!extra || !extra.ids.length) return base;
-    return base.length ? Array.from(new Set(base.concat(extra.ids))) : extra.ids;
+    var own = Array.isArray(item.providerGenreIds)
+      ? item.providerGenreIds.map(Number).filter(function (id) { return LABELS.has(id); })
+      : [];
+    if (item.providerGenreText) own = own.concat(groupGenreIds(item.providerGenreText));
+    if (!tmdbByTitle.size) return base.length || own.length ? Array.from(new Set(base.concat(own))) : [];
+    var extra = tmdbByTitle.get(titleKey(item));
+    if (!extra || !extra.ids.length) return base.length || own.length ? Array.from(new Set(base.concat(own))) : [];
+    return Array.from(new Set(base.concat(own, extra.ids)));
   }
 
   function matches(item, key) {
@@ -134,7 +143,8 @@
       .sort(function (a, b) { return b.localeCompare(a); });
     // Keep genre filters visible while metadata is still being learned.
     // Counts are identified entries only; the UI adds '+' if classification is incomplete.
-    var genreKeys = items.length ? GENRES.map(function (g) { return PREFIX + g[0]; }) : [];
+    var genreKeys = GENRES.map(function (g) { return PREFIX + g[0]; })
+      .filter(function (key) { return (counts.get(key) || 0) > 0; });
     var other = orderedRawGroups.filter(function (group) {
       if (adultGroups.has(group) || isAdultGroup(group)) return true;
       return !collectionYear(group) && groupGenreIds(group).length === 0
@@ -203,6 +213,67 @@
     return true;
   }
 
+  // One index pass across the provider catalogue; incoming TMDB candidate
+  // batches are matched in O(candidate-count), never O(31k * candidate-count).
+  function createCatalogIndex(items) {
+    var byTitle = new Map();
+    var valid = 0;
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!item || item.type !== 'movies' || item.isAdult) continue;
+      var key = titleKey(item);
+      var name = key.split('|')[0];
+      if (!name || name.length < 4) continue;
+      var bucket = byTitle.get(name);
+      if (!bucket) { bucket = []; byTitle.set(name, bucket); }
+      bucket.push({ item: item, key: key, year: key.split('|')[1] });
+      valid++;
+    }
+    return { byTitle: byTitle, valid: valid, total: items.length };
+  }
+
+  function ingestCandidates(index, candidates) {
+    if (!index || !index.byTitle || !Array.isArray(candidates)) return 0;
+    var identified = 0;
+    for (var i = 0; i < candidates.length; i++) {
+      var row = candidates[i];
+      if (!row || row.adult) continue;
+      var ids = (Array.isArray(row.genre_ids) ? row.genre_ids : []).map(Number)
+        .filter(function (id) { return LABELS.has(id); });
+      if (!ids.length) continue;
+      var candidateYear = String(row.release_date || '').slice(0, 4);
+      var names = new Set([normalize(row.title), normalize(row.original_title)].filter(Boolean));
+      var matchedKeys = new Set();
+      for (const name of names) {
+        var bucket = index.byTitle.get(name);
+        if (!bucket) continue;
+        for (var j = 0; j < bucket.length; j++) {
+          var match = bucket[j];
+          if (matchedKeys.has(match.key)) continue;
+          if (match.year && candidateYear && Math.abs(Number(match.year) - Number(candidateYear)) > 1) continue;
+          var old = tmdbByTitle.get(match.key);
+          // When provider year is unknown, keep the first (highest-ranked)
+          // exact-title candidate instead of merging different remakes.
+          if (old?.source === 'discover') continue;
+          if (old && old.ids.length && old.ids.every(function (id) { return ids.includes(id); })) continue;
+          var combined = old && old.source !== 'discover'
+            ? Array.from(new Set(old.ids.concat(ids))) : ids;
+          tmdbByTitle.set(match.key, { ids: combined, at: Date.now(), source: 'discover' });
+          if (!old) identified++;
+          matchedKeys.add(match.key);
+        }
+      }
+    }
+    while (tmdbByTitle.size > CACHE_LIMIT) tmdbByTitle.delete(tmdbByTitle.keys().next().value);
+    if (identified) persistCache();
+    return identified;
+  }
+
+  var indexState = { status: 'idle', processed: 0, total: 0, matched: 0 };
+  function setIndexStatus(patch) {
+    indexState = Object.assign({}, indexState, patch);
+  }
+
   loadCache();
   root.LuxSmartGenres = {
     navigation: navigation,
@@ -212,6 +283,10 @@
     hasMetadata: function (item) { return tmdbByTitle.has(titleKey(item)); },
     isGenre: function (key) { return typeof key === 'string' && key.indexOf(PREFIX) === 0 && key !== UNCLASSIFIED; },
     genreIds: genreIds,
+    createCatalogIndex: createCatalogIndex,
+    ingestCandidates: ingestCandidates,
+    setIndexStatus: setIndexStatus,
+    indexStatus: function () { return Object.assign({}, indexState); },
     genreKey: function (id) { return PREFIX + id; },
     collectionKey: function (year) { return COLLECTION + year; },
     isSmart: function (key) { return typeof key === 'string' && (key.indexOf(PREFIX) === 0 || key.indexOf(COLLECTION) === 0); }
