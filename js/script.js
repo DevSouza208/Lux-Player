@@ -4420,40 +4420,22 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         sortedCats.sort(sortCategoriesSmart);
       }
 
-      // Sempre renderizar grupos reais retornados por get_vod_categories,
-      // get_series_categories e group-title da M3U. Sem TMDB ou mapa antigo.
-      const smartGenres = null;
+      // A organização da develop usa somente o item.group já resolvido
+      // pelo provedor e/ou mapa histórico, sem gêneros TMDB sintéticos.
       const rawCategoryCounts = new Map();
       items.forEach(item => rawCategoryCounts.set(item.group, (rawCategoryCounts.get(item.group) || 0) + 1));
-      const smartNavigation = smartGenres && !isSortModeActive
-        ? smartGenres.navigation(items, sortedCats)
-        : null;
-      const categoryHeadings = new Map();
       const cats = ['Todos', 'Continuar Assistindo', 'Minha Lista'];
       if (hasCliente) cats.push(hasCliente);
       if (hasGuiaJogos) cats.push(hasGuiaJogos);
-      if (smartNavigation) {
-        smartNavigation.sections.forEach(section => {
-          if (!section.keys.length) return;
-          categoryHeadings.set(section.keys[0], section.title === 'GÊNEROS' && smartNavigation.unclassified
-            ? 'GÊNEROS · CONTAGENS PARCIAIS' : section.title);
-          cats.push(...section.keys);
-        });
-      } else {
-        cats.push(...sortedCats);
-      }
+      cats.push(...sortedCats);
       const getCategoryCount = cat => {
         if (cat === 'Todos') return items.length;
         if (cat === 'Continuar Assistindo') return resumeCount;
         if (cat === 'Minha Lista') return favCount;
-        return smartNavigation?.counts.get(cat) ?? rawCategoryCounts.get(cat) ?? 0;
+        return rawCategoryCounts.get(cat) ?? 0;
       };
-      const getCategoryLabel = cat => smartGenres ? smartGenres.label(cat) : cat;
-      const getCategoryCountLabel = cat => {
-        const count = getCategoryCount(cat);
-        if (smartNavigation?.unclassified && smartGenres?.isGenre(cat)) return count + '+';
-        return String(count);
-      };
+      const getCategoryLabel = cat => cat;
+      const getCategoryCountLabel = cat => String(getCategoryCount(cat));
 
       const resumeCount = items.filter(c => {
         return hasResumeEntry(c);
@@ -4472,25 +4454,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       const previousCategoryScroll = desktopContainer.scrollTop;
       desktopContainer.innerHTML = '';
 
-      if (smartNavigation && smartGenres?.indexStatus) {
-        const state = smartGenres.indexStatus();
-        if (state.status === 'loading' || state.status === 'error') {
-          const info = document.createElement('div');
-          info.className = 'mx-2 mb-2 rounded-lg bg-purple-950/40 px-3 py-2 text-[10px] leading-relaxed text-purple-300/80';
-          info.textContent = state.status === 'loading'
-            ? 'Organizando gêneros pelo TMDB em segundo plano (' + state.processed + '/' + state.total + ').'
-            : 'Classificação temporariamente indisponível. Filmes acessíveis em Todos.';
-          desktopContainer.appendChild(info);
-        }
-      }
-
       cats.forEach(cat => {
-        if (categoryHeadings.has(cat)) {
-          const heading = document.createElement('div');
-          heading.className = 'mt-4 mb-1 px-3 text-[10px] font-bold tracking-widest text-purple-400/70';
-          heading.textContent = categoryHeadings.get(cat);
-          desktopContainer.appendChild(heading);
-        }
         const displayCat = getCategoryLabel(cat);
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
