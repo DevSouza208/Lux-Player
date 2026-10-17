@@ -70,7 +70,7 @@ test('stale safe-looking grouping never downgrades the adult restriction', () =>
   const groups = setupGroups({ 'movies|restrito': 'Filmes | Família' });
   const film = { type:'movies', name:'Restrito', group:'Filmes +18', source:'xtream', isAdult:true };
   const enriched = groups.applySharedCategoryToItem(film);
-  assert.equal(enriched.group, 'Filmes | Família');
+  assert.equal(enriched.group, 'Filmes +18');
   assert.equal(enriched.providerGroup, 'Filmes +18');
   assert.equal(enriched.isAdult, true);
 });
