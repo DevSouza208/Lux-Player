@@ -29,7 +29,11 @@ test('groups supplier genres while preserving exact catalogue counts', () => {
   assert.equal(genres.matches(items[0], genres.genreKey(28)), true);
   assert.equal(genres.matches(items[1], genres.genreKey(35)), false);
   assert.ok(!result.sections[2].keys.includes('Filmes | Ação ⚡ PLUS'));
-  assert.ok(result.sections[2].keys.includes('FILMES'));
+  assert.equal(result.sections[1].keys.length, 19);
+  assert.ok(!result.sections[2].keys.includes('FILMES'));
+  assert.ok(result.sections[2].keys.includes('__lux_genre_unclassified__'));
+  assert.equal(result.unclassified, 2);
+  assert.equal(genres.matches(items[4], '__lux_genre_unclassified__'), true);
 });
 
 test('adult items remain outside the smart-genre routes', () => {
@@ -44,6 +48,7 @@ test('TMDB genres are learned from an exact match without network requests', () 
   const item = movie('Um filme (2026)', 'FILMES');
   assert.equal(genres.learn(item, { title: 'Um filme', releaseDate: '2026-02-01', genreIds: [28, 12] }), true);
   assert.equal(genres.matches(item, genres.genreKey(28)), true);
+  assert.equal(genres.matches(item, '__lux_genre_unclassified__'), false);
   assert.equal(genres.matches(item, genres.genreKey(12)), true);
   assert.equal(genres.learn(item, { title: 'Um filme', releaseDate: '2026-02-01', genreIds: [28, 12] }), false);
   assert.equal(genres.learn(item, { title: 'Outro filme', releaseDate: '2026-02-01', genreIds: [27] }), false);
@@ -59,4 +64,25 @@ test('catalogue index scales to 31,306 supplier entries with no added requests',
   assert.equal(results.counts.get(genres.genreKey(28)), 15653);
   assert.equal(results.counts.get('FILMES'), 15653);
   assert.equal(items.length, 31306);
+});
+
+test('single-group catalog still displays all genres and honest partial counts', () => {
+  const items = Array.from({ length: 31306 }, (_, i) => movie('Novo ' + i, 'FILMES'));
+  const result = genres.navigation(items, ['FILMES']);
+  assert.equal(result.sections[1].keys.length, 19);
+  assert.equal(result.unclassified, 31306);
+  assert.equal(result.counts.get('__lux_genre_unclassified__'), 31306);
+  assert.ok(result.sections[2].keys.includes('__lux_genre_unclassified__'));
+  assert.ok(!result.sections[2].keys.includes('FILMES'));
+  assert.equal(result.counts.get(genres.genreKey(28)) || 0, 0);
+});
+
+test('adult titles are not exposed by general release-year collections', () => {
+  const restricted = movie('Restrito', 'Filmes | Lançamentos 2026', { isAdult: true });
+  const normal = movie('Aberto', 'Filmes | Lançamentos 2026');
+  const items = [restricted, normal];
+  const output = genres.navigation(items, ['Filmes | Lançamentos 2026']);
+  assert.equal(output.counts.get(genres.collectionKey('2026')), 1);
+  assert.equal(genres.matches(restricted, genres.collectionKey('2026')), false);
+  assert.equal(genres.matches(normal, genres.collectionKey('2026')), true);
 });

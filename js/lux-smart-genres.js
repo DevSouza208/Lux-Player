@@ -4,8 +4,9 @@
 
   var PREFIX = '__lux_genre_';
   var COLLECTION = '__lux_collection_';
+  var UNCLASSIFIED = '__lux_genre_unclassified__';
   var CACHE_KEY = 'lux_smart_genres_v1';
-  var CACHE_LIMIT = 1500;
+  var CACHE_LIMIT = 32000;
   var CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
   var GENRES = [
     [28, 'Ação', /\b(acao|action)\b/],
@@ -87,15 +88,17 @@
 
   function matches(item, key) {
     if (!item || item.type !== 'movies') return false;
+    if (key === UNCLASSIFIED) return !item.isAdult && genreIds(item).length === 0;
     if (key.indexOf(PREFIX) === 0) {
       var genre = Number(key.slice(PREFIX.length));
       return !item.isAdult && genreIds(item).includes(genre);
     }
-    if (key.indexOf(COLLECTION) === 0) return collectionYear(item.group) === key.slice(COLLECTION.length);
+    if (key.indexOf(COLLECTION) === 0) return !item.isAdult && collectionYear(item.group) === key.slice(COLLECTION.length);
     return item.group === key;
   }
 
   function label(key) {
+    if (key === UNCLASSIFIED) return 'Sem gênero identificado';
     if (key.indexOf(PREFIX) === 0) return LABELS.get(Number(key.slice(PREFIX.length))) || 'Gênero';
     if (key.indexOf(COLLECTION) === 0) return 'Lançamentos ' + key.slice(COLLECTION.length);
     if (isAdultGroup(key)) return key;
@@ -109,17 +112,19 @@
     var counts = new Map();
     var rawCounts = new Map();
     var adultGroups = new Set();
+    var unclassified = 0;
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
       var group = String(item.group || '');
       rawCounts.set(group, (rawCounts.get(group) || 0) + 1);
       if (item.isAdult) adultGroups.add(group);
       var year = collectionYear(group);
-      if (year) {
+      if (year && !item.isAdult) {
         var yearKey = COLLECTION + year;
         counts.set(yearKey, (counts.get(yearKey) || 0) + 1);
       }
       var ids = genreIds(item);
+      if (!item.isAdult && !ids.length) unclassified++;
       for (var j = 0; j < ids.length; j++) {
         var genreKey = PREFIX + ids[j];
         counts.set(genreKey, (counts.get(genreKey) || 0) + 1);
@@ -127,14 +132,19 @@
     }
     var years = Array.from(counts.keys()).filter(function (k) { return k.indexOf(COLLECTION) === 0; })
       .sort(function (a, b) { return b.localeCompare(a); });
-    var genreKeys = GENRES.map(function (g) { return PREFIX + g[0]; })
-      .filter(function (k) { return (counts.get(k) || 0) > 0; });
+    // Keep genre filters visible while metadata is still being learned.
+    // Counts are identified entries only; the UI adds '+' if classification is incomplete.
+    var genreKeys = items.length ? GENRES.map(function (g) { return PREFIX + g[0]; }) : [];
     var other = orderedRawGroups.filter(function (group) {
       if (adultGroups.has(group) || isAdultGroup(group)) return true;
-      return !collectionYear(group) && groupGenreIds(group).length === 0;
+      return !collectionYear(group) && groupGenreIds(group).length === 0
+        && !/^(filmes?|movies?|catalogo geral)$/i.test(cleanGroup(group));
     });
     rawCounts.forEach(function (count, group) { counts.set(group, count); });
+    counts.set(UNCLASSIFIED, unclassified);
+    if (unclassified) other.unshift(UNCLASSIFIED);
     return {
+      unclassified: unclassified,
       counts: counts,
       sections: [
         { title: 'COLEÇÕES', keys: years },
@@ -169,7 +179,7 @@
           return [entry[0], entry[1].ids, entry[1].at];
         })));
       } catch (_) { /* Quota/storage failures must not affect playback. */ }
-    }, 1500);
+    }, 6000);
   }
 
   function learn(item, metadata) {
@@ -199,6 +209,8 @@
     matches: matches,
     label: label,
     learn: learn,
+    hasMetadata: function (item) { return tmdbByTitle.has(titleKey(item)); },
+    isGenre: function (key) { return typeof key === 'string' && key.indexOf(PREFIX) === 0 && key !== UNCLASSIFIED; },
     genreIds: genreIds,
     genreKey: function (id) { return PREFIX + id; },
     collectionKey: function (year) { return COLLECTION + year; },
