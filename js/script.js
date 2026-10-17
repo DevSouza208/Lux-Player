@@ -3746,6 +3746,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       // Uma classificação antiga nunca pode retirar a proteção de um título.
       item.isAdult = Boolean(item.isAdult || item.adult) ||
         isAdultContent(item.providerGroup, item.name) ||
+        isAdultContent(item.sharedGroup, item.name) ||
         isAdultContent(item.group, item.name);
       return item;
     }
