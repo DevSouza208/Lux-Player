@@ -4528,12 +4528,6 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       mobileGrid.innerHTML = '';
 
       cats.forEach(cat => {
-        if (categoryHeadings.has(cat)) {
-          const heading = document.createElement('div');
-          heading.className = 'col-span-2 mt-3 mb-0.5 text-[10px] font-bold tracking-widest text-purple-400/70';
-          heading.textContent = categoryHeadings.get(cat);
-          mobileGrid.appendChild(heading);
-        }
         const displayCat = getCategoryLabel(cat);
         const isAdultCat = isAdultContent(cat);
         const isResumeCat = cat === 'Continuar Assistindo';
