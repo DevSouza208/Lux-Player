@@ -4473,7 +4473,8 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         return hasResumeEntry(c);
       }).length;
 
-      const favCount = items.filter(c => isFavorite(c)).length;
+      const favoriteKeys = new Set(getFavorites());
+      const favCount = items.filter(c => favoriteKeys.has(getItemKey(c))).length;
 
       document.getElementById('mediaCountBadge').innerText = `${items.length} itens`;
       document.getElementById('mobileMediaCountBadge').innerText = `${items.length} itens`;
@@ -4482,6 +4483,7 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
       document.getElementById('mobileCatSubtitle').innerText = `Escolha um gênero de ${sectionTitle}`;
 
       const desktopContainer = document.getElementById('categoriesList');
+      const previousCategoryScroll = desktopContainer.scrollTop;
       desktopContainer.innerHTML = '';
 
       cats.forEach(cat => {
@@ -4557,6 +4559,8 @@ const SUPABASE_URL = 'https://cavgobgykpbiehqvqkws.supabase.co';
         `;
         desktopContainer.appendChild(btn);
       });
+
+      desktopContainer.scrollTop = previousCategoryScroll;
 
       const mobileGrid = document.getElementById('mobileCategoryGrid');
       mobileGrid.innerHTML = '';
