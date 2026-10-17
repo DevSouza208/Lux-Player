@@ -170,11 +170,11 @@
       if (!Array.isArray(saved)) return;
       var now = Date.now();
       saved.slice(-CACHE_LIMIT).forEach(function (row) {
-        if (!Array.isArray(row) || row.length !== 3 ||
+        if (!Array.isArray(row) || (row.length !== 3 && row.length !== 4) ||
             typeof row[0] !== 'string' || !Array.isArray(row[1]) ||
             typeof row[2] !== 'number' || now - row[2] > CACHE_TTL) return;
         var ids = row[1].filter(function (id) { return LABELS.has(id); });
-        if (ids.length) tmdbByTitle.set(row[0], { ids: ids, at: row[2] });
+        if (ids.length) tmdbByTitle.set(row[0], { ids: ids, at: row[2], source: row[3] === 'discover' ? 'discover' : 'detail' });
       });
     } catch (_) { /* Storage is optional. */ }
   }
@@ -186,7 +186,7 @@
       try {
         var recent = Array.from(tmdbByTitle.entries()).slice(-CACHE_LIMIT);
         root.localStorage.setItem(CACHE_KEY, JSON.stringify(recent.map(function (entry) {
-          return [entry[0], entry[1].ids, entry[1].at];
+          return [entry[0], entry[1].ids, entry[1].at, entry[1].source || 'detail'];
         })));
       } catch (_) { /* Quota/storage failures must not affect playback. */ }
     }, 6000);
@@ -223,7 +223,7 @@
       if (!item || item.type !== 'movies' || item.isAdult) continue;
       var key = titleKey(item);
       var name = key.split('|')[0];
-      if (!name || name.length < 4) continue;
+      if (!name || (name.length < 4 && !key.split('|')[1])) continue;
       var bucket = byTitle.get(name);
       if (!bucket) { bucket = []; byTitle.set(name, bucket); }
       bucket.push({ item: item, key: key, year: key.split('|')[1] });
