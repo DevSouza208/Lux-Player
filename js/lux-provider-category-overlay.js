@@ -3,7 +3,7 @@
 (function(root){
   'use strict';
   const endpoint='https://cavgobgykpbiehqvqkws.supabase.co/functions/v1/lux-provider-categories';
-  const active=new Map();
+  const active=new WeakMap();
 
   function norm(raw){
     return String(raw||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
@@ -54,8 +54,7 @@
   }
   async function get(user){
     if(!user?.user||!user?.pass)throw Error('not_authenticated');
-    const k=user.user+'|'+String(user.pass).slice(0,8);
-    if(active.has(k))return active.get(k);
+    if(active.has(user))return active.get(user);
     const task=(async()=>{
       const timeout=AbortSignal.timeout(75000);
       const r=await root.fetch(endpoint,{
@@ -69,8 +68,8 @@
       const body=await r.json();
       if(!body?.ok||body?.data?.version!==1)throw Error('category_data_unavailable');
       return body.data;
-    })().catch(err=>{active.delete(k);throw err});
-    active.set(k,task);
+    })().catch(err=>{active.delete(user);throw err});
+    active.set(user,task);
     return task;
   }
   root.LuxProviderCategoryOverlay={get,apply,generic,norm,streamId};
