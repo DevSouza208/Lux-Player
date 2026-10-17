@@ -43,8 +43,8 @@
   function titleKey(item) {
     if (itemKeys.has(item)) return itemKeys.get(item);
     var raw = String(item.name || '');
-    var fromBrackets = raw.match(/[([ ]((?:19|20)\d{2})[)\] ]/);
-    var fromSuffix = raw.match(/[\s|_-]((?:19|20)\d{2})(?:\s|$)/);
+    var fromBrackets = raw.match(/[\[(]((?:19|20)\d{2})[\])]/);
+    var fromSuffix = raw.match(/[\s|_-]((?:19|20)\d{2})\s*$/);
     var year = String(item.year || fromBrackets?.[1] || fromSuffix?.[1] || '');
     if (!/^(19|20)\d{2}$/.test(year)) year = '';
     var cleaned = raw.replace(/\((?:19|20)\d{2}\)/g, ' ')
