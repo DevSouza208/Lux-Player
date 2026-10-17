@@ -112,7 +112,7 @@ Deno.serve(async request=>{
     if(authError||!account?.usuario)return reply({error:'not_authenticated'},401,origin);
     const src=sourceFromUser(account),key=await cacheKey(src);
     const {data:cached}=await db.from('lux_provider_category_cache').select('data,refreshed_at').eq('source_key',key).maybeSingle();
-    if(cached?.data && Date.now()-Date.parse(cached.refreshed_at)<ttlMs&&!body?.refresh)return reply({ok:true,source:'shared_cache',data:cached.data},200,origin);
+    if(cached?.data && Date.now()-Date.parse(cached.refreshed_at)<ttlMs)return reply({ok:true,source:'shared_cache',data:cached.data},200,origin);
     try {
       const [catsMovies,catsSeries,movies,series]=await Promise.all([
         upstream(src,'get_vod_categories'),upstream(src,'get_series_categories'),
@@ -121,7 +121,8 @@ Deno.serve(async request=>{
       const data=buildIndex(catsMovies,catsSeries,movies,series);
       // Never overwrite good stored categories with generic-only or failed replies.
       if(!data.counts.movieMapped&&!data.counts.seriesMapped)throw Error('no_detailed_categories');
-      await db.from('lux_provider_category_cache').upsert({source_key:key,data,refreshed_at:new Date().toISOString()},{onConflict:'source_key'});
+      const {error:saveError}=await db.from('lux_provider_category_cache').upsert({source_key:key,data,refreshed_at:new Date().toISOString()},{onConflict:'source_key'});
+      if(saveError)throw Error('cache_write_failed');
       return reply({ok:true,source:'provider',data},200,origin);
     } catch(err){
       if(cached?.data)return reply({ok:true,source:'stale_cache',data:cached.data},200,origin);
