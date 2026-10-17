@@ -13,7 +13,7 @@
   }
   function streamId(url,kind){
     try {
-      const route=kind==='movies'?'movie':'series';
+      const route=kind==='live'?'live':kind==='movies'?'movie':'series';
       const path=new URL(String(url||'')).pathname;
       const match=path.match(new RegExp('/'+route+'/[^/]+/[^/]+/(\\d+)(?:\\.[^/]+)?$','i'));
       return match?match[1]:'';
