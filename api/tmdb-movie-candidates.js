@@ -1,12 +1,13 @@
 // Shared public TMDB candidate cache for the Lux Original movie-genre index.
 // This endpoint never receives playlist URLs, credentials, user identifiers or film lists.
-const GENRES = [28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 10402, 9648, 10749, 878, 10770, 53, 10752, 37];
+const MOVIE_GENRES = [28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 10402, 9648, 10749, 878, 10770, 53, 10752, 37];
+const SERIES_GENRES = [10759, 16, 35, 80, 99, 18, 10751, 14, 9648, 10765, 10768, 10762, 10766, 10764, 10767];
 const BATCH_SIZE = 4;
-const PAGE_COUNT = 3;
+const PAGE_COUNT = 2;
 const MAX_ROUNDS = 3;
 const CONCURRENCY = 4;
 
-async function getPage(apiKey, genre, page, round) {
+async function getPage(apiKey, genre, page, round, kind) {
   const params = new URLSearchParams({
     api_key: apiKey,
     language: 'pt-BR',
@@ -15,7 +16,7 @@ async function getPage(apiKey, genre, page, round) {
     with_genres: String(genre),
     page: String(page)
   });
-  const response = await fetch('https://api.themoviedb.org/3/discover/movie?' + params, {
+  const response = await fetch('https://api.themoviedb.org/3/discover/' + (kind === 'series' ? 'tv' : 'movie') + '?' + params, {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(5500)
   });
@@ -42,8 +43,10 @@ module.exports = async function tmdbDiscover(req, res) {
 
   const batch = Number(req.query?.batch);
   const round = Number(req.query?.round);
-  const batches = Math.ceil(GENRES.length / BATCH_SIZE);
-  if (!Number.isInteger(batch) || batch < 0 || batch >= batches
+  const kind = req.query?.kind === 'series' ? 'series' : req.query?.kind === 'movies' ? 'movies' : null;
+  const genres = kind === 'series' ? SERIES_GENRES : MOVIE_GENRES;
+  const batches = Math.ceil(genres.length / BATCH_SIZE);
+  if (!kind || !Number.isInteger(batch) || batch < 0 || batch >= batches
       || !Number.isInteger(round) || round < 0 || round >= MAX_ROUNDS) {
     return res.status(400).json({ error: 'Invalid batch/round' });
   }
@@ -51,12 +54,12 @@ module.exports = async function tmdbDiscover(req, res) {
   const apiKey = process.env.TMDB_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'TMDB candidate service unavailable' });
 
-  const genres = GENRES.slice(batch * BATCH_SIZE, (batch + 1) * BATCH_SIZE);
-  const jobs = genres.flatMap(genre => Array.from({ length: PAGE_COUNT }, (_, i) => ({
+  const selectedGenres = genres.slice(batch * BATCH_SIZE, (batch + 1) * BATCH_SIZE);
+  const jobs = selectedGenres.flatMap(genre => Array.from({ length: PAGE_COUNT }, (_, i) => ({
     genre, page: i + 1 + (round < 2 ? round * PAGE_COUNT : 0)
   })));
   const results = await limitedMap(jobs, CONCURRENCY, job =>
-    getPage(apiKey, job.genre, job.page, round)
+    getPage(apiKey, job.genre, job.page, round, kind)
   );
 
   const rows = new Map();
@@ -67,15 +70,15 @@ module.exports = async function tmdbDiscover(req, res) {
     for (const item of items) {
       if (item?.adult || !Number.isInteger(Number(item?.id))) continue;
       const ids = (Array.isArray(item.genre_ids) ? item.genre_ids : []).map(Number)
-        .filter(id => GENRES.includes(id));
+        .filter(id => genres.includes(id));
       if (!ids.length) continue;
       const id = String(item.id);
       const previous = rows.get(id);
       rows.set(id, {
         id: Number(item.id),
-        title: String(item.title || '').slice(0, 240),
-        original_title: String(item.original_title || '').slice(0, 240),
-        release_date: String(item.release_date || '').slice(0, 16),
+        title: String(item.title || item.name || '').slice(0, 240),
+        original_title: String(item.original_title || item.original_name || '').slice(0, 240),
+        release_date: String(item.release_date || item.first_air_date || '').slice(0, 16),
         genre_ids: previous ? Array.from(new Set([...previous.genre_ids, ...ids])) : ids
       });
     }
@@ -85,7 +88,7 @@ module.exports = async function tmdbDiscover(req, res) {
     ? 'public, max-age=60, s-maxage=86400, stale-while-revalidate=86400'
     : 'public, max-age=0, s-maxage=300');
   return res.status(200).json({
-    version: 1, batch, round, complete,
+    version: 1, kind, batch, round, complete,
     rows: Array.from(rows.values()), pagesFetched: success
   });
 };
