@@ -60,7 +60,8 @@ test('new provider titles stay present even when saved grouping has no key', () 
   const newer = { type:'movies', name:'Título Novo', group:'FILMES', source:'xtream', isAdult:false };
   const result = [old, newer].map(groups.applySharedCategoryToItem);
   assert.equal(result.length, 2);
-  assert.equal(result[0].group, 'Filmes | Ação ⚡ PLUS');
+  assert.equal(result[0].group, 'FILMES');
+  assert.equal(result[0].sharedGroup, 'Filmes | Ação ⚡ PLUS');
   assert.equal(result[1].group, 'FILMES');
   assert.equal(result[1].providerGroup, 'FILMES');
   assert.equal(result[1].sharedGroup, '');
@@ -70,7 +71,7 @@ test('stale safe-looking grouping never downgrades the adult restriction', () =>
   const groups = setupGroups({ 'movies|restrito': 'Filmes | Família' });
   const film = { type:'movies', name:'Restrito', group:'Filmes +18', source:'xtream', isAdult:true };
   const enriched = groups.applySharedCategoryToItem(film);
-  assert.equal(enriched.group, 'Filmes | Família');
+  assert.equal(enriched.group, 'Filmes +18');
   assert.equal(enriched.providerGroup, 'Filmes +18');
   assert.equal(enriched.isAdult, true);
 });
