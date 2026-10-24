@@ -426,6 +426,12 @@
         <div id="adminAvatarGallery" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
       </div>
       <div id="adminTabClientes" class="admin-tab-panel space-y-4 overflow-y-auto pr-1">
+        <section class="bg-[#180f29] border border-purple-700/50 rounded-2xl p-4 space-y-3" aria-label="Sincronização HTTPS dos clientes">
+          <h4 class="text-xs font-bold uppercase text-purple-200">Manutenção do catálogo · HTTP → HTTPS</h4>
+          <p class="text-xs text-purple-300">Baixa novamente a M3U original de cada cliente, publica a cópia HTTPS no R2 e atualiza o endereço no Supabase. Não altera favoritos nem as categorias da lista original. Contas com falha conservam o link anterior.</p>
+          <button id="adminSyncAllM3uBtn" type="button" onclick="adminSyncAllM3u()" class="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl">Sincronizar HTTP → HTTPS de todos</button>
+          <p id="adminSyncAllM3uStatus" role="status" aria-live="polite" class="text-xs text-purple-200 whitespace-pre-line"></p>
+        </section>
         <div class="bg-[#180f29] border border-purple-900/40 rounded-2xl p-4">
           <h4 id="adminUserFormTitle" class="text-xs font-bold uppercase text-purple-300 mb-3">Cadastrar Novo Cliente</h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -952,5 +958,57 @@
   <script src="js/reading-admin.js"></script>
   <script src="js/reading-import.js"></script>
   <script src="js/reading-document-metadata.js"></script>
+
+  <script>
+  // Usa o Worker de sincronização existente. Cada conta tem sua própria requisição,
+  // evitando que um erro impeça a atualização das demais.
+  async function adminSyncAllM3u() {
+    const btn = document.getElementById('adminSyncAllM3uBtn');
+    const status = document.getElementById('adminSyncAllM3uStatus');
+    if (!btn || btn.disabled || typeof currentUser === 'undefined' || currentUser?.role !== 'admin') return;
+    if (!confirm('Sincronizar as listas HTTP/HTTPS de todos os clientes agora?')) return;
+    const admin = currentUser;
+    btn.disabled = true;
+    let success = 0, partial = 0, failure = 0, skipped = 0;
+    const errors = [];
+    try {
+      status.textContent = 'Buscando clientes...';
+      const { data: users, error } = await supabaseClient.from('usuarios').select('usuario,lista_m3u').order('usuario');
+      if (error) throw new Error('Não foi possível listar os clientes.');
+      const eligible = (users || []).filter(u => /^https?:\\/\\//i.test(String(u.lista_m3u || '')));
+      if (!eligible.length) { status.textContent = 'Nenhum cliente com URL HTTP/HTTPS para sincronizar.'; return; }
+      for (let i = 0; i < eligible.length; i++) {
+        if (currentUser !== admin) throw new Error('A sessão mudou; operação interrompida.');
+        const user = eligible[i];
+        status.textContent = 'Sincronizando ' + (i + 1) + '/' + eligible.length + ' (' + user.usuario + ')...\\nSucesso: ' + success + ' · Parcial: ' + partial + ' · Falha: ' + failure;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 180000);
+        try {
+          const response = await fetch('https://lux-playlist-sync.professorsouza-tech.workers.dev/sync-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'omit',
+            body: JSON.stringify({ username: admin.user, credential: admin.pass, targetUsername: user.usuario }),
+            signal: controller.signal
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok || payload.result?.status === 'error') {
+            throw new Error(payload.error || payload.result?.message || 'Sincronização recusada');
+          }
+          if (payload.result?.status === 'partial') partial++;
+          else if (payload.result?.status === 'skipped') skipped++;
+          else success++;
+        } catch (err) {
+          failure++;
+          errors.push(user.usuario + ': ' + (err.name === 'AbortError' ? 'tempo esgotado' : String(err.message).slice(0,120)));
+        } finally { clearTimeout(timer); }
+      }
+      status.textContent = 'Finalizado: ' + success + ' sincronizados, ' + partial + ' parciais, ' + skipped + ' ignorados, ' + failure + ' erros.\\n' +
+        (errors.length ? 'Falhas: ' + errors.slice(0, 8).join(' | ') + (errors.length > 8 ? ' ...' : '') : 'As cópias HTTPS foram atualizadas. Reabra a conta para carregar a lista nova.');
+    } catch (err) {
+      status.textContent = 'Interrompido: ' + err.message + '. Já sincronizados: ' + success + '.';
+    } finally { btn.disabled = false; }
+  }
+  </script>
 </body>
 </html>
