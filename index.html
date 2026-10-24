@@ -975,7 +975,7 @@
       status.textContent = 'Buscando clientes...';
       const { data: users, error } = await supabaseClient.from('usuarios').select('usuario,lista_m3u').order('usuario');
       if (error) throw new Error('Não foi possível listar os clientes.');
-      const eligible = (users || []).filter(u => /^https?:\\/\\//i.test(String(u.lista_m3u || '')));
+      const eligible = (users || []).filter(u => ['http://', 'https://'].some(prefix => String(u.lista_m3u || '').toLowerCase().startsWith(prefix)));
       if (!eligible.length) { status.textContent = 'Nenhum cliente com URL HTTP/HTTPS para sincronizar.'; return; }
       for (let i = 0; i < eligible.length; i++) {
         if (currentUser !== admin) throw new Error('A sessão mudou; operação interrompida.');
