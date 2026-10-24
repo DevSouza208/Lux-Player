@@ -122,22 +122,9 @@ Deno.serve(async request=>{
     if(!username||username.length>100||!credential||credential.length>250)return reply({error:'invalid_auth'},401,origin);
     const {data:account,error:authError}=await db.rpc('lux_auth_resolve',{p_username:username,p_credential:credential});
     if(authError||!account?.usuario)return reply({error:'not_authenticated'},401,origin);
-    // Reparação unitária acionada pelo painel, autorizada novamente no servidor.
-    // O navegador envia apenas o nome do cliente: suas credenciais ficam no banco.
-    const repair=body?.action==='admin_repair_categories';
-    let selected=account;
-    if(repair){
-      if(String(account.cargo||account.role||'').toLowerCase()!=='admin')
-        return reply({error:'admin_required'},403,origin);
-      const target=String(body?.target_username||'').trim();
-      if(!target||target.length>100)return reply({error:'invalid_target'},400,origin);
-      const {data:found,error:lookupError}=await db.from('usuarios').select('*').eq('usuario',target).maybeSingle();
-      if(lookupError||!found)return reply({error:'account_not_found'},404,origin);
-      selected=found;
-    }
-    const src=sourceFromUser(selected),key=await cacheKey(src);
+    const src=sourceFromUser(account),key=await cacheKey(src);
     const {data:cached}=await db.from('lux_provider_category_cache').select('data,refreshed_at').eq('source_key',key).maybeSingle();
-    if(!repair && cached?.data?.version>=2 && Date.now()-Date.parse(cached.refreshed_at)<ttlMs)return reply({ok:true,source:'shared_cache',data:cached.data},200,origin);
+    if(cached?.data?.version>=2 && Date.now()-Date.parse(cached.refreshed_at)<ttlMs)return reply({ok:true,source:'shared_cache',data:cached.data},200,origin);
     try {
       // Streams/categorias de TV são independentes: uma falha de um endpoint
       // não descarta categorias já válidas dos outros tipos.
@@ -152,9 +139,9 @@ Deno.serve(async request=>{
       if(!data.counts.movieMapped&&!data.counts.seriesMapped&&!data.counts.liveMapped)throw Error('no_detailed_categories');
       const {error:saveError}=await db.from('lux_provider_category_cache').upsert({source_key:key,data,refreshed_at:new Date().toISOString()},{onConflict:'source_key'});
       if(saveError)throw Error('cache_write_failed');
-      return reply(repair ? {ok:true,source:'provider',counts:data.counts} : {ok:true,source:'provider',data},200,origin);
+      return reply({ok:true,source:'provider',data},200,origin);
     } catch(err){
-      if(cached?.data&&!repair)return reply({ok:true,source:'stale_cache',data:cached.data},200,origin);
+      if(cached?.data)return reply({ok:true,source:'stale_cache',data:cached.data},200,origin);
       return reply({ok:false,error:String(err?.message||'provider_unavailable').replace(/https?:\/\/\S+/g,'[redacted]')},503,origin);
     }
   } catch(err){
