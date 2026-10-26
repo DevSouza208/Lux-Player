@@ -1,5 +1,5 @@
 (() => {
-  const APP_VERSION = '1.6.3';
+  const APP_VERSION = '1.7.1';
   const FRIENDLY_UI_VERSION = '20260914-v163-friendly-ui-23';
 
   const replacements = [

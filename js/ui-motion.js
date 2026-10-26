@@ -126,7 +126,7 @@ function animateDashboardEntry() {
     const auth = document.getElementById('authScreen');
     if (!auth) return;
     const badge = [...auth.querySelectorAll('div')].find(el => /^versão\s+[\d.]+$/i.test((el.textContent || '').trim()));
-    if (badge) badge.textContent = 'versão 1.6.3';
+    if (badge) badge.textContent = 'versão 1.7.1';
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyVersion, { once: true });
   else applyVersion();
