@@ -320,7 +320,7 @@
   'use strict';
   if (document.querySelector('script[data-lux-global-search]')) return;
   const script = document.createElement('script');
-  script.src = 'js/global-search-page.js?v=20260918-main-interface-search1';
+  script.src = 'js/global-search-page.js?v=20261026-search-layer2';
   script.async = true;
   script.dataset.luxGlobalSearch = '1';
   document.head.appendChild(script);

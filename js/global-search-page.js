@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260918-global-search1';
+  const VERSION = '20261026-global-search-layer2';
   if (window.__luxGlobalSearchVersion === VERSION) return;
   window.__luxGlobalSearchVersion = VERSION;
 
@@ -306,8 +306,8 @@
     const style = document.createElement('style');
     style.id = 'luxGlobalSearchStyles';
     style.textContent = `
-      #luxGlobalSearchPage{position:fixed;left:0;right:0;top:64px;bottom:0;z-index:18;background:#09060e;display:flex;flex-direction:column;overflow:hidden}
-      #luxGlobalSearchPage[hidden]{display:none!important}
+      #luxGlobalSearchPage{position:fixed;left:0;right:0;top:64px;bottom:0;z-index:40;background:#09060e;display:flex;flex-direction:column;overflow:hidden}
+      #luxGlobalSearchPage[hidden],#luxGlobalSearchPage [hidden]{display:none!important}
       .lux-search-shell{width:100%;max-width:1480px;margin:0 auto;padding:24px 28px 36px;overflow-y:auto;overscroll-behavior:contain}
       .lux-search-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}
       .lux-search-title{font-size:1.35rem;font-weight:900;color:#fff;letter-spacing:-.02em}.lux-search-subtitle{margin-top:4px;color:#9f8aad;font-size:.78rem}
